@@ -355,8 +355,9 @@ int s23_c435_write(uint32_t p, int size, uint32_t v)
             direct_nonempty = 0; direct_pos = 0;
         }
         return 1;
-    case 0x0CC00002u: direct_open = (v & 0xFFFF) != 0; direct_pos = 0; return 1;
+    case 0x0CC00002u: if (s23_game.no_direct_buf) return 1; direct_open = (v & 0xFFFF) != 0; direct_pos = 0; return 1;
     case 0x0CC00000u:
+        if (s23_game.no_direct_buf) return 1;
         { static int lg = -1; if (lg < 0) { S23_SS_ENV(lg); lg = getenv("S23_DIRECTLOG") != NULL; } if (lg) fprintf(stderr, "[DIRECT] frame %u BUF %04X open %d\n", rr_frame, (unsigned)v, direct_open); }
         if (!direct_open) return 1;
         if (direct_pos <= 0 || direct_pos > 28) { direct_pos = 1; direct_nonempty = 0; return 1; }   /* (bounded, as above: the dummy word first) */

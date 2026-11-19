@@ -50,6 +50,7 @@ typedef struct {
     int (*rom_sub)(const char *dir, uint8_t *dst, size_t n);
     int (*rom_io)(const char *dir, uint8_t *dst, size_t n);
     uint32_t io_rom_size;                         /* how much of the I/O board's program its H8 maps */
+    int no_direct_buf;                            /* 1 = the C435 direct buffer (S23 0x0CC00000) is not decoded: Rapid River (GORgON has none) */
     int direct_off_bit;                           /* 1 = a C435 direct quad whose colour word (d[2]) has bit 15 set is not drawn. Crisis Zone: its direct buffer
                                                    * (0x1CC00000, which MAME leaves unmapped) carries the attract demo's RULES panels ("PRESS PEDAL : GO&SHOOT",
                                                    * "OUT OF AMMO"...: bit 15 clear) beside a full-screen quad and two letterbox bars it keeps every frame with
