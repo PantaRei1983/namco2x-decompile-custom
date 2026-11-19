@@ -79,7 +79,7 @@ static void bar(char *v, size_t vn, int val, int lo, int hi, const char *txt)   
     b[10] = 0; snprintf(v, vn, "[%s] %s", b, txt);
 }
 /* ---- Display: the choices of engine/eng_display.h ------------------------------ */
-enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_SMOOTH, D_DEPTH, D_C404, D_GAMMA, D_BRIGHT, D_VIEW, D_CROSS, D_XIMG, D_FLASH, D_OUTNET, D_LAMPS, D_RUMBLE, D_N };   /* D_CROSS.. last: only light-gun games show them */
+enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TEXF, D_ANISO, D_SMOOTH, D_DEPTH, D_C404, D_GAMMA, D_BRIGHT, D_VIEW, D_CROSS, D_XIMG, D_FLASH, D_OUTNET, D_LAMPS, D_RUMBLE, D_N };   /* D_CROSS.. last: only light-gun games show them */
 /* the rows THIS game shows (each game its own: Fighter view only where the game has it, the crosshair for an aimed gun, the shot flash and
  * the recoil / lamp outputs only for a light gun) -- the page's row r is vis[r] */
 static int vis[D_N], nvis;
@@ -103,6 +103,7 @@ static bool disp_enabled(int r)
     if (r == D_SIZE) return g_eng_disp.winmode == 0;
     if (r == D_ASPECT) return !g_eng_disp.wide;
     if (r == D_HUD) return g_eng_disp.wide;
+    if (r == D_ANISO) return g_eng_disp.tex_filter == 2 || g_eng_disp.tex_filter == 4;     /* anisotropy rides on the trilinear modes */
     if (r == D_XIMG) return g_eng_disp.crosshair;
     if (r == D_VIEW) return s23_game_has_view();
     return true;
@@ -119,6 +120,8 @@ static void disp_text(int r, char *l, size_t ln, char *v, size_t vn)
     case D_ASPECT:  snprintf(l, ln, "Aspect ratio"); snprintf(v, vn, "%s", eng_disp_aspect_name(g_eng_disp.aspect)); break;
     case D_SCALING: snprintf(l, ln, "Scaling"); snprintf(v, vn, "%s", eng_disp_scaling_name(g_eng_disp.scaling)); break;
     case D_HUD:     snprintf(l, ln, "Widescreen HUD"); snprintf(v, vn, "%s", g_eng_disp.hud_edges ? "at the screen edges" : "original (4:3 centre)"); break;
+    case D_TEXF:    snprintf(l, ln, "3D texture filter"); snprintf(v, vn, "%s", g_eng_disp.tex_filter == 4 ? "Sharp trilinear (3D only)" : g_eng_disp.tex_filter == 3 ? "Sharp bilinear (3D only)" : g_eng_disp.tex_filter == 2 ? "Trilinear (3D only)" : g_eng_disp.tex_filter ? "Bilinear (3D only)" : "Off (arcade)"); break;
+    case D_ANISO:   snprintf(l, ln, "Anisotropic filter"); if (g_eng_disp.tex_aniso) snprintf(v, vn, "%dx", g_eng_disp.tex_aniso); else snprintf(v, vn, "Off"); break;
     case D_FPS:     snprintf(l, ln, "Frame rate"); snprintf(v, vn, "%s", eng_vsync_rate_name(g_eng_disp.fps)); break;
     case D_SMOOTH:  snprintf(l, ln, "Motion smoothing (100+ fps)"); snprintf(v, vn, "%s", s23_smooth_on() ? "ON (in-between pictures, +8 ms lag)" : "OFF (as the arcade)"); break;
     case D_DEPTH:   snprintf(l, ln, "Depth"); snprintf(v, vn, "%s", s23_depth_on() ? "exact (no z-fighting)" : "arcade sorting"); break;
@@ -156,6 +159,10 @@ static void disp_change(int r, int dir)
     case D_SCALING: eng_disp_set_scaling(cyc(g_eng_disp.scaling, d, 3)); break;
     case D_HUD:     eng_disp_set_hud_edges(!g_eng_disp.hud_edges); break;
     case D_FPS:     eng_disp_set_fps(eng_vsync_rate_step(g_eng_disp.fps, d)); break;
+    case D_TEXF:    { static const int ord[5] = { 0, 1, 3, 2, 4 }; int i = 0; for (int k = 0; k < 5; k++) if (ord[k] == g_eng_disp.tex_filter) i = k;   /* Off, Bilinear, Sharp bilinear, Trilinear, Sharp trilinear */
+                      eng_disp_set_texfilter(ord[cyc(i, d, 5)]); break; }
+    case D_ANISO:   { static const int lv[5] = { 0, 2, 4, 8, 16 }; int i = 0; for (int k = 0; k < 5; k++) if (lv[k] == g_eng_disp.tex_aniso) i = k;
+                      eng_disp_set_texaniso(lv[cyc(i, d, 5)]); break; }
     case D_SMOOTH:  s23_smooth_set(!s23_smooth_on()); eng_cfg_set_int("motion_smooth", s23_smooth_on()); break;
     case D_DEPTH:   s23_depth_set(!s23_depth_on()); eng_cfg_set_int("depth", s23_depth_on()); break;
     case D_C404:    s23_pic_c404 = dir ? s23_pic_c404 + 10 * dir : (s23_pic_c404 >= 100 ? 0 : s23_pic_c404 + 10);     /* Left/Right 10% steps, Enter cycles */

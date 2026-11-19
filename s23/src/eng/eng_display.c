@@ -156,6 +156,11 @@ void eng_disp_load(const char *cfg_path, int scale, bool fullscreen)
     d->gun_border = eng_cfg_int("gun_border", 0);
     if (d->gun_border < 0 || d->gun_border > 6) d->gun_border = 0;
     d->crosshair = eng_cfg_int("crosshair", 1) != 0;
+    { const char *tf = eng_cfg_get("texture_filter");
+      d->tex_filter = tf && (!strcmp(tf, "sharp-trilinear") || !strcmp(tf, "4")) ? 4 : tf && (!strcmp(tf, "sharp") || !strcmp(tf, "3")) ? 3
+                    : tf && (!strcmp(tf, "trilinear") || !strcmp(tf, "2")) ? 2 : tf && (!strcmp(tf, "bilinear") || !strcmp(tf, "1")) ? 1 : 0;
+      int an = eng_cfg_int("texture_aniso", 0);
+      d->tex_aniso = an >= 16 ? 16 : an >= 8 ? 8 : an >= 4 ? 4 : an >= 2 ? 2 : 0; }
     d->fps = eng_vsync_rate_valid(eng_cfg_int("frame_rate", ENG_VSYNC_DEFAULT));
     d->volume = eng_cfg_int("volume", 100);
     if (d->volume < 0) d->volume = 0;
@@ -222,6 +227,19 @@ void eng_disp_set_crosshair(int on)
 {
     g_eng_disp.crosshair = on != 0;
     eng_cfg_set("crosshair", g_eng_disp.crosshair ? "1" : "0");
+}
+
+void eng_disp_set_texfilter(int mode)
+{
+    static const char *const nm[5] = { "off", "bilinear", "trilinear", "sharp", "sharp-trilinear" };
+    g_eng_disp.tex_filter = mode < 0 ? 0 : mode > 4 ? 4 : mode;
+    eng_cfg_set("texture_filter", nm[g_eng_disp.tex_filter]);
+}
+void eng_disp_set_texaniso(int level)
+{
+    g_eng_disp.tex_aniso = level >= 16 ? 16 : level >= 8 ? 8 : level >= 4 ? 4 : level >= 2 ? 2 : 0;
+    char b[8]; snprintf(b, sizeof b, g_eng_disp.tex_aniso ? "%d" : "off", g_eng_disp.tex_aniso);
+    eng_cfg_set("texture_aniso", b);
 }
 
 void eng_disp_set_fps(int fps)

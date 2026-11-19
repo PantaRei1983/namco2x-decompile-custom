@@ -21,6 +21,7 @@
  *
  * Needs OpenGL 3.0 / GLSL 1.30 (in a compatibility context) and 8192-texel textures: every Intel GPU since Sandy Bridge (HD 2000 / 3000).
  */
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,7 @@
 #include "s23_build.h"
 #include "s23_game.h"
 #include "s23_host.h"
+#include "eng_display.h"
 
 /* the post-1.1 entry points, from the driver at run time (the same on Linux and Windows) */
 #define GLFN(T, n) static T p_##n;
@@ -61,9 +63,9 @@ void s23_render_assets(const uint8_t **texrom, const uint32_t **tm_decoded, cons
 
 static const char *vs_poly =
     "#version 130\n"
-    "in vec4 a_pos; in vec3 a_uvs; in vec4 a_par; in vec4 a_clip; in vec2 a_ext;\n"
-    "out vec3 v_uvs; flat out vec4 v_par; flat out vec4 v_clip; flat out vec2 v_ext;\n"
-    "void main() { gl_Position = a_pos; v_uvs = a_uvs; v_par = a_par; v_clip = a_clip; v_ext = a_ext; }\n";
+    "in vec4 a_pos; in vec3 a_uvs; in vec4 a_par; in vec4 a_clip; in vec2 a_ext; in vec4 a_uvb;\n"
+    "out vec3 v_uvs; flat out vec4 v_par; flat out vec4 v_clip; flat out vec2 v_ext; flat out vec4 v_uvb;\n"
+    "void main() { gl_Position = a_pos; v_uvs = a_uvs; v_par = a_par; v_clip = a_clip; v_ext = a_ext; v_uvb = a_uvb; }\n";
 static const char *fs_poly =
     "#version 130\n"
     "uniform sampler2D t_rom, t_map, t_pal, t_sten, t_near, t_nearz, t_photo;\n"
@@ -71,9 +73,40 @@ static const char *fs_poly =
     "uniform float u_keep;\n"
     "uniform ivec3 u_pcol, u_fcol, u_fogc;\n"
     "uniform sampler2D t_fog; uniform int u_fog, u_seam;\n"
-    "in vec3 v_uvs; flat in vec4 v_par; flat in vec4 v_clip; flat in vec2 v_ext;\n"
+    "in vec3 v_uvs; flat in vec4 v_par; flat in vec4 v_clip; flat in vec2 v_ext; flat in vec4 v_uvb;\n"
     "uint b8(vec4 t, int c) { return uint(t[c] * 255.0 + 0.5); }\n"
+    "uniform int u_filt, u_aniso;\n"                                   /* the optional 3D texture filter for polygons without the no-filter flag (1024): 1 bilinear, 2 trilinear-like (u_aniso 0) or anisotropic (u_aniso = 2..16), 3 sharp bilinear, 4 sharp trilinear */
+    "uint tex_pen(uint tx, uint ty) {\n"                               /* the pen at texel (tx, ty): tile map, its flips, the texture ROM -- ty already holds the polygon's tbase */
+    "  uint id = ((tx >> 4u) & 0xFFu) | ((ty << 4u) & 0x1FFF00u);\n"
+    "  vec4 m = texelFetch(t_map, ivec2(int(id & 2047u), int(id >> 11u)), 0);\n"
+    "  uint mb = b8(m, 2); uint tile = b8(m, 0) | (b8(m, 1) << 8u) | ((mb & 1u) << 16u); uint a = mb >> 1u;\n"
+    "  if ((a & 1u) != 0u) ty = ~ty;\n"
+    "  if ((a & 2u) != 0u) tx = ~tx;\n"
+    "  if ((a & 4u) != 0u) { uint t = tx; tx = ty; ty = t; }\n"
+    "  uint ri = ((tile << 8u) | ((ty << 4u) & 0xF0u) | (tx & 0x0Fu)) & 0x1FFFFFFu;\n"
+    "  return b8(texelFetch(t_rom, ivec2(int(ri & 8191u), int(ri >> 13u)), 0), 0);\n"
+    "}\n"
+    "vec3 pen_col(uint pen, uint pbase, uint pshift, uint pmask) {\n"
+    "  uint ci = pbase + ((pen >> pshift) & pmask);\n"
+    "  return texelFetch(t_pal, ivec2(int(ci & 255u), int((ci >> 8u) & 127u)), 0).rgb * 255.0;\n"
+    "}\n"
+    /* THE FILTERS' TEXEL FETCHES. The board shows texel floor(u): texel i covers [i, i+1), its centre is i + 0.5. Every filtered fetch
+     * keeps to THIS polygon's texels (v_uvb, its uv box: the first texel and the last one the board shows): a tap past its edge takes the
+     * edge texel, never the next texel of the tile map (another piece of art). */
+    "vec3 tap_bl(vec2 uv, vec2 sw, uint zb, uint pbase, uint pshift, uint pmask) {\n"   /* bilinear round uv - 0.5; sw > 1 narrows the blend between two texels (SHARP: sw = pixels per texel) */
+    "  vec2 p = uv - 0.5, f0 = floor(p), w = clamp((p - f0 - 0.5) * sw + 0.5, 0.0, 1.0);\n"
+    "  int x0 = clamp(int(f0.x), int(v_uvb.x), int(v_uvb.z)), x1 = clamp(int(f0.x) + 1, int(v_uvb.x), int(v_uvb.z));\n"
+    "  int y0 = clamp(int(f0.y), int(v_uvb.y), int(v_uvb.w)), y1 = clamp(int(f0.y) + 1, int(v_uvb.y), int(v_uvb.w));\n"
+    "  vec3 c00 = pen_col(tex_pen(uint(x0), uint(y0) + zb), pbase, pshift, pmask), c10 = pen_col(tex_pen(uint(x1), uint(y0) + zb), pbase, pshift, pmask);\n"
+    "  vec3 c01 = pen_col(tex_pen(uint(x0), uint(y1) + zb), pbase, pshift, pmask), c11 = pen_col(tex_pen(uint(x1), uint(y1) + zb), pbase, pshift, pmask);\n"
+    "  return mix(mix(c00, c10, w.x), mix(c01, c11, w.x), w.y);\n"
+    "}\n"
+    "vec3 tap_nn(vec2 uv, uint zb, uint pbase, uint pshift, uint pmask) {\n"   /* the texel under uv, for the wide footprints (taps spaced a texel or more apart) */
+    "  vec2 r = floor(uv);\n"
+    "  return pen_col(tex_pen(uint(clamp(int(r.x), int(v_uvb.x), int(v_uvb.z))), uint(clamp(int(r.y), int(v_uvb.y), int(v_uvb.w))) + zb), pbase, pshift, pmask);\n"
+    "}\n"
     "void main() {\n"
+    "  vec2 d_x = dFdx(v_uvs.xy), d_y = dFdy(v_uvs.xy);\n"                 /* the texel footprint of one fragment: before any discard, derivatives need the whole 2x2 quad */
     "  ivec2 fc = ivec2(gl_FragCoord.xy) * (u_prio != 0 ? u_scale : 1);\n"   /* (the priority target is at board resolution) */
     "  ivec2 px = ivec2(fc.x / u_scale - u_ex, fc.y / u_scale);\n"
     "  if (px.x < int(v_clip.x) || px.x >= int(v_clip.z) || px.y < int(v_clip.y) || px.y >= int(v_clip.w)) discard;\n"
@@ -107,23 +140,48 @@ static const char *fs_poly =
     "  int cmode = int(v_par.y); uint pbase = uint(v_par.x); uint pmask = 0xFFu; uint pshift = 0u;\n"
     "  if ((cmode & 4) != 0) { pbase += 0xECu + uint((cmode & 8) << 1); pmask = 3u; pshift = uint(2 * (~cmode & 3)); }\n"
     "  else if ((cmode & 2) != 0) { pbase += 0xE0u + uint((cmode & 8) << 1); pmask = 15u; pshift = uint(4 * (~cmode & 1)); }\n"
-    "  uint id = ((tx >> 4u) & 0xFFu) | ((ty << 4u) & 0x1FFF00u);\n"   /* the tile map: tile number and its flips */
-    "  vec4 m = texelFetch(t_map, ivec2(int(id & 2047u), int(id >> 11u)), 0);\n"
-    "  uint mb = b8(m, 2); uint tile = b8(m, 0) | (b8(m, 1) << 8u) | ((mb & 1u) << 16u); uint a = mb >> 1u;\n"
-    "  if ((a & 1u) != 0u) ty = ~ty;\n"
-    "  if ((a & 2u) != 0u) tx = ~tx;\n"
-    "  if ((a & 4u) != 0u) { uint t = tx; tx = ty; ty = t; }\n"
-    "  uint ri = ((tile << 8u) | ((ty << 4u) & 0xF0u) | (tx & 0x0Fu)) & 0x1FFFFFFu;\n"
-    "  uint pen = b8(texelFetch(t_rom, ivec2(int(ri & 8191u), int(ri >> 13u)), 0), 0);\n"
+    "  uint pen = tex_pen(tx, ty);\n"                                      /* the tile map: tile number and its flips, then the texture ROM */
     "  if (u_prio != 0) {\n"                                               /* the priority target: R text-or-7, G any polygon, A last was 7 */
     "    int pv = (fl >> 3) & 7;\n"
     "    gl_FragColor = vec4(pv == 7 ? 1.0 : 0.0, pv != 0 ? 1.0 : 0.0, 0.0, pv == 7 ? 1.0 : 0.0); return;\n"
     "  }\n"
-    "  uint ci = pbase + ((pen >> pshift) & pmask);\n"
-    "  vec4 c = texelFetch(t_pal, ivec2(int(ci & 255u), int((ci >> 8u) & 127u)), 0);\n"
+    "  vec3 cf = pen_col(pen, pbase, pshift, pmask);\n"
     "  int prow = int(v_par.z) + int(pty) - u_photo;\n"            /* the photo page: any way a polygon reaches its rows */
-    "  if (u_photo != 0 && prow >= 0 && prow < 256 && ptx < 1024u) { c = texelFetch(t_photo, ivec2(int(ptx), prow), 0); pen = 1u; }\n"
-    "  ivec3 col = ivec3(c.rgb * 255.0 + 0.5);\n"
+    "  if (u_photo != 0 && prow >= 0 && prow < 256 && ptx < 1024u) { cf = texelFetch(t_photo, ivec2(int(ptx), prow), 0).rgb * 255.0; pen = 1u; }\n"
+    "  else if (u_filt != 0 && (fl & 1024) == 0) {\n"                   /* THE OPTIONAL 3D TEXTURE FILTER (Display > 3D texture filter), the same five as the System 22 games:
+                                                                           1 BILINEAR, 3 SHARP BILINEAR (the blend between two texels only across about one screen pixel at their border, so the texels
+                                                                           stay solid however big they are on screen; plain bilinear where a texel is smaller than a pixel), 2 TRILINEAR and 4 SHARP
+                                                                           TRILINEAR. The board's texture is paletted and tile-mapped, with no mip chain to sample, so the trilinear modes average the
+                                                                           footprint of the fragment directly: the texel-space derivatives give its size, and a grid of taps over it stands in for the
+                                                                           mip level (a square the size of the longer side, like an isotropic mip) or, with u_aniso, the true parallelogram (N taps along
+                                                                           the long axis, the short side kept sharp). Where the footprint is a texel or less (magnified) they are the bilinear -- the
+                                                                           sharp one for sharp trilinear. Never the camera board's photo page (Gunmen Wars): its pixels are a picture, not texels */
+    "    uint zb = uint(v_par.z);\n"
+    "    vec2 tpp = vec2(length(vec2(d_x.x, d_y.x)), length(vec2(d_x.y, d_y.y)));\n"   /* texels per screen pixel, per axis */
+    "    vec2 sw = (u_filt == 3 || u_filt == 4) ? max(1.0 / max(tpp, vec2(1e-4)), vec2(1.0)) : vec2(1.0);\n"
+    "    float l1 = length(d_x), l2 = length(d_y), lmaj = max(l1, l2), lmin = min(l1, l2);\n"
+    "    int am = 1, an = 1; vec2 ax = vec2(0.0), ay = vec2(0.0);\n"
+    "    if ((u_filt == 2 || u_filt == 4) && lmaj > 1.0) {\n"
+    "      lmaj = min(lmaj, 128.0);\n"
+    "      vec2 mj = (l1 >= l2 ? d_x : d_y) * (lmaj / max(max(l1, l2), 1e-6)), mn = l1 >= l2 ? d_y : d_x;\n"
+    "      vec2 pd = vec2(-mj.y, mj.x) / lmaj;\n"                          /* unit vector across the long axis */
+    "      float ln = lmaj;\n"
+    "      if (u_aniso >= 2) { ln = max(min(lmin, lmaj), lmaj / float(u_aniso)); mn = lmin > 1e-4 ? mn * (ln / lmin) : pd * ln; }\n"
+    "      else mn = pd * ln;\n"
+    "      ax = mj; ay = mn;\n"
+    "      am = clamp(int(ceil(lmaj)), 1, u_aniso >= 2 ? 16 : 8); an = clamp(int(ceil(ln)), 1, u_aniso >= 2 ? 4 : 8);\n"
+    "    }\n"
+    "    if (am * an == 1) cf = tap_bl(v_uvs.xy, sw, zb, pbase, pshift, pmask);\n"
+    "    else {\n"
+    "      vec3 acc = vec3(0.0); bool bl = am * an <= 4;\n"
+    "      for (int i = 0; i < am; i++) for (int j = 0; j < an; j++) {\n"
+    "        vec2 p = v_uvs.xy + ax * ((float(i) + 0.5) / float(am) - 0.5) + ay * ((float(j) + 0.5) / float(an) - 0.5);\n"
+    "        acc += bl ? tap_bl(p, vec2(1.0), zb, pbase, pshift, pmask) : tap_nn(p, zb, pbase, pshift, pmask);\n"
+    "      }\n"
+    "      cf = acc / float(am * an);\n"
+    "    }\n"
+    "  }\n"
+    "  ivec3 col = ivec3(cf + 0.5);\n"
     "  int sh = clamp(int(v_uvs.z), 0, (fl & 64) != 0 ? 127 : 63);\n"
     "  col = min((col * sh) >> 6, ivec3(255));\n"
     "  if (u_fog != 0 && (fl & 128) != 0) {\n"                          /* the depth fog: the level at z * 64, toward the fog colour */
@@ -195,11 +253,11 @@ static int ok, scale = 1, ex, fbw, fbh;                  /* ex: widescreen margi
 static GLuint prog_poly, prog_text, prog_gamma, vbo, quad_vbo, t_out, fbo_out, t_lut;
 static GLint ug[2];
 static GLuint t_fog, t_band, t_rom, t_map, t_pal, t_sten, t_mix, t_col, t_prio, fbo_col, fbo_prio;
-static GLint up[25], ut[23];
+static GLint up[32], ut[23];
 static GLuint t_near, t_nearz, fbo_near;
 static GLuint t_photo; static int photo_gen_up = -1;   /* the photo page (s23_photo_tex) and the version uploaded */          /* the exact-depth pre-pass target: nearest object / band (colour), its 1/z (depth) */
-enum { A_POS, A_UVS, A_PAR, A_CLIP, A_EXT };
-#define VFLOATS 17
+enum { A_POS, A_UVS, A_PAR, A_CLIP, A_EXT, A_UVB };
+#define VFLOATS 21
 static float *verts; static size_t vcap;
 
 static GLuint shader(GLenum kind, const char *src)
@@ -218,6 +276,7 @@ static GLuint program(const char *vs, const char *fs)
     p_glAttachShader(p, v); p_glAttachShader(p, f);
     p_glBindAttribLocation(p, A_POS, "a_pos"); p_glBindAttribLocation(p, A_UVS, "a_uvs");
     p_glBindAttribLocation(p, A_PAR, "a_par"); p_glBindAttribLocation(p, A_CLIP, "a_clip"); p_glBindAttribLocation(p, A_EXT, "a_ext");
+    p_glBindAttribLocation(p, A_UVB, "a_uvb");
     p_glLinkProgram(p);
     GLint good = 0; p_glGetProgramiv(p, GL_LINK_STATUS, &good);
     if (!good) { char log[2048]; p_glGetProgramInfoLog(p, sizeof log, NULL, log); fprintf(stderr, "[GPU] link: %s\n", log); return 0; }
@@ -303,8 +362,8 @@ int s23_gl_init(void)
     if (!(prog_poly = program(vs_poly, fs_poly)) || !(prog_text = program(vs_text, fs_text)) || !(prog_gamma = program(vs_text, fs_gamma))) return 0;
     ug[0] = p_glGetUniformLocation(prog_gamma, "t_src"); ug[1] = p_glGetUniformLocation(prog_gamma, "t_lut");
     static const char *pn[] = { "t_rom", "t_map", "t_pal", "t_sten", "u_scale", "u_h", "u_prio", "u_pfade", "u_ff", "u_alpha", "u_alpha_pen", "u_pcol", "u_fcol", "u_ex",
-                                "t_near", "t_nearz", "u_near", "u_depth", "u_keep", "t_photo", "u_photo", "t_fog", "u_fog", "u_fogc", "u_seam" };   /* (the fog: the author's 0.10, after ours) */
-    for (int i = 0; i < 25; i++) up[i] = p_glGetUniformLocation(prog_poly, pn[i]);
+                                "t_near", "t_nearz", "u_near", "u_depth", "u_keep", "t_photo", "u_photo", "t_fog", "u_fog", "u_fogc", "u_seam", "u_filt", "u_aniso" };   /* (the fog: the author's 0.10, after ours) */
+    for (int i = 0; i < 27; i++) up[i] = p_glGetUniformLocation(prog_poly, pn[i]);
     static const char *tn[] = { "t_mix", "t_pal", "t_prio", "u_scale", "u_h", "u_pass", "u_fade", "u_ff", "u_alpha", "u_amask", "u_c12", "u_c13", "u_fcol", "u_ex", "t_band",
                                 "u_nts", "u_ts0", "u_ts1", "u_td0", "u_td1", "u_nst", "u_st0", "u_st1" };
     for (int i = 0; i < 23; i++) ut[i] = p_glGetUniformLocation(prog_text, tn[i]);
@@ -359,7 +418,18 @@ static int fill_vertices(const s23_built *b)
         /* widescreen (Hor+): a viewport that fills the 4:3 screen fills the wide one -- same camera, more world at the sides */
         const int full = ex && cl <= 0 && cr >= 640 && !p->clip43;
         const int ccl = full ? -ex : cl, ccr = full ? 640 + ex : cr;
-        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8);   /* bits 8-9: s23_game.depth_role */   /* bit 7: the author's depth fog (bit 6 is our boost) */
+        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | (p->model < 0) << 10);   /* bits 8-9: s23_game.depth_role; bit 10: an immediate / direct (screen-space) polygon: the 3D texture filter leaves it sharp */   /* bit 7: the author's depth fog (bit 6 is our boost) */
+        /* the polygon's uv box for the bilinear filters (fs_poly): the first texel and the last one the board shows (texel floor(u) for u
+         * inside the box: ceil(max) - 1, a hair of float slack below an exact integer) */
+        float bu0 = 1e30f, bv0 = 1e30f, bu1 = -1e30f, bv1 = -1e30f;
+        for (int k = 0; k < p->n; k++) {
+            const s23_pvert *v = &p->pv[k];
+            const float ooz = v->p[0] != 0 ? v->p[0] : 1e-30f, u = v->p[1] / ooz, vv = v->p[2] / ooz;
+            if (u < bu0) bu0 = u; if (u > bu1) bu1 = u; if (vv < bv0) bv0 = vv; if (vv > bv1) bv1 = vv;
+        }
+        const float uvb[4] = { floorf(bu0 + 1e-3f), floorf(bv0 + 1e-3f), ceilf(bu1 - 1e-3f) - 1.0f, ceilf(bv1 - 1e-3f) - 1.0f };
+        const float ub0 = isfinite(uvb[0]) ? uvb[0] : 0, vb0 = isfinite(uvb[1]) ? uvb[1] : 0;
+        const float ub1 = !isfinite(uvb[2]) || uvb[2] < ub0 ? ub0 : uvb[2], vb1 = !isfinite(uvb[3]) || uvb[3] < vb0 ? vb0 : uvb[3];
         for (int k = 1; k + 1 < p->n; k++) {
             const int tri[3] = { 0, k, k + 1 };
             /* a triangle with a non-finite or absurd coordinate is dropped: Intel's GL driver crashed on such vertices (Gunmen Wars, in a
@@ -382,6 +452,7 @@ static int fill_vertices(const s23_built *b)
                 *o++ = (float)p->color_base; *o++ = (float)p->cmode; *o++ = (float)p->tbase; *o++ = flags;
                 *o++ = (float)ccl; *o++ = (float)ct; *o++ = (float)ccr; *o++ = (float)cb;
                 *o++ = (float)((p->entry & 0x3FFF) + 1); *o++ = (float)(p->zkey >> 21);
+                *o++ = ub0; *o++ = vb0; *o++ = ub1; *o++ = vb1;
             }
         }
     }
@@ -537,6 +608,7 @@ unsigned s23_gl_draw(const s23_built *b)
         p_glEnableVertexAttribArray(A_PAR); p_glVertexAttribPointer(A_PAR, 4, GL_FLOAT, GL_FALSE, st, (void *)(7 * sizeof(float)));
         p_glEnableVertexAttribArray(A_CLIP); p_glVertexAttribPointer(A_CLIP, 4, GL_FLOAT, GL_FALSE, st, (void *)(11 * sizeof(float)));
         p_glEnableVertexAttribArray(A_EXT); p_glVertexAttribPointer(A_EXT, 2, GL_FLOAT, GL_FALSE, st, (void *)(15 * sizeof(float)));
+        p_glEnableVertexAttribArray(A_UVB); p_glVertexAttribPointer(A_UVB, 4, GL_FLOAT, GL_FALSE, st, (void *)(17 * sizeof(float)));
         p_glUseProgram(prog_poly);
         p_glUniform1i(up[0], 0); p_glUniform1i(up[1], 1); p_glUniform1i(up[2], 2); p_glUniform1i(up[3], 3);
         p_glUniform1i(up[4], scale); p_glUniform1i(up[5], fbh);
@@ -548,6 +620,14 @@ unsigned s23_gl_draw(const s23_built *b)
             photo_gen_up = s23_photo_gen; bind_tex(6, t_photo); glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, S23_PHOTO_W, 256, GL_BGRA, GL_UNSIGNED_BYTE, s23_photo_tex); }
         bind_tex(6, t_photo); p_glUniform1i(up[19], 6); p_glUniform1i(up[20], s23_game.photo_page);
         p_glUniform1i(up[24], seam);
+        { static int ef = -2, ea = -2;
+          if (ef == -2) { const char *e = getenv("S23_TEX_FILTER"); ef = e && *e ? atoi(e) : -1; if (ef > 4) ef = 4; }       /* S23_TEX_FILTER=0|1|2|3|4 (2 trilinear, 3 sharp bilinear, 4 sharp trilinear), S23_TEX_ANISO=0|2|4|8|16 win for a run */
+          if (ea == -2) { const char *e = getenv("S23_TEX_ANISO"); ea = e && *e ? atoi(e) : -1; }
+          const int tf = ef >= 0 ? ef : g_eng_disp.tex_filter;
+          const int ta = (tf == 2 || tf == 4) ? (ea >= 0 ? ea : g_eng_disp.tex_aniso) : 0;
+          static int last = -1, lasta = -1;
+          if (tf != last || ta != lasta) { last = tf; lasta = ta; fprintf(stderr, "[GPU] 3D texture filter: %s, anisotropy %dx\n", tf == 4 ? "sharp trilinear" : tf == 3 ? "sharp bilinear" : tf == 2 ? "trilinear" : tf ? "bilinear" : "off", ta ? ta : 1); }
+          p_glUniform1i(up[25], tf); p_glUniform1i(up[26], ta); }
         bind_tex(7, t_fog); p_glUniform1i(up[21], 7); p_glUniform1i(up[22], f->fog); p_glUniform3i(up[23], f->cr, f->cg, f->cb);
         p_glUniform1i(up[14], 4); p_glUniform1i(up[15], 5); p_glUniform1i(up[16], 0);
         const int depth = (s23_depth_on() || s23_game.depth_within) && fbo_near;   /* depth_within (Rapid River): one object's own polygons only */
@@ -589,7 +669,7 @@ unsigned s23_gl_draw(const s23_built *b)
             glViewport(0, 0, fbw, fbh);
             p_glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
         }
-        for (int a = A_POS; a <= A_EXT; a++) p_glDisableVertexAttribArray((GLuint)a);
+        for (int a = A_POS; a <= A_UVB; a++) p_glDisableVertexAttribArray((GLuint)a);
         bind_tex(4, 0); bind_tex(5, 0); bind_tex(6, 0); bind_tex(7, 0); p_glActiveTexture(GL_TEXTURE0);
     }
     spr_group(b, spr_next, b->fs.nspr);                  /* 4b. GORgON's sprites nearer than every polygon (the rest went in among them, step 4) */
