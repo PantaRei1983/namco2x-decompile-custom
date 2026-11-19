@@ -22,6 +22,9 @@
 #include <setjmp.h>
 #ifdef _WIN32
 #include <windows.h>
+#define S23_IMAGE_BASE ((uintptr_t)GetModuleHandleA(NULL))   /* (S23_SSLOG: an address as an offset in the .exe) */
+#else
+#define S23_IMAGE_BASE ((uintptr_t)0)                         /* (Linux builds: the address itself) */
 #endif
 
 extern char s23_ss_data_begin[], s23_ss_data_end[], s23_ss_bss_begin[], s23_ss_bss_end[];
@@ -134,7 +137,7 @@ static int load(const char *path)
         for (; i + 8 <= (size_t)len[s]; i += 8) {
             uint64_t cur, sav; memcpy(&cur, base + i, 8); memcpy(&sav, buf + i, 8);
             if (cur == sav) continue;
-            if (sav >= 0x100000000ull && in_map(r, nr, sav)) { kept++; if (getenv("S23_SSLOG")) fprintf(stderr, "[LOAD] kept %s+%zX (image +%llX): %016llX (saved %016llX)\n", s ? "bss" : "data", i, (unsigned long long)((uintptr_t)(base + i) - (uintptr_t)GetModuleHandleA(NULL)), (unsigned long long)cur, (unsigned long long)sav); continue; }
+            if (sav >= 0x100000000ull && in_map(r, nr, sav)) { kept++; if (getenv("S23_SSLOG")) fprintf(stderr, "[LOAD] kept %s+%zX (image +%llX): %016llX (saved %016llX)\n", s ? "bss" : "data", i, (unsigned long long)((uintptr_t)(base + i) - S23_IMAGE_BASE), (unsigned long long)cur, (unsigned long long)sav); continue; }
             memcpy(base + i, &sav, 8);
         }
         for (; i < (size_t)len[s]; i++) base[i] = buf[i];
