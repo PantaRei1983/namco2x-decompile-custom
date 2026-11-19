@@ -491,7 +491,7 @@ static void draw_quad(void)
  * uploaded and drawn. 1280 wide: board x -320..960, so HUD sprites moved out to a widescreen picture's edges still draw. Leaves the
  * fixed-function state set; the polygon pass calls poly_state() after it */
 static int spr_next;                                     /* the first sprite not drawn yet this frame */
-static void spr_group(const s23_built *b, int i0, int i1)
+static void spr_ovl(const s23_built *b, int i0, int i1)
 {
     static uint32_t ovl[1280 * 480]; static GLuint t_spr; int bb[4];
     if (i0 >= i1) return;
@@ -530,6 +530,83 @@ static void spr_group(const s23_built *b, int i0, int i1)
     }
     glDisable(GL_TEXTURE_2D);
     glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW); glPopMatrix();
+}
+/* the "Effects" option (eng_display fx_filter; Rapid River's spray and foam, s23_game.spr_fx): sprites i0..i1-1, all effect sprites, drawn
+ * as one filtered quad per tile instead of through the nearest-stretched CPU overlay -- each tile a rimmed 34 x 34 premultiplied cell
+ * (src/s23_render.c s23_spr_cell) in an atlas, so neighbouring tiles join with no seam and the sprite's edge fades out. Corners
+ * (x0, y0)..(x0 + xs, y0 + ys) with texels 0..32 across them: a negative xs / ys flips it as the board does. The text over them as spr_ovl */
+#define FXA 1024                                         /* the atlas: 30 x 30 cells */
+#define FXC (FXA / 34)
+static void spr_fx_flush(const s23_built *b, GLuint t_fx, const uint32_t *atlas, const float (*q)[8], int n)
+{
+    if (!n) return;
+    const int rows = (n + FXC - 1) / FXC;
+    bind_tex(0, t_fx); glPixelStorei(GL_UNPACK_ROW_LENGTH, FXA);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, FXC * 34, rows * 34, GL_BGRA, GL_UNSIGNED_BYTE, atlas);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    p_glUseProgram(0); p_glBindFramebuffer(GL_FRAMEBUFFER, fbo_col); glViewport(0, 0, fbw, fbh);
+    glEnable(GL_BLEND); p_glBlendEquation(GL_FUNC_ADD); glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);   /* premultiplied */
+    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(-ex, 640 + ex, 0, 480, -1, 1);
+    glMatrixMode(GL_MODELVIEW); glPushMatrix(); glLoadIdentity();
+    glDisable(GL_SCISSOR_TEST); glDisable(GL_DEPTH_TEST); glDisable(GL_CULL_FACE); glDisable(GL_ALPHA_TEST); glDisable(GL_LIGHTING); glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); p_glActiveTexture(GL_TEXTURE0); glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glMatrixMode(GL_TEXTURE); glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+    glEnable(GL_TEXTURE_2D); glColor4f(1, 1, 1, 1);
+    for (int pass = 0; pass < ((b->fx.layers & 4) ? 2 : 1); pass++) {
+        if (pass) {   /* the text layer goes over them: G = 1 in the priority target (spr_ovl) */
+            p_glBindFramebuffer(GL_FRAMEBUFFER, fbo_prio); glViewport(0, 0, fbw / scale, 480);
+            glDisable(GL_BLEND); glEnable(GL_ALPHA_TEST); glAlphaFunc(GL_GREATER, 0.f); glColorMask(GL_FALSE, GL_TRUE, GL_FALSE, GL_FALSE);
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE); glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_REPLACE); glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_RGB, GL_PRIMARY_COLOR);
+            glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE); glTexEnvi(GL_TEXTURE_ENV, GL_SOURCE0_ALPHA, GL_TEXTURE);
+            glColor4f(0, 1, 0, 1);
+        }
+        glBegin(GL_QUADS);
+        for (int k = 0; k < n; k++) { const float *t = q[k];
+            glTexCoord2f(t[4], t[5]); glVertex2f(t[0], t[1]); glTexCoord2f(t[6], t[5]); glVertex2f(t[2], t[1]);
+            glTexCoord2f(t[6], t[7]); glVertex2f(t[2], t[3]); glTexCoord2f(t[4], t[7]); glVertex2f(t[0], t[3]); }
+        glEnd();
+        if (pass) {
+            glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glDisable(GL_ALPHA_TEST); glColor4f(1, 1, 1, 1);
+            p_glBindFramebuffer(GL_FRAMEBUFFER, fbo_col); glViewport(0, 0, fbw, fbh);
+        }
+    }
+    glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_TEXTURE_2D);
+    glMatrixMode(GL_PROJECTION); glPopMatrix(); glMatrixMode(GL_MODELVIEW); glPopMatrix();
+}
+static void spr_fx_run(const s23_built *b, int i0, int i1)
+{
+    static uint32_t atlas[FXA * FXA], cell[34 * 34]; static float q[FXC * FXC][8]; static GLuint t_fx;
+    if (!t_fx) { t_fx = texture(GL_RGBA8, FXA, FXA, GL_BGRA, NULL);
+                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); }
+    int n = 0;
+    for (int i = i0; i < i1 && i < b->fs.nspr; i++) {
+        const s23_sprite *s = &b->fs.spr[i];
+        if (!s->xs || !s->ys) continue;
+        for (int row = 0; row < s->rows; row++) for (int col = 0; col < s->cols; col++) {
+            const float x0 = (float)(s->x + col * s->xs), y0 = (float)(s->y + row * s->ys), x1 = x0 + s->xs, y1 = y0 + s->ys;
+            if ((x0 < x1 ? x1 : x0) < -ex || (x0 < x1 ? x0 : x1) > 640 + ex || (y0 < y1 ? y1 : y0) < 0 || (y0 < y1 ? y0 : y1) > 480) continue;
+            if (n == FXC * FXC) { spr_fx_flush(b, t_fx, atlas, (const float (*)[8])q, n); n = 0; }
+            const int cx = n % FXC * 34, cy = n / FXC * 34;
+            s23_spr_cell(&b->fs, s, row, col, cell);
+            for (int y = 0; y < 34; y++) memcpy(&atlas[(cy + y) * FXA + cx], &cell[y * 34], 34 * 4);
+            float *t = q[n++];
+            t[0] = x0; t[1] = y0; t[2] = x1; t[3] = y1;
+            t[4] = (cx + 1) / (float)FXA; t[5] = (cy + 1) / (float)FXA; t[6] = (cx + 33) / (float)FXA; t[7] = (cy + 33) / (float)FXA;
+        }
+    }
+    spr_fx_flush(b, t_fx, atlas, (const float (*)[8])q, n);
+}
+/* sprites i0..i1-1 in list order: runs of effect sprites filtered when "Effects" is on, the rest through the CPU overlay */
+static void spr_group(const s23_built *b, int i0, int i1)
+{
+    if (i1 > b->fs.nspr) i1 = b->fs.nspr;
+    if (!s23_fx_smooth()) { spr_ovl(b, i0, i1); return; }
+    for (int i = i0; i < i1; ) {
+        const int fx = s23_spr_is_fx(&b->fs.spr[i]); int e = i + 1;
+        while (e < i1 && s23_spr_is_fx(&b->fs.spr[e]) == fx) e++;
+        if (fx) spr_fx_run(b, i, e); else spr_ovl(b, i, e);
+        i = e;
+    }
 }
 static void text_pass(const s23_built *b, int pass)
 {

@@ -132,6 +132,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
 - **Effects (Display > Effects):** smoothing for the 2D effect sprites of Dirt Dash (dust, mud, spray and a softer
   headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks) and Armadillo
   Racing (dust).
+  - Rapid River (Gorgon): the water spray and foam sprites. With the option on, each sprite tile is drawn as a filtered
+    quad at the output resolution, with no seams between tiles, instead of being stretched with nearest-neighbour
+    sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:
+    `S23_FX_FILTER` = 0 | 1.
 - **Crisis Zone:**
   - The zone select's beam counter is read in System 23 Evolution 2's format (a line count from the start of vblank),
     so the game's own wait puts the ticker's scroll on the ticker rows only. This replaces the fixed row cut-off.

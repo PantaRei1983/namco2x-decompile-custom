@@ -24,6 +24,9 @@ typedef struct {
 } s23_frame_state;
 void s23_sprites_draw(const s23_frame_state *fs, int i0, int i1, uint32_t *ovl, int ow, int ox, int bb[4]);   /* sprites i0..i1-1 into a cleared ow x 480 ARGB overlay (alpha 0 = clear),
                                                    * board x 0 at ox; bb = the overlay rectangle touched (x0, y0, x1, y1; empty: x0 >= x1) */
+void s23_spr_cell(const s23_frame_state *fs, const s23_sprite *s, int row, int col, uint32_t *cell);   /* one tile of an effect sprite, 34 x 34 premultiplied with its neighbours' rim */
+int s23_spr_is_fx(const s23_sprite *s);   /* the game names it an effect sprite (s23_game.spr_fx) */
+int s23_fx_smooth(void);                  /* the "Effects" option on (eng_display fx_filter, or $S23_FX_FILTER=0|1 for a run) */
 extern int s23_spr_fullpic, s23_spr_hud;   /* s23_spr_hud: a HUD sprite moved out this frame (the game's spr_wide) */   /* this frame's sprites cover the 4:3 screen (a title / map picture): widescreen shows it with bars */
 void s23_text_layer(const s23_frame_state *fs, uint16_t *mix, uint8_t *pri);
 void s23_text_mix(const s23_frame_state *fs, uint32_t *rgba, const uint16_t *mix, const uint8_t *pri, int prival);

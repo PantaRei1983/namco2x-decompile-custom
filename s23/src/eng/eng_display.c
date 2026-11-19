@@ -160,7 +160,9 @@ void eng_disp_load(const char *cfg_path, int scale, bool fullscreen)
       d->tex_filter = tf && (!strcmp(tf, "sharp-trilinear") || !strcmp(tf, "4")) ? 4 : tf && (!strcmp(tf, "sharp") || !strcmp(tf, "3")) ? 3
                     : tf && (!strcmp(tf, "trilinear") || !strcmp(tf, "2")) ? 2 : tf && (!strcmp(tf, "bilinear") || !strcmp(tf, "1")) ? 1 : 0;
       int an = eng_cfg_int("texture_aniso", 0);
-      d->tex_aniso = an >= 16 ? 16 : an >= 8 ? 8 : an >= 4 ? 4 : an >= 2 ? 2 : 0; }
+      d->tex_aniso = an >= 16 ? 16 : an >= 8 ? 8 : an >= 4 ? 4 : an >= 2 ? 2 : 0;
+      const char *fx = eng_cfg_get("effects_filter");
+      d->fx_filter = fx && (!strncmp(fx, "on", 2) || atoi(fx) == 1); }
     d->fps = eng_vsync_rate_valid(eng_cfg_int("frame_rate", ENG_VSYNC_DEFAULT));
     d->volume = eng_cfg_int("volume", 100);
     if (d->volume < 0) d->volume = 0;
@@ -234,6 +236,11 @@ void eng_disp_set_texfilter(int mode)
     static const char *const nm[5] = { "off", "bilinear", "trilinear", "sharp", "sharp-trilinear" };
     g_eng_disp.tex_filter = mode < 0 ? 0 : mode > 4 ? 4 : mode;
     eng_cfg_set("texture_filter", nm[g_eng_disp.tex_filter]);
+}
+void eng_disp_set_fx(int on)
+{
+    g_eng_disp.fx_filter = on != 0;
+    eng_cfg_set("effects_filter", g_eng_disp.fx_filter ? "on" : "off");
 }
 void eng_disp_set_texaniso(int level)
 {

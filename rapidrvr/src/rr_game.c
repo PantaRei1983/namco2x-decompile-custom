@@ -165,6 +165,9 @@ void rr_paddle_frame(void)
 #include "../../s23/src/s23_c435.h"
 #include "../../s23/src/s23_frame.h"
 /* the timer (top left, palette F2: session 11 frames 1280 / 2296) is the only HUD sprite; the route map's labels sit near the sides too */
+/* the 2D effects (the S23_SPRLOG of a race): the spray off the raft and the rocks -- 4x4 tiles 0x0120-0x01DF, banks 6C/6D, translucent --
+ * and the foam puffs -- 2x2 tiles 0x18AB-0x18CB. Not the HUD arrows (0x1700), the title logo or the text */
+static const uint16_t rr_spr_fx[][2] = { { 0x0120, 0x01DF }, { 0x18AB, 0x18CB } };
 static int rr_spr_wide(const s23_sprite *s) { return (s->color == 0xF2 && s->y < 64 && s->x < 160) ? -1 : 0; }
 static int rr_hud_wide_ok(const void *l) { (void)l; return s23_spr_hud && !s23_spr_fullpic; }   /* full width only in play (timer up): the route map's flat labels sit on 3D lines that widen */
 static int rr_wide_pillar(void) { return 1; }
@@ -212,6 +215,7 @@ const s23_game_t s23_game = {
     .ip = { [S23_SRC_VBLANK] = S23_IP(0), [S23_SRC_C361] = S23_IP(1), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C435] = S23_IP(2),
             [S23_SRC_C422] = S23_IP(3), [S23_SRC_TIMER] = S23_IP(5) },
     .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 0,
+    .spr_fx = rr_spr_fx, .n_spr_fx = 2,
     .no_direct_buf = 1,                           /* (GORgON has no 0x0CC00000 direct buffer) */
     .data_rom = { { "rd1mtah.3j", "rd1mtal.1j" }, { NULL, NULL } },
     .npt = 4, .pt_rom = { { "rd1pt0h.9l", "rd1pt0l.9j" }, { "rd1pt1h.10l", "rd1pt1l.10j" }, { "rd1pt2h.11l", "rd1pt2l.11j" }, { "rd1pt3h.12l", "rd1pt3l.12j" } },

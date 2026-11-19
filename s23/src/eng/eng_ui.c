@@ -71,7 +71,7 @@ int s23_smooth_on(void); void s23_smooth_set(int on);   /* src/s23_render.c: mot
 extern int s23_out_net, s23_out_rumble, s23_out_lamps;                  /* src/s23_out.c: the recoil outputs */
 void s23_out_set_net(int on), s23_out_set_rumble(int on), s23_out_set_lamps(int on);
 extern int s23_pic_c404, s23_pic_gamma, s23_pic_bright;   /* src/s23_render.c: the picture adjustments */
-extern int s23_first_person; int s23_game_has_view(void); int s23_game_mounted_gun(void); int s23_game_no_smooth(void);   /* src/s23_render.c: Gunmen Wars' fighter view */
+extern int s23_first_person; int s23_game_has_view(void); int s23_game_mounted_gun(void); int s23_game_no_smooth(void); int s23_game_has_fx(void);   /* src/s23_render.c: Gunmen Wars' fighter view */
 static void bar(char *v, size_t vn, int val, int lo, int hi, const char *txt)   /* "[######----] txt": where val sits in lo..hi */
 {
     char b[11]; const int k = (val - lo) * 10 / (hi - lo);
@@ -79,7 +79,7 @@ static void bar(char *v, size_t vn, int val, int lo, int hi, const char *txt)   
     b[10] = 0; snprintf(v, vn, "[%s] %s", b, txt);
 }
 /* ---- Display: the choices of engine/eng_display.h ------------------------------ */
-enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TEXF, D_ANISO, D_SMOOTH, D_DEPTH, D_C404, D_GAMMA, D_BRIGHT, D_VIEW, D_CROSS, D_XIMG, D_FLASH, D_OUTNET, D_LAMPS, D_RUMBLE, D_N };   /* D_CROSS.. last: only light-gun games show them */
+enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TEXF, D_ANISO, D_FX, D_SMOOTH, D_DEPTH, D_C404, D_GAMMA, D_BRIGHT, D_VIEW, D_CROSS, D_XIMG, D_FLASH, D_OUTNET, D_LAMPS, D_RUMBLE, D_N };   /* D_CROSS.. last: only light-gun games show them */
 /* the rows THIS game shows (each game its own: Fighter view only where the game has it, the crosshair for an aimed gun, the shot flash and
  * the recoil / lamp outputs only for a light gun) -- the page's row r is vis[r] */
 static int vis[D_N], nvis;
@@ -88,7 +88,8 @@ static int disp_n(void)
     nvis = 0;
     for (int d = 0; d < D_N; d++) {
         if (d == D_VIEW && !s23_game_has_view()) continue;
-        if (d == D_SMOOTH && s23_game_no_smooth()) continue;          /* (off for good in this game) */
+        if (d == D_SMOOTH && s23_game_no_smooth()) continue;
+        if (d == D_FX && !s23_game_has_fx()) continue;                 /* (only a game that names its effect sprites: Rapid River) */          /* (off for good in this game) */
         if (d >= D_CROSS && !g_eng_disp_light_gun) continue;
         if (d >= D_FLASH && s23_game_mounted_gun()) continue;
         if (d == D_OUTNET || d == D_LAMPS || d == D_RUMBLE) continue;   /* (on the Controls page now, with the gun) */
@@ -122,6 +123,7 @@ static void disp_text(int r, char *l, size_t ln, char *v, size_t vn)
     case D_HUD:     snprintf(l, ln, "Widescreen HUD"); snprintf(v, vn, "%s", g_eng_disp.hud_edges ? "at the screen edges" : "original (4:3 centre)"); break;
     case D_TEXF:    snprintf(l, ln, "3D texture filter"); snprintf(v, vn, "%s", g_eng_disp.tex_filter == 4 ? "Sharp trilinear (3D only)" : g_eng_disp.tex_filter == 3 ? "Sharp bilinear (3D only)" : g_eng_disp.tex_filter == 2 ? "Trilinear (3D only)" : g_eng_disp.tex_filter ? "Bilinear (3D only)" : "Off (arcade)"); break;
     case D_ANISO:   snprintf(l, ln, "Anisotropic filter"); if (g_eng_disp.tex_aniso) snprintf(v, vn, "%dx", g_eng_disp.tex_aniso); else snprintf(v, vn, "Off"); break;
+    case D_FX:      snprintf(l, ln, "Effects (water spray, foam)"); snprintf(v, vn, "%s", g_eng_disp.fx_filter ? "Smooth (2D effects only)" : "Off (arcade)"); break;
     case D_FPS:     snprintf(l, ln, "Frame rate"); snprintf(v, vn, "%s", eng_vsync_rate_name(g_eng_disp.fps)); break;
     case D_SMOOTH:  snprintf(l, ln, "Motion smoothing (100+ fps)"); snprintf(v, vn, "%s", s23_smooth_on() ? "ON (in-between pictures, +8 ms lag)" : "OFF (as the arcade)"); break;
     case D_DEPTH:   snprintf(l, ln, "Depth"); snprintf(v, vn, "%s", s23_depth_on() ? "exact (no z-fighting)" : "arcade sorting"); break;
@@ -163,6 +165,7 @@ static void disp_change(int r, int dir)
                       eng_disp_set_texfilter(ord[cyc(i, d, 5)]); break; }
     case D_ANISO:   { static const int lv[5] = { 0, 2, 4, 8, 16 }; int i = 0; for (int k = 0; k < 5; k++) if (lv[k] == g_eng_disp.tex_aniso) i = k;
                       eng_disp_set_texaniso(lv[cyc(i, d, 5)]); break; }
+    case D_FX:      eng_disp_set_fx(!g_eng_disp.fx_filter); break;
     case D_SMOOTH:  s23_smooth_set(!s23_smooth_on()); eng_cfg_set_int("motion_smooth", s23_smooth_on()); break;
     case D_DEPTH:   s23_depth_set(!s23_depth_on()); eng_cfg_set_int("depth", s23_depth_on()); break;
     case D_C404:    s23_pic_c404 = dir ? s23_pic_c404 + 10 * dir : (s23_pic_c404 >= 100 ? 0 : s23_pic_c404 + 10);     /* Left/Right 10% steps, Enter cycles */

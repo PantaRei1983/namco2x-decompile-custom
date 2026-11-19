@@ -24,6 +24,7 @@
 #include "s23_c435.h"
 #include "s23_frame.h"
 #include "s23_build.h"
+#include "eng_display.h"
 #include "s23_game.h"
 #include "s23_host.h"
 
@@ -714,6 +715,34 @@ static void build(s23_built *b)
  * own alpha unless its bank is the C404's opaque bank and the pen isn't its alpha pen. Drawn into an ARGB overlay the back end lays over the
  * polygons (ponytail: in list order, over every polygon -- MAME sorts them by depth among the polygons; sort them in if one shows through wrong) */
 int s23_spr_fullpic, s23_spr_hud;
+/* the "Effects" option (eng_display fx_filter): one tile of an effect sprite as a 34 x 34 premultiplied cell (0xAARRGGBB, GL_BGRA), its
+ * 32 x 32 texels in the middle and a 1-texel rim from the neighbouring tiles of the same sprite (clear past the sprite's edge), so a
+ * filtered tile blends into its neighbours with no seam and fades out at the sprite's own edge. The colour as s23_sprites_draw's */
+void s23_spr_cell(const s23_frame_state *fs, const s23_sprite *s, int row, int col, uint32_t *cell)
+{
+    const uint8_t *c4 = fs->c404;
+    const int fflags = c4[2 * 0x1A + 1], ffac = 0xFF - c4[2 * 0x19 + 1], fr = c4[2 * 0x16 + 1], fg = c4[2 * 0x17 + 1], fb = c4[2 * 0x18 + 1];
+    const int acolor = c4[2 * 0x0F + 1], apen = c4[2 * 0x10 + 1];
+    const uint32_t *pal = &fs->pens[(s->color & 0x7F) << 8];
+    const int fade = (fflags & 2) || s->fade, af = 0xFF - s->alpha, ablend = (s->color & 0x7F) != acolor;
+    for (int cy = 0; cy < 34; cy++) for (int cx = 0; cx < 34; cx++) {
+        int r = row, c = col, v = cy - 1, u = cx - 1;
+        if (v < 0) { r--; v = 31; } else if (v > 31) { r++; v = 0; }
+        if (u < 0) { c--; u = 31; } else if (u > 31) { c++; u = 0; }
+        uint32_t o = 0;
+        if (r >= 0 && r < s->rows && c >= 0 && c < s->cols) {
+            const uint8_t *src = sprrom + (((uint32_t)s->code + r * s->cols + c) & 0x3FFF) * 1024u;
+            const int pen = src[v * 32 + u];
+            if (pen != 0xFF) {
+                const uint32_t pc = pal[pen]; int cr = pc >> 16 & 0xFF, cg = pc >> 8 & 0xFF, cb = pc & 0xFF;
+                if (fade && ffac != 0xFF) { cr = (cr * ffac + fr * (0x100 - ffac)) >> 8; cg = (cg * ffac + fg * (0x100 - ffac)) >> 8; cb = (cb * ffac + fb * (0x100 - ffac)) >> 8; }
+                const uint32_t a = af != 0xFF && (ablend || pen == apen) ? (uint32_t)af : 0xFF;
+                o = a << 24 | (cr * a / 255) << 16 | (cg * a / 255) << 8 | (cb * a / 255);
+            }
+        }
+        cell[cy * 34 + cx] = o;
+    }
+}
 void s23_sprites_draw(const s23_frame_state *fs, int i0, int i1, uint32_t *ovl, int ow, int ox, int bb[4])
 {
     const uint8_t *c4 = fs->c404;
@@ -724,6 +753,32 @@ void s23_sprites_draw(const s23_frame_state *fs, int i0, int i1, uint32_t *ovl, 
         const s23_sprite *s = &fs->spr[i];
         const uint32_t *pal = &fs->pens[(s->color & 0x7F) << 8];
         const int fade = (fflags & 2) || s->fade, af = 0xFF - s->alpha, ablend = (s->color & 0x7F) != acolor;
+        if (s23_fx_smooth() && s23_spr_is_fx(s)) {   /* "Effects": filtered, from the rimmed cells (the GPU draws them as filtered quads instead: src/s23_gl.c) */
+            static uint32_t cell[34 * 34];
+            for (int row = 0; row < s->rows; row++) for (int col = 0; col < s->cols; col++) {
+                s23_spr_cell(fs, s, row, col, cell);
+                const int x0 = s->x + col * s->xs, y0 = s->y + row * s->ys, ax = abs(s->xs), ay = abs(s->ys);
+                if (!ax || !ay) continue;
+                const int xl = s->xs < 0 ? x0 + s->xs : x0, yt = s->ys < 0 ? y0 + s->ys : y0;
+                for (int y = yt < 0 ? 0 : yt; y < yt + ay && y < 480; y++) {
+                    const float tv = (y + 0.5f - y0) * 32.f / s->ys + 0.5f; const int iv = (int)floorf(tv); const float fv = tv - iv;
+                    for (int x = xl < -ox ? -ox : xl; x < xl + ax && x + ox < ow; x++) {
+                        const float tu = (x + 0.5f - x0) * 32.f / s->xs + 0.5f; const int iu = (int)floorf(tu); const float fu = tu - iu;
+                        if (iu < 0 || iu > 32 || iv < 0 || iv > 32) continue;
+                        const uint32_t *t = &cell[iv * 34 + iu];
+                        float ch[4];
+                        for (int k = 0; k < 4; k++) { const int sh = 8 * k;
+                            ch[k] = ((t[0] >> sh & 0xFF) * (1 - fu) + (t[1] >> sh & 0xFF) * fu) * (1 - fv) + ((t[34] >> sh & 0xFF) * (1 - fu) + (t[35] >> sh & 0xFF) * fu) * fv; }
+                        const uint32_t a = (uint32_t)(ch[3] + 0.5f); if (!a) continue;
+                        uint32_t o = a << 24;
+                        for (int k = 0; k < 3; k++) { uint32_t q = (uint32_t)(ch[k] * 255.f / ch[3] + 0.5f); o |= (q > 255 ? 255 : q) << (8 * k); }
+                        ovl[y * ow + x + ox] = o;
+                        if (x + ox < bb[0]) bb[0] = x + ox; if (x + ox >= bb[2]) bb[2] = x + ox + 1; if (y < bb[1]) bb[1] = y; if (y >= bb[3]) bb[3] = y + 1;
+                    }
+                }
+            }
+            continue;
+        }
         for (int row = 0; row < s->rows; row++) for (int col = 0; col < s->cols; col++) {
             const uint8_t *src = sprrom + (((uint32_t)s->code + row * s->cols + col) & 0x3FFF) * 1024u;
             const int x0 = s->x + col * s->xs, y0 = s->y + row * s->ys, ax = abs(s->xs), ay = abs(s->ys);
@@ -1005,6 +1060,17 @@ static void picture_adjust(uint8_t g[3][256])
 int s23_game_has_view(void) { return s23_game.znear_model > 0.f; }
 int s23_game_mounted_gun(void) { return s23_game.mounted_gun; }
 int s23_game_no_smooth(void) { return s23_game.no_smooth; }
+int s23_game_has_fx(void) { return s23_game.n_spr_fx > 0; }
+int s23_fx_smooth(void)
+{
+    static int ef = -2; if (ef == -2) { const char *e = getenv("S23_FX_FILTER"); ef = e && *e ? atoi(e) != 0 : -1; }
+    return s23_game.n_spr_fx > 0 && (ef >= 0 ? ef : g_eng_disp.fx_filter);
+}
+int s23_spr_is_fx(const s23_sprite *s)
+{
+    for (int k = 0; k < s23_game.n_spr_fx; k++) if (s->code >= s23_game.spr_fx[k][0] && s->code <= s23_game.spr_fx[k][1]) return 1;
+    return 0;
+}
 void s23_picture_load(void)
 {
     int eng_cfg_int(const char *, int);

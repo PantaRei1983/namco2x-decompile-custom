@@ -102,6 +102,8 @@ typedef struct {
     int (*mem_read)(uint32_t p, int size, uint32_t *v);
     int (*mem_write)(uint32_t p, int size, uint32_t v);
     void (*list_hook)(void *list);
+    const uint16_t (*spr_fx)[2]; int n_spr_fx;   /* optional, GORgON: the effect sprites (water spray, foam) by first tile, lo..hi inclusive: the display
+                                                   * option "Effects" draws them filtered instead of nearest-stretched (src/s23_gl.c spr_fx_run) */
     int (*spr_wide)(const struct s23_sprite *s);  /* optional, GORgON: -1 / +1 = this sprite is HUD, moved out to that edge in widescreen; 0 = stays */
     int (*hide_crosshair)(void);                  /* optional: 1 = the crosshair is not drawn now (Gunmen Wars: the FPS layout, where the mouse turns
                                                    * and the crosshair's spot means nothing -- Options page "Crosshair (FPS)") */
