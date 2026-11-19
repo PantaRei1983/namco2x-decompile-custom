@@ -192,5 +192,5 @@ static const ss22_game game = {
 
 extern int g_eng_tex_smooth_default;           /* engine/tex_bake.c */
 int main(int argc, char **argv) {
-    g_eng_tex_smooth_default = 1;               /* Texture smoothing on, as Alpine Racer 2 (Display page; texture_smoothing in the cfg) */
+    g_eng_tex_smooth_default = 1;               /* 3D texture filter Bilinear by default, as Alpine Racer 2 (Display page; texture_filter in the cfg) */
     g_ss22_inputs_hook = af_inputs; g_ss22_adc_hook = af_adc; return ss22_main(argc, argv, &game); }

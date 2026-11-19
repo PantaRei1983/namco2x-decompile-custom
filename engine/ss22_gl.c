@@ -101,6 +101,14 @@ static bool            hud_on;               /* the game is showing its race HUD
 static const eng_hud_cfg *hud_cfg;           /* the game's HUD description, set by its board host (NULL = the HUD stays put) */
 
 void ss22_gl_set_hud(const eng_hud_cfg *h) { hud_cfg = h; }
+void ss22_gl_set_soft_effects(const int (*ranges)[2], int n) { sprite_set_soft_tiles(ranges, n); }
+void ss22_gl_set_effects(const int (*ranges)[2], int n)
+{
+    if (!ranges || n <= 0) return;
+    sprite_set_effect_tiles(ranges, n);
+    g_sprite_smooth_fast = 1;                 /* Prop Cycle (its own renderer) keeps the plain per-tap loop */
+    g_eng_fx_known = 1;                       /* the menu shows its row */
+}
 
 /* THE GUN SHOT FLASH (Time Crisis): a light-gun cabinet whitens the whole screen for the frame after the trigger so the gun's
  * photodiode can find the beam -- the mixer's screen fade at full strength in white, switched on for ONE frame with no ramp
@@ -241,11 +249,111 @@ static void tex_alloc(GLuint *t)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPR_W, SPR_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 }
 
+/* An effect sprite (Display > Effects): sprite_render_item has already sampled the 32x32 tiles bilinearly (engine/sprite_hw.c); what it made is premultiplied
+ * and drawn LINEARLY, so the stretched tiles show no blocks. Only the sprites named in the game's fx table come here. */
+/* Only the part of the item that has something in it is made, uploaded and drawn: a dust cloud's box is mostly empty, and a transparent texel adds nothing under the
+ * premultiplied blend, so the picture is the same as for the whole box (one transparent texel is kept round the content for the linear sampler). The textures take
+ * turns, so an upload never lands in one a draw of this frame may still be reading. */
+#define FX_TEX_N 4
+static GLuint spr_fx_tex[FX_TEX_N];
+static int spr_fx_next;
+static uint8_t *spr_fx_buf;
+static void draw_effect_sprite(const sprite_item *it)
+{
+    const int TW = SPR_W + 2, TH = SPR_H + 2;
+    if (!spr_fx_buf && !(spr_fx_buf = malloc((size_t)TW * TH * 4))) return;
+    const int w = it->w, h = it->h;
+    int bx0 = w, bx1 = -1, by0 = h, by1 = -1;                                /* the pixels with any alpha */
+    for (int y = 0; y < h; y++) {
+        const uint8_t *s = spr_buf + (size_t)y * w * 4 + 3;
+        int xa = -1, xb = -1;
+        for (int x = 0; x < w; x++) if (s[(size_t)x * 4]) { xa = x; break; }
+        if (xa < 0) continue;
+        for (int x = w - 1; x >= xa; x--) if (s[(size_t)x * 4]) { xb = x; break; }
+        if (xa < bx0) bx0 = xa;
+        if (xb > bx1) bx1 = xb;
+        if (y < by0) by0 = y;
+        by1 = y;
+    }
+    if (bx1 < 0) return;                                                     /* nothing in it: nothing to draw */
+    /* a glow sprite (sprite_item_soft) is blurred a little after the bilinear pass: the box grows by 2 texels for it */
+    int ext = sprite_item_soft(it) ? 2 : 0;
+    if (bx1 - bx0 + 1 + 2 * ext + 2 > TW || by1 - by0 + 1 + 2 * ext + 2 > TH) ext = 0;
+    bx0 -= ext; by0 -= ext; bx1 += ext; by1 += ext;
+    const int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1, rw = bw + 2, rh = bh + 2;
+    for (int y = 0; y < rh; y++) {                                           /* premultiplied, a transparent texel all round */
+        uint8_t *d = spr_fx_buf + (size_t)y * rw * 4;
+        const int sy = by0 + y - 1;
+        if (sy < by0 || sy > by1) { memset(d, 0, (size_t)rw * 4); continue; }
+        d[0] = d[1] = d[2] = d[3] = 0;
+        d += 4;
+        for (int x = 0; x < bw; x++, d += 4) {
+            const int sx = bx0 + x;
+            if (sx < 0 || sx >= w || sy < 0 || sy >= h) { d[0] = d[1] = d[2] = d[3] = 0; continue; }   /* (only the blur's margin lies outside the item) */
+            const uint8_t *s = spr_buf + ((size_t)sy * w + sx) * 4;
+            const unsigned a = s[3];
+            d[0] = (uint8_t)((s[0] * a + 127) / 255); d[1] = (uint8_t)((s[1] * a + 127) / 255); d[2] = (uint8_t)((s[2] * a + 127) / 255); d[3] = (uint8_t)a;
+        }
+        d[0] = d[1] = d[2] = d[3] = 0;
+    }
+    if (ext) {                                                               /* two passes of the 1-2-1 kernel, each way, on the premultiplied texels */
+        static uint8_t *tmp;
+        if (!tmp && !(tmp = malloc((size_t)TW * TH * 4))) tmp = NULL;
+        if (tmp) for (int pass = 0; pass < 2; pass++) {
+            for (int y = 0; y < rh; y++) {                                   /* horizontal: buf -> tmp */
+                const uint8_t *s = spr_fx_buf + (size_t)y * rw * 4; uint8_t *d = tmp + (size_t)y * rw * 4;
+                for (int x = 0; x < rw; x++)
+                    for (int c = 0; c < 4; c++) {
+                        const int l = x > 0 ? s[(x - 1) * 4 + c] : 0, r = x < rw - 1 ? s[(x + 1) * 4 + c] : 0;
+                        d[x * 4 + c] = (uint8_t)((l + 2 * s[x * 4 + c] + r + 2) >> 2);
+                    }
+            }
+            for (int y = 0; y < rh; y++) {                                   /* vertical: tmp -> buf */
+                uint8_t *d = spr_fx_buf + (size_t)y * rw * 4;
+                for (int x = 0; x < rw * 4; x++) {
+                    const int u = y > 0 ? tmp[(size_t)(y - 1) * rw * 4 + x] : 0, v = y < rh - 1 ? tmp[(size_t)(y + 1) * rw * 4 + x] : 0;
+                    d[x] = (uint8_t)((u + 2 * tmp[(size_t)y * rw * 4 + x] + v + 2) >> 2);
+                }
+            }
+        }
+    }
+    GLuint *tp = &spr_fx_tex[spr_fx_next]; spr_fx_next = (spr_fx_next + 1) % FX_TEX_N;
+    if (!*tp) {
+        glGenTextures(1, tp);
+        glBindTexture(GL_TEXTURE_2D, *tp);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TW, TH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    } else glBindTexture(GL_TEXTURE_2D, *tp);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, spr_fx_buf);
+    const float u0 = 1.0f / TW, u1 = (float)(bw + 1) / TW, v0 = 1.0f / TH, v1 = (float)(bh + 1) / TH;
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_ALPHA_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    const int dx = (g_eng_hud_e && hud_cfg && (int)(it->z & 0x1FFFFF) <= hud_cfg->sprite_zmax) ? eng_hud_dx(it->x0 + it->w / 2.0) : 0;
+    const float qx0 = (float)(it->x0 + bx0 + dx), qx1 = qx0 + (float)bw, qy0 = (float)(it->y0 + by0), qy1 = qy0 + (float)bh;
+    glBegin(GL_QUADS);
+    glTexCoord2f(u0, v0); glVertex2f(qx0, qy0);
+    glTexCoord2f(u1, v0); glVertex2f(qx1, qy0);
+    glTexCoord2f(u1, v1); glVertex2f(qx1, qy1);
+    glTexCoord2f(u0, v1); glVertex2f(qx0, qy1);
+    glEnd();
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
+    glEnable(GL_ALPHA_TEST);
+    glDisable(GL_TEXTURE_2D);
+}
+
 /* one sprite in its turn of the merged z order: rendered into the corner of one 640x480 texture, sub-imaged, blended */
 static void draw_sprite(const sprite_item *it)
 {
     if (!spr_buf && !(spr_buf = malloc((size_t)SPR_W * SPR_H * 4))) return;
     sprite_render_item(&sst, &g_fog, it, spr_buf, 1);
+    if (sprite_item_smooth(it)) { draw_effect_sprite(it); return; }       /* dust / mud / spray with the option on: a linear texture, never a HUD sprite */
     if (it->prioverchar) {                    /* the text layer shows nothing under this sprite's pixels */
         for (int y = 0; y < it->h; y++)
             for (int x = 0; x < it->w; x++)
@@ -585,6 +693,25 @@ void ss22_draw(int vw, int vh)
     cfg.fade_rgb = ss22_fade_rgb;
     cfg.wide_backdrop = 1;                   /* a menu's screen-sized backdrop reaches the wide picture's edges (engine/quad_gl.c) */
     { static int tc = -1; if (tc < 0) { const char *e = getenv("ENG_TEXEL_CENTRE"); tc = e ? atoi(e) : 1; } cfg.texel_centre = tc; }
+    /* the optional 3D texture filter (Display > 3D texture filter, texture_filter in the cfg; ENG_TEX_FILTER=0|1 wins for a run): world
+     * polygons only -- the HUD pieces drawn as polygons, and the sprite and text layers, stay NEAREST */
+    { static int ef = -2, ea = -2;                                                     /* 0 off (the board's NEAREST), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear */
+      if (ef == -2) { const char *e = getenv("ENG_TEX_FILTER"); ef = e && *e ? atoi(e) : -1; if (ef > 4) ef = 4; }
+      if (ea == -2) { const char *e = getenv("ENG_TEX_ANISO"); ea = e && *e ? atoi(e) : -1; }
+      g_eng_tex_filter = ef >= 0 ? ef : (g_eng_tex_filter_setting < 0 ? 0 : g_eng_tex_filter_setting > 4 ? 4 : g_eng_tex_filter_setting);
+      g_eng_tex_aniso = g_eng_tex_filter >= 3 ? (ea >= 0 ? ea : g_eng_tex_aniso_setting) : 0;
+      tex_bake_set_layout(g_eng_tex_filter >= 3);                                        /* the mip layout (a no-op while unchanged) */
+      tex_bake_set_filtered(g_eng_tex_filter); }                                         /* bakes made for filtering (a no-op while unchanged) */
+    { static int last = -1, lasta = -1;
+      if (g_eng_tex_filter != last || g_eng_tex_aniso != lasta) { last = g_eng_tex_filter; lasta = g_eng_tex_aniso;
+          static const char *const nm[5] = { "off", "bilinear", "sharp bilinear", "trilinear", "sharp trilinear" };
+          fprintf(stderr, "[TEX] 3D texture filter: %s, anisotropy %dx\n", nm[last], lasta ? lasta : 1); } }
+    cfg.nofilter_quad = eng_hud_quad_piece;
+    if (g_eng_fx_known) {                                /* the 2D effects option (Display > Effects; ENG_FX_FILTER=0|1 wins for a run) */
+        static int ef = -2;
+        if (ef == -2) { const char *e = getenv("ENG_FX_FILTER"); ef = e && *e ? (atoi(e) != 0) : -1; }
+        g_sprite_smooth = ef >= 0 ? ef : g_eng_fx_filter_setting;
+    }
 
     /* MERGED Z ORDER, not layers: MAME queues sprites and polygons into the same radix tree keyed on a 24-bit z and
      * walks it far to near, so a sprite can sit behind a polygon (the HUD plate behind the score digits) */

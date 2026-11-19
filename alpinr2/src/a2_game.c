@@ -194,5 +194,5 @@ static const ss22_game game = {
 
 extern int g_eng_tex_smooth_default;           /* engine/tex_bake.c */
 int main(int argc, char **argv) {
-    g_eng_tex_smooth_default = 1;               /* Texture smoothing on: the cabinet's snow is smooth (Display page; texture_smoothing in the cfg) */
+    g_eng_tex_smooth_default = 1;               /* 3D texture filter Bilinear by default: the cabinet's snow is smooth (Display page; texture_filter in the cfg) */
     g_ss22_inputs_hook = a2_inputs; g_ss22_adc_hook = a2_adc; return ss22_main(argc, argv, &game); }

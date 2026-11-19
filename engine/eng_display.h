@@ -29,8 +29,10 @@ typedef struct {
     int wide_169;                /* widescreen's shape (Display > Aspect ratio while widescreen is on): 0 = the window's (the default), 1 = 16:9 */
     int hud_edges;               /* widescreen: 1 = the HUD slides out to the screen edges (default), 0 = the original HUD stays in the 4:3 centre */
     int gun_border;              /* light-gun games: a white border round the picture, 0..6 % of the window (Sinden-style guns need it), F8 cycles */
-    int tex_smooth;              /* Texture smoothing: 1 = the polygons' textures blended between texels, 0 = hard blocks (the game's default: engine/tex_bake.c) */
     int crosshair;               /* light-gun games: 1 = draw the aiming cross (default), 0 = none */
+    int tex_filter;              /* 3D texture filter: 0 off (the board's nearest, default), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear; polygons only, never the HUD, text or sprites (saved as texture_filter) */
+    int tex_aniso;               /* anisotropic filtering with the trilinear modes: 0 off, else 2/4/8/16 (saved as texture_aniso) */
+    int fx_filter;               /* 2D effect sprites (dust, mud, spray) smoothed instead of nearest-stretched; only games that name their effect tiles (saved as effects_filter) */
     int fps;                     /* Frame rate: pictures a second, 0 = Auto (the default; engine/eng_vsync.h; the game itself always runs at 59.906 Hz) */
 } eng_display_t;
 extern eng_display_t g_eng_disp;
@@ -54,8 +56,10 @@ void eng_disp_toggle_fullscreen(void);     /* F11: windowed <-> fullscreen (desk
 
 void eng_disp_set_hud_edges(int on);
 void eng_disp_cycle_gun_border(void);      /* F8 in a light-gun game: off, 1..6 %, saved as gun_border */
-void eng_disp_set_tex_smooth(int on);      /* saved as texture_smoothing */
 void eng_disp_set_crosshair(int on);       /* saved as crosshair */
+void eng_disp_set_texfilter(int mode);     /* 0 off, 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear; saved as texture_filter (off | bilinear | sharp | trilinear | sharp-trilinear) */
+void eng_disp_set_texaniso(int level);     /* 0 off, else 2/4/8/16 (with the trilinear modes); saved as texture_aniso */
+void eng_disp_set_fx(int on);              /* saved as effects_filter (off | on) */
 void eng_disp_set_fps(int fps);           /* saved as frame_rate (0 = Auto, the default) */
 void eng_disp_set_wide(int on);
 void eng_disp_set_winmode(int m);

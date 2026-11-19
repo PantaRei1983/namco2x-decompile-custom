@@ -5,6 +5,7 @@
 #include <math.h>
 #include "eng_vsync.h"
 #include "eng_display.h"
+#include "tex_bake.h"
 #include "eng_cfg.h"
 
 #define BASE_W 640
@@ -158,8 +159,19 @@ void eng_disp_load(const char *cfg_path, int scale, bool fullscreen)
     d->gun_border = eng_cfg_int("gun_border", 0);
     if (d->gun_border < 0 || d->gun_border > 6) d->gun_border = 0;
     d->crosshair = eng_cfg_int("crosshair", 1) != 0;
-    { extern int g_eng_tex_smooth, g_eng_tex_smooth_default;
-      d->tex_smooth = eng_cfg_int("texture_smoothing", g_eng_tex_smooth_default) != 0; g_eng_tex_smooth = d->tex_smooth; }
+    { const char *tf = eng_cfg_get("texture_filter");
+      /* off | bilinear | sharp | trilinear | sharp-trilinear (or 0..4). None yet: arcade-lan's texture_smoothing if the cfg has it, else
+       * the game's default (g_eng_tex_smooth_default: Bilinear in Alpine Racer 2 and Alpine Surfer) */
+      extern int g_eng_tex_smooth_default;
+      d->tex_filter = !tf ? (eng_cfg_int("texture_smoothing", g_eng_tex_smooth_default) != 0) : (!strcmp(tf, "sharp-trilinear") || !strcmp(tf, "4")) ? 4 : (!strcmp(tf, "trilinear") || !strcmp(tf, "3")) ? 3
+                    : (!strcmp(tf, "sharp") || !strcmp(tf, "2")) ? 2 : (!strcmp(tf, "bilinear") || !strcmp(tf, "1")) ? 1 : 0;
+      g_eng_tex_filter_setting = d->tex_filter;
+      int an = eng_cfg_int("texture_aniso", 0);
+      d->tex_aniso = an >= 16 ? 16 : an >= 8 ? 8 : an >= 4 ? 4 : an >= 2 ? 2 : 0;
+      g_eng_tex_aniso_setting = d->tex_aniso; }
+    { const char *fx = eng_cfg_get("effects_filter");
+      d->fx_filter = fx && (!strncmp(fx, "on", 2) || atoi(fx) == 1);
+      g_eng_fx_filter_setting = d->fx_filter; }
     d->fps = eng_vsync_rate_valid(eng_cfg_int("frame_rate", ENG_VSYNC_DEFAULT));
     d->volume = eng_cfg_int("volume", 100);
     if (d->volume < 0) d->volume = 0;
@@ -213,16 +225,32 @@ void eng_disp_set_hud_edges(int on)
 }
 
 bool g_eng_disp_light_gun;
-void eng_disp_set_tex_smooth(int on)
-{
-    extern int g_eng_tex_smooth;
-    g_eng_disp.tex_smooth = on != 0; g_eng_tex_smooth = g_eng_disp.tex_smooth;
-    eng_cfg_set("texture_smoothing", g_eng_disp.tex_smooth ? "1" : "0");
-}
 void eng_disp_set_crosshair(int on)
 {
     g_eng_disp.crosshair = on != 0;
     eng_cfg_set("crosshair", g_eng_disp.crosshair ? "1" : "0");
+}
+
+void eng_disp_set_texfilter(int mode)
+{
+    static const char *const nm[5] = { "off", "bilinear", "sharp", "trilinear", "sharp-trilinear" };
+    g_eng_disp.tex_filter = mode < 0 ? 0 : mode > 4 ? 4 : mode;
+    g_eng_tex_filter_setting = g_eng_disp.tex_filter;
+    eng_cfg_set("texture_filter", nm[g_eng_disp.tex_filter]);
+}
+void eng_disp_set_texaniso(int level)
+{
+    g_eng_disp.tex_aniso = level >= 16 ? 16 : level >= 8 ? 8 : level >= 4 ? 4 : level >= 2 ? 2 : 0;
+    g_eng_tex_aniso_setting = g_eng_disp.tex_aniso;
+    char b[8]; snprintf(b, sizeof b, g_eng_disp.tex_aniso ? "%d" : "off", g_eng_disp.tex_aniso);
+    eng_cfg_set("texture_aniso", b);
+}
+
+void eng_disp_set_fx(int on)
+{
+    g_eng_disp.fx_filter = on != 0;
+    g_eng_fx_filter_setting = g_eng_disp.fx_filter;
+    eng_cfg_set("effects_filter", g_eng_disp.fx_filter ? "on" : "off");
 }
 
 void eng_disp_set_fps(int fps)

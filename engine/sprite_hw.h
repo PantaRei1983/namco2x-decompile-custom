@@ -87,6 +87,18 @@ typedef struct {
 
 int  sprite_collect(const sprite_state *st, const fog_state *fog,
                     sprite_item *out, int max_items);
+
+/* Optional bilinear smoothing of the EFFECT sprites (dust, mud, spray) -- never the gauges, banners, digits or titles. A game registers the tile
+ * ranges (inclusive) of its effect art; g_sprite_smooth (the menu's choice, 0/1) switches it on. sprite_render_item then samples those tiles
+ * bilinearly; a renderer draws such an item (sprite_item_smooth) from a LINEAR texture made by sprite_pad_premul, blended GL_ONE / GL_ONE_MINUS_SRC_ALPHA. */
+extern int g_sprite_smooth;
+extern int g_sprite_smooth_fast;   /* 1: resolve each tile's texels once for the smooth path (identical pixels, a fraction of the time); the Super 22 compositor sets it */
+void sprite_set_effect_tiles(const int (*ranges)[2], int n);
+int  sprite_effects_known(void);                       /* 1 once a game registered ranges: the menu offers the option */
+int  sprite_item_smooth(const sprite_item *it);
+void sprite_set_soft_tiles(const int (*ranges)[2], int n);   /* glow sprites drawn 1:1 (Dirt Dash's headlights): smoothed AND softened */
+int  sprite_item_soft(const sprite_item *it);                /* 1: smoothing is on and the item is one of them */
+void sprite_pad_premul(const uint8_t *rgba, int w, int h, uint8_t *dst);   /* dst: (w+2)*(h+2)*4 bytes */
 /* Render one sprite into a w*h RGBA buffer whose origin is (it->x0, it->y0). */
 void sprite_render_item(const sprite_state *st, const fog_state *fog,
                         const sprite_item *it, uint8_t *rgba, int compose_alpha);

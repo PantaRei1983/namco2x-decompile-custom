@@ -57,6 +57,11 @@ typedef struct {
     bool        vics_linked;                 /* our fork: VICS set 1 is set 2's HEADER, not sprites (Air Combat 22, its code 0x3AD02): entry 0's
                                               * first halfword 6 = draw set 2, 7 = draw nothing; its third halfword = set 2's count - 1. The
                                               * registers' counts are constants. MAME draws both sets as sprites: stale ones stuck on screen */
+    const int  (*fx)[2];                     /* the sprite tiles (first tile of a sprite, inclusive ranges) that are dust, mud or spray: the Display menu's "Effects" option
+                                              * smooths those and nothing else (engine/sprite_hw.h). NULL = the game has none named, the option is not offered */
+    int          n_fx;
+    const int  (*soft)[2];                   /* optional: glow sprites (a subset of fx) that are drawn 1:1 and get a light blur when the option is on (Dirt Dash's headlights) */
+    int          n_soft;
 } ss22_video_cfg;
 
 typedef struct { const char *name; uint16_t bit; } ss22_press_name;      /* --press NAME@F[+LEN] */
