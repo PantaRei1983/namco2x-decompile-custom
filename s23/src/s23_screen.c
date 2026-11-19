@@ -23,6 +23,13 @@
 #define FRAME_PIX  (814ull * 525ull)
 #define VBL_LINE   480ull
 #define NEVER      UINT64_MAX
+/* THE BEAM COUNTER ON EVOLUTION 2 (0x0682000A; Crisis Zone): a plain line count, 0 where the PICTURE enters vblank -- not System 23's
+ * MAME format (line * 2 | vblank), which Time Crisis 2 checks against its raster interrupt's line. Crisis Zone's zone select resets the
+ * text layer's x scroll at vblank and waits for the count to reach row * 16 + 45 (the ticker's first line: 45 = the vblank's lines) to
+ * scroll only the ticker; its other waits stop at 518..520 (just before vblank). In MAME's format every one of them was already met
+ * in vblank: the ticker's scroll went to the whole layer (the header, the zone names and the timer slid with it). The picture runs 8
+ * lines behind our beam line (MAME's row scroll offsets, s23_text_scroll), hence 480 - 8 */
+#define EVO2_VPOS_ZERO 472u
 
 static uint64_t cyc;                         /* CPU cycles up to the last s23_screen_advance */
 static uint64_t off_pix;                     /* the pixel clock at cycle 0 (power-on: 0; a snapshot: the start of vblank) */
@@ -124,12 +131,30 @@ static uint32_t vpos_now(int *vblank)
     return line;
 }
 
+/* A BEAM-COUNTER WAIT (s23_game.beam_wait_*): Crisis Zone's zone select reads the counter in a loop for most of a frame, waiting for the
+ * ticker's line -- hundreds of thousands of reads a frame, run one by one, held a PC at 50 fps. Back-to-back reads that see the same line can only see it
+ * again until the next line starts, so the rest of the way there is counted at once (as RR_IDLE counts a RAM poll: the same cycles pass,
+ * the scheduler runs at the same count, the read that sees the new line lands on it). Only in a routine that counts nothing: a general
+ * skip also caught the boot's own counter loops, and the game stopped (frame ~1100, no interrupts). Stops 64 cycles short of the line
+ * and of the slice */
+static void poll_skip(uint32_t line)
+{
+    static uint64_t last_c = ~0ull; static uint32_t last_l = ~0u;
+    const uint64_t c = s23_cycles_now();
+    const int again = line == last_l && c - last_c < 256;
+    last_c = c; last_l = line;
+    if (!again) return;
+    int64_t n = (int64_t)cycles_until((pix_at(c) / LINE_PIX + 1) * LINE_PIX, c) - 64;
+    if (n > (int64_t)rr_budget - 64) n = (int64_t)rr_budget - 64;
+    if (n > 0) { rr_budget -= (int32_t)n; last_c += (uint64_t)n; }
+}
 uint32_t s23_vpos_dbg(void) { int vb; return vpos_now(&vb); }   /* the beam line, for probes ($S23_IOLOG) */
 int s23_screen_read(uint32_t p, int size, uint32_t *v)
 {
     if (size != 2) return 0;
     int vb;
-    if (p == 0x0682000Au) { const uint32_t l = vpos_now(&vb); cause(S23_SRC_C361, 0); *v = (l * 2) | (uint32_t)vb;
+    if (p == 0x0682000Au) { const uint32_t l = vpos_now(&vb); cause(S23_SRC_C361, 0); *v = s23_game.evo2 ? (l + 525u - EVO2_VPOS_ZERO) % 525u : (l * 2) | (uint32_t)vb;
+        if (s23_game.beam_wait_hi && rr_pc >= s23_game.beam_wait_lo && rr_pc <= s23_game.beam_wait_hi) poll_skip(l);
         { static int lg = -1; static uint32_t fr = ~0u; if (lg < 0) lg = getenv("S23_VPLOG") != NULL;   /* $S23_VPLOG: the line of each frame's first beam read */
           extern uint32_t rr_frame; if (lg && rr_frame != fr) { fr = rr_frame; fprintf(stderr, "[VP] %u %u\n", rr_frame, l); } }
         return 1; }

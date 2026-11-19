@@ -50,8 +50,10 @@ typedef struct {
     int (*rom_sub)(const char *dir, uint8_t *dst, size_t n);
     int (*rom_io)(const char *dir, uint8_t *dst, size_t n);
     uint32_t io_rom_size;                         /* how much of the I/O board's program its H8 maps */
-    int no_direct_buf;                            /* 1 = the C435 direct buffer (S23 0x0CC00000) is not decoded: Crisis Zone (MAME's crszone map leaves
-                                                   * 0x1CC00000 unmapped: a full-screen black quad written there covers the namco / GASHIN logos) */
+    int direct_off_bit;                           /* 1 = a C435 direct quad whose colour word (d[2]) has bit 15 set is not drawn. Crisis Zone: its direct buffer
+                                                   * (0x1CC00000, which MAME leaves unmapped) carries the attract demo's RULES panels ("PRESS PEDAL : GO&SHOOT",
+                                                   * "OUT OF AMMO"...: bit 15 clear) beside a full-screen quad and two letterbox bars it keeps every frame with
+                                                   * bit 15 set -- drawn, they covered the namco / GASHIN logos and the story's sky, which the arcade shows */
     int text_xscroll_from;                        /* optional: the text layer's x scroll only from this screen row down (0 = all rows,
                                                    * MAME). Crisis Zone 448: the zone select writes its bottom ticker's scroll for the whole
                                                    * picture (in vblank, no raster split) yet only the ticker moves on the arcade */
@@ -73,6 +75,8 @@ typedef struct {
                                                    * Crisis Zone 0: with "exact" its hotel scene (frame 2280) loses the sky (the background colour shows where
                                                    * coverage proves the sky polygons drawn) and gains black bands top and bottom -- cause not found yet (NOT
                                                    * transparent texels: System 23 has none, only the stencil, which the pre-pass honours) */
+    uint32_t beam_wait_lo, beam_wait_hi;          /* 0, or the game's routine that does nothing but wait on the beam counter (0x0682000A): its
+                                                   * reads are fast-forwarded to the next line (src/s23_screen.c poll_skip). Crisis Zone's ticker wait */
     uint16_t c417_status;                         /* the C417 status read's fixed bits (MAME: System 23 0x008E; crszone_state::c417_status_r 0) | test mode << 15 */
     uint16_t gun_x0, gun_xw, gun_y0, gun_yh;      /* the light gun's port range (MAME JVS_SCREEN_POSITION_INPUT_X1/Y1 PORT_MINMAX): first value + width */
     uint8_t io_6001_held;                         /* bits of the I/O board's 0x6001 that read as PRESSED always (MAME namco_tss_io_device::in_r: bit 3 =

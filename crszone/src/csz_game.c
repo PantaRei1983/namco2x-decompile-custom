@@ -94,7 +94,9 @@ const s23_game_t s23_game = {
     .speech_bank_lo = 0xDB, .speech_bank_hi = 0xFF,   /* the call-outs (0xDB/0xDC/0xE1, centred) and the shouts (0xFD, panned): voices 30/31, and 17 doubling 0xFD */
     .zip_help = "MAME's crszone.zip (Crisis Zone, World CSZO4 Ver. B)",
     .zips = zips, .nzips = 2, .chips = chips, .nchips = (int)(sizeof chips / sizeof chips[0]),
-    .evo2 = 1, .text_xscroll_from = 428,   /* (rowscroll row i = screen row i + 4: the ticker band is screen rows 432-463) */ .over_text = csz_over_text, .hud_wide_ok = csz_hud_wide_ok, .wide_pillar = csz_wide_pillar, .list_hook = csz_list_hook,
+    .evo2 = 1, .over_text = csz_over_text, .hud_wide_ok = csz_hud_wide_ok, .wide_pillar = csz_wide_pillar, .list_hook = csz_list_hook,
+    .beam_wait_lo = 0x801F76F0u, .beam_wait_hi = 0x801F772Cu,   /* the zone select's "read the counter until two reads agree": called only by the
+                                                                  * two ticker waits (0x801A3F54, 0x801A40A4), which loop on it for most of a frame */
     .clock = 203212800u,                          /* BUSCLOCK * 6 */
     .px_num = 500, .px_den = 3969,                /* 25.6 MHz / 203.2128 MHz */
     .sub_div = 12,                                /* 16.9344 MHz */
@@ -104,7 +106,7 @@ const s23_game_t s23_game = {
     .irq_prompt = 1,                              /* ~550 C450 DMA interrupts a frame: take each at once, as MAME */
     .ip = { [S23_SRC_RS232] = S23_IP(0), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C422] = S23_IP(1), [S23_SRC_VBLANK] = S23_IP(2),
             [S23_SRC_C361] = S23_IP(3), [S23_SRC_C451] = S23_IP(3), [S23_SRC_C450] = S23_IP(4), [S23_SRC_TIMER] = S23_IP(5) },
-    .boot_size = 0x800000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x0000, .no_direct_buf = 1, .depth_default = 0, .gun_x0 = 0x040, .gun_xw = 0x33F - 0x040, .gun_y0 = 0x020, .gun_yh = 0x0FF - 0x020, .sub_p7 = 0x80, .io_6001_held = 0x08,
+    .boot_size = 0x800000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x0000, .direct_off_bit = 1, .depth_default = 0, .gun_x0 = 0x040, .gun_xw = 0x33F - 0x040, .gun_y0 = 0x020, .gun_yh = 0x0FF - 0x020, .sub_p7 = 0x80, .io_6001_held = 0x08,
     .data_rom = { { "csz1mtah.2j", "csz1mtal.2h" }, { "csz1mtbh.2m", "csz1mtbl.2f" } },
     .npt = 4, .pt_rom = { { "csz1pt0h.7a", "csz1pt0l.7c" }, { "csz1pt1h.5a", "csz1pt1l.5c" }, { "csz1pt2h.4a", "csz1pt2l.4c" }, { "csz1pt3h.3a", "csz1pt3l.3c" } },
     .ccrl = "csz1ccrl.7f", .ccrh = "csz1ccrh.7e", .cg = { "csz1cgll.4m", "csz1cglm.4k", "csz1cgum.4j", "csz1cguu.5f" },
