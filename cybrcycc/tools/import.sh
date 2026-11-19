@@ -24,4 +24,4 @@ grep -E "DumpPcode:" "$WORK/cc_import.log" | sed 's/^INFO *//; s/(GhidraScript).
 cp "$WORK/cybrcycc.pcode" "$HERE/cybrcycc.pcode"
 rm -f "$HERE"/gen/cc_lifted_*.c
 ( cd "$ROOT" && python -I tools/gen/lift68k.py cybrcycc/cybrcycc.pcode cybrcycc/gen cc 8 cybrcycc/cybrcycc_main.bin | grep -v "untranslated\|CALLOTHER" )
-MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build cc 2>&1 | grep -E 'error|Linking'"
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build cc 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)

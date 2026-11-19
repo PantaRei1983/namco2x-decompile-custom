@@ -36,4 +36,4 @@ EOF
 rm -f "$HERE"/gen_supp/ads_lifted_*.c
 ( cd "$ROOT" && LIFT_SUPPLEMENT="$HERE/gen_supp/known.txt" LIFT_SUPP_NAME=ads_supp_jump \
     python -I tools/gen/lift68k.py acedriver/acedriver.pcode acedriver/gen_supp ads 4 acedriver/acedriver_main.bin | grep -v "untranslated\|CALLOTHER" )
-MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build ad 2>&1 | grep -E 'error|Linking'"
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build ad 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)

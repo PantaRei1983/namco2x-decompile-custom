@@ -23,4 +23,4 @@ grep -E "SeedTables:|DumpPcode:" "$WORK/vl_import.log" | sed 's/^INFO *//; s/(Gh
 cp "$WORK/victlap.pcode" "$HERE/victlap.pcode"
 rm -f "$HERE"/gen/rr_lifted_*.c
 ( cd "$ROOT" && python -I tools/gen/lift68k.py victlap/victlap.pcode victlap/gen rr 8 victlap/victlap_main.bin | grep -v "untranslated\|CALLOTHER" )
-if [ -f "$HERE/build/build.ninja" ]; then MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build vl 2>&1 | grep -E 'error|Linking'"; fi
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build vl 2>&1 | grep -E 'error|Linking' ); fi   # (MINGW64's own ninja, wherever MSYS2 is installed)

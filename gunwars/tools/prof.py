@@ -4,7 +4,7 @@ Prints, per thread, the share of samples per function (and the lifted MIPS progr
 import sys, subprocess, bisect, collections, re
 exe, prof = sys.argv[1], sys.argv[2]
 top = int(sys.argv[3]) if len(sys.argv) > 3 else 25
-nm = subprocess.run([r'C:\msys64\mingw64\bin\nm.exe', '-n', '--defined-only', exe], capture_output=True, text=True).stdout
+nm = subprocess.run(['nm', '-n', '--defined-only', exe], capture_output=True, text=True).stdout
 syms = []
 for l in nm.splitlines():
     p = l.split()

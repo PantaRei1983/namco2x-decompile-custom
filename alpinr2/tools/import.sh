@@ -24,4 +24,4 @@ grep -E "DumpPcode:" "$WORK/a2_import.log" | sed 's/^INFO *//; s/(GhidraScript).
 cp "$WORK/alpinr2.pcode" "$HERE/alpinr2.pcode"
 rm -f "$HERE"/gen/a2_lifted_*.c
 ( cd "$ROOT" && python -I tools/gen/lift68k.py alpinr2/alpinr2.pcode alpinr2/gen a2 8 alpinr2/alpinr2_main.bin | grep -v "untranslated\|CALLOTHER" )
-MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build a2 2>&1 | grep -E 'error|Linking'"
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build a2 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)

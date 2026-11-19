@@ -8,4 +8,4 @@ ROOT="$(cd "$HERE/.." && pwd)"
 bash "$HERE/tools/import.sh" "$HERE/extracted"
 rm -f "$HERE"/gen/rapidrvr_lifted_*.c
 ( cd "$ROOT" && python -I tools/gen/liftmips.py rapidrvr/rapidrvr.pcode rapidrvr/gen rapidrvr 16 )
-MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build rapidrvr 2>&1 | grep -E 'error|FAILED|Linking'"
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build rapidrvr 2>&1 | grep -E 'error|FAILED|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)

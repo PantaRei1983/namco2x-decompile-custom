@@ -20,4 +20,4 @@ touch "$HERE/seeds.txt"; cp "$HERE/seeds.txt" "$WORK/af_seeds.txt"
 grep -E "SeedTables:|DumpPcode:" "$WORK/af_regen.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
 cp "$WORK/alpines.pcode" "$HERE/alpines.pcode"
 ( cd "$ROOT" && python -I tools/gen/lift68k.py alpines/alpines.pcode alpines/gen af 8 alpines/alpines_main.bin | grep -v "untranslated\|CALLOTHER" )
-MSYSTEM=MINGW64 /c/msys64/usr/bin/bash.exe -lc "cd '$HERE' && ninja -C build af 2>&1 | grep -E 'error|Linking'"
+if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build af 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)
