@@ -116,6 +116,32 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   polygons drawn.
 - **Menus:** quick clicks and touchpad taps are no longer lost; a controller's D-pad moves one row, not two.
 
+### Texture filters and fixes from PantaRei1983's namco22-decompile fork
+
+- **3D texture filter (Display > 3D texture filter)** for every textured game: **Off, Bilinear, Sharp bilinear, Trilinear,
+  Sharp trilinear**, with **anisotropic filtering 2x / 4x / 8x / 16x** in the trilinear modes. Only the 3D polygons are
+  filtered: the HUD, the text layer and the 2D sprites stay sharp. It replaces the Texture smoothing switch: Alpine
+  Racer 2 and Alpine Surfer still start with Bilinear, and an older `texture_smoothing` line in a game's cfg is still read.
+  - Super 22 / System 22 and Prop Cycle: atlas pages with mip levels; the sharp modes run in a small fragment shader.
+    Config: `texture_filter` = `off | bilinear | sharp | trilinear | sharp-trilinear`, `texture_aniso`. Environment:
+    `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`.
+  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Gunmen Wars, Rapid River): filtered per fragment in the polygon
+    shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Environment: `S23_TEX_FILTER`,
+    `S23_TEX_ANISO`.
+  - Rave Racer has its own Display rows for the same filters. Cyber Sled has no textures, so no filter rows.
+- **Effects (Display > Effects):** smoothing for the 2D effect sprites of Dirt Dash (dust, mud, spray and a softer
+  headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks) and Armadillo
+  Racing (dust).
+- **Crisis Zone:**
+  - The zone select's beam counter is read in System 23 Evolution 2's format (a line count from the start of vblank),
+    so the game's own wait puts the ticker's scroll on the ticker rows only. This replaces the fixed row cut-off.
+  - That wait is fast-forwarded line by line, so the screen holds 60 fps.
+  - The attract demo's RULES panels ("PRESS PEDAL : GO&SHOOT", "OUT OF AMMO", ...) are shown. They are direct quads,
+    and the buffer is decoded again; the full-screen quad and letterbox bars that the game keeps there with bit 15 set
+    are skipped.
+- **Prop Cycle:** the end-of-game replay of the player's own run is in sync again.
+- **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+
 ## Putting a PC in a cabinet
 
 - **Video**: an original 15 kHz arcade monitor needs a converter from the PC's VGA/HDMI output to the monitor's RGB
