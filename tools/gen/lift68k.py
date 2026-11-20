@@ -366,10 +366,47 @@ class Lifter:
         ins.ops = ops[:k] + [('RAWC', '-', [c])]
         self.note('divide rewritten (%s)' % mn)
 
+    def fix_cmp2(self, ins):
+        """GHIDRA'S CMP2 / CHK2 ARE WRONG IN THREE WAYS. (1) Every addressing mode loads a word or long FROM the effective address and
+        uses it as a pointer to the bounds -- the bounds are AT the effective address (lower, then upper). (2) A data register is compared
+        whole; the CPU compares only its low byte / word (sign-extended), the whole register only for .l or an address register.
+        (3) C (out of bounds) is a signed <= pair; the 68020 checks the range modulo the size, so an unsigned or wrapping pair works too.
+        (4) A PC-relative bound pair is read 2 bytes early (the PC base is taken before the extension word).
+        Ridge Racer's course culling (the visible blocks of road and ground: cmp2.w (d16,PC),Dn) drew no road with (1).
+        Rewritten from the 68020 manual (the fix the first Ridge Racer 2 lift had): the p-code is kept up to the effective address."""
+        mn = ins.text.split()[0] if ins.text else ''
+        if not mn.startswith(('cmp2', 'chk2')) or self.rom is None: return
+        ops = ins.ops
+        k = next((n for n, o in enumerate(ops) if o[0] == 'LOAD'), None)
+        if k is None: return
+        A = ins.addr
+        op = int.from_bytes(self.rom[A:A + 2], 'big')
+        ext = int.from_bytes(self.rom[A + 2:A + 4], 'big')
+        if (op & 0xF9C0) != 0x00C0: return
+        sz = {0: 1, 1: 2, 2: 4}.get((op >> 9) & 3)
+        if sz is None: return
+        an, rn, chk = (ext >> 15) & 1, (ext >> 12) & 7, (ext >> 11) & 1
+        ea = self.rd(ops[k][2][1])
+        if (op & 0x3F) in (0x3A, 0x3B):                                # (d16,PC) / (d8,PC,Xn): Ghidra takes PC = the extension word's
+            ea = '(%s) + 2' % ea                                       # address; the displacement follows it, so the base is 2 further
+        sx = {1: '(int64_t)(int8_t)', 2: '(int64_t)(int16_t)', 4: '(int64_t)(int32_t)'}[sz]
+        reg = 'RG4(0x%X)' % ((0x20 if an else 0) + rn * 4)
+        x = '(int64_t)(int32_t)%s' % reg if an else '%s(%s)' % (sx, reg)
+        msk = '0xFFFFFFFFULL' if an or sz == 4 else ('0xFFFFULL' if sz == 2 else '0xFFULL')
+        c = ('{ uint32_t ea_ = (uint32_t)(%s); int64_t lo_ = %s(MRD%d(ea_)), hi_ = %s(MRD%d(ea_ + %d)), x_ = %s; '
+             'RS1(0x45, x_ == lo_ || x_ == hi_); RS1(0x47, ((uint64_t)(x_ - lo_) & %s) > ((uint64_t)(hi_ - lo_) & %s));'
+             % (ea, sx, sz, sx, sz, sz, x, msk, msk))
+        if chk:
+            c += ' if (RG1(0x47)) { rr_trap(0x%XU, 0x%XU, "chk2 out of bounds (the CPU would take exception 6)"); return; }' % (A, A)
+        c += ' }'
+        ins.ops = ops[:k] + [('RAWC', '-', [c])]
+        self.note('%s rewritten' % mn.split('.')[0])
+
     def function(self, f, out):
         ins = f.ins
         for i in ins: self.fix_preindexed(i)
         for i in ins: self.fix_divide(i)
+        for i in ins: self.fix_cmp2(i)
         self.cur_addrs = {i.addr for i in ins}
         self.lo, self.hi = min(self.cur_addrs), max(self.cur_addrs)
         self.temps = set()

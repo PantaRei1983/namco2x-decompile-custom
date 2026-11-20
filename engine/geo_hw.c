@@ -128,6 +128,12 @@ static geo_view g_view;
 #define LIT_MAX 512
 static int32_t g_lit[LIT_MAX];
 static int     g_lit_n, g_lit_idx;
+/* VERTEX LIGHTING, as MAME's current namcos22_v.cpp (blit_quads packet 0x10, after 0.289): the packet says flat or Gouraud, the mesh
+ * width and whether the quads are triangles, and its own diffuse intensity (word 3 x the camera's power). The quad index advances
+ * once per QUAD; a Gouraud quad takes its four normals from the mesh grid (index, index + width, index + width + 1, index + 1).
+ * Ridge Racer's waving flag, the rotating sign before the second tunnel, Prop Cycle's score / time, Time Crisis' knives. */
+static int     g_lit_gouraud, g_lit_width = 2, g_lit_tri;
+static int32_t g_lit_intensity;
 
 static void register_normals(uint32_t addr)
 {
@@ -150,7 +156,7 @@ static void register_normals(uint32_t addr)
         if (dot < 0) dot = 0;
         if (g_lit_n < LIT_MAX)
             g_lit[g_lit_n++] = g_view.ambient +
-                               (int32_t)(((int64_t)g_view.power * dot) >> 30);
+                               (int32_t)(((int64_t)g_lit_intensity * dot) >> 30);
     }
 }
 
@@ -278,14 +284,24 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
     int briv[4];
     for (int i = 0; i < 4; i++) {
         if (g_lit_n > 0) {
-            int idx = g_lit_idx++;
-            if (g_lit_n > 4) idx >>= 2;
-            briv[i] = g_lit[((idx % g_lit_n) + g_lit_n) % g_lit_n];
+            int k = g_lit_idx;                                   /* flat: one normal per quad */
+            if (g_lit_gouraud) {
+                static const int ni_off[4] = { 0, 0, 1, 1 };     /* + width for vertices 1 and 2 */
+                int idx = g_lit_tri ? (g_lit_idx >> 1) : g_lit_idx;
+                idx = idx / (g_lit_width > 1 ? g_lit_width - 1 : 1) + idx;
+                k = idx + ni_off[i] + ((i == 1 || i == 2) ? g_lit_width : 0);
+            }
+            if (k < 0) k = 0;
+            if (k >= g_lit_n) k = g_lit_n - 1;
+            briv[i] = g_lit[k];
         } else if (packetformat & 0x40) {
             briv[i] = (int)((uv_raw[i] >> 16) & 0xff);   /* gouraud */
         } else {
             briv[i] = (int)((color >> 16) & 0xff);       /* flat */
         }
+    }
+    if (g_lit_n > 0 && g_lit_gouraud && g_lit_tri) {      /* triangles: a quad with two vertices the same */
+        if (g_lit_idx & 1) briv[0] = briv[1]; else briv[2] = briv[3];
     }
     q.cmode   = (uv_raw[0] >> 12) & 0xf;   /* oracle: same fields */
     q.texbank = (uv_raw[1] >> 12) & 0xf;
@@ -512,11 +528,18 @@ static void blit_quads(uint32_t addr, uint32_t length,
         if (packetlength == 0x17) {
             quad_fixed(pt_read(addr + 2), addr + 3, 0,
                        pt_read(addr + 1), packetformat, cb, user);
+            g_lit_idx++;
         } else if (packetlength == 0x18) {
             quad_fixed(pt_read(addr + 2), addr + 4, pt_read(addr + 3),
                        pt_read(addr + 1), packetformat, cb, user);
+            g_lit_idx++;
         } else if (packetlength == 0x10) {
             g_lit_n = 0; g_lit_idx = 0;
+            const int32_t w1 = pt_read(addr + 1);
+            g_lit_gouraud = (w1 & 3) > 0;
+            g_lit_width = ((w1 >> 16) & 0xf) + 1;
+            g_lit_tri = (w1 >> 20) & 1;
+            g_lit_intensity = (int32_t)(((int64_t)(pt_read(addr + 3) & 0xffff) * g_view.power) >> 15);
             register_normals(addr + 4);
         } else if (packetlength == 0x0d) {
             register_normals(addr + 1);

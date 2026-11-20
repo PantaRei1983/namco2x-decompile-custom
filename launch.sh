@@ -17,6 +17,7 @@
 #   ./launch.sh ad           Ace Driver (add a number for the window size: ad 3)
 #   ./launch.sh cc           Cyber Commando (add a number for the window size: cc 3)
 #   ./launch.sh r2           Ridge Racer 2 (add a number for the window size: r2 3)
+#   ./launch.sh rr1          Ridge Racer (add a number for the window size: rr1 3)
 #   ./launch.sh cs           Cyber Sled (add a number for the window size: cs 2)
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
@@ -180,6 +181,17 @@ case "$game" in
             exec ./build/r2 extracted --window $SCALE ${PARGS[@]+"${PARGS[@]}"}
         fi
         exec ./build/r2 extracted "$@"
+        ;;
+    rr1|ridgerac|ridgeracer)
+        if [ ! -f ridgerac/build/CMakeCache.txt ]; then
+            echo "Ridge Racer is not built yet. Run:  ridgerac/build.sh /path/to/ridgerac.zip /path/to/namcoc74.zip  (and ridgerac/tools/import.sh once)"; exit 1
+        fi
+        rebuild ridgerac rg
+        cd ridgerac
+        if play_args "$@"; then
+            exec ./build/rg extracted --window $SCALE ${PARGS[@]+"${PARGS[@]}"}
+        fi
+        exec ./build/rg extracted "$@"
         ;;
     cs|cybsled|cybersled)
         if [ ! -f cybsled/build/CMakeCache.txt ]; then

@@ -231,3 +231,20 @@ __pycache__/
 /rapidrvr/gen/
 /rapidrvr/build/
 /rapidrvr/*.pcode
+# Ridge Racer (ridgerac/): game files, the translation's working files, test output
+/ridgerac/extracted/
+/ridgerac/gen/
+/ridgerac/build/
+/ridgerac/run*/
+/ridgerac/*.bin
+/ridgerac/*.pcode
+/ridgerac/*.log
+/ridgerac/*.out
+/ridgerac/*.nv
+/ridgerac/*.nv.tmp
+/ridgerac/*.cfg
+/ridgerac/*.rec
+/ridgerac/*.png
+/ridgerac/captures/
+/ridgerac/screenshots/
+/ridgerac/recordings/

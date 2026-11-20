@@ -56,6 +56,7 @@ cabinets on the network and links with them, with nobody touching a keyboard, ev
 | **Air Combat 22** | 1995 | Super 22 | 1 | **New** port; jet-fighter missions |
 | **Aqua Jet** | 1996 | Super 22 | 1 | **New** port |
 | **Rapid River** | 1997 | Gorgon (System 23 family) | 1 | **New** port; white-water rafting |
+| **Ridge Racer** | 1993 | System 22 | 1 | **New** port (World, RR2 Ver.B); the waving flag lit as in MAME's current source |
 | **Crisis Zone** | 1999 | System 23 | 1 | Built by this fork, with widescreen and graphics fixes |
 | **Prop Cycle** | 1996 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
 | **Dirt Dash** | 1995 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
@@ -145,6 +146,18 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     are skipped.
 - **Prop Cycle:** the end-of-game replay of the player's own run is in sync again.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Ridge Racer (new port):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
+  master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
+  - The translator (`tools/gen/lift68k.py`) rewrites `cmp2` / `chk2`: Ghidra reads the bounds through a pointer it loads from
+    the effective address (they are AT it), compares the whole data register, and reads a PC-relative pair 2 bytes early.
+    Ridge Racer's course culling uses it, and drew no road or ground until it was fixed. Re-run a game's `tools/regen.sh`
+    to get the fix in its translation.
+  - Vertex lighting (point ROM packet 0x10) follows MAME's current `namcos22_v.cpp` (after 0.289): flat or Gouraud, the mesh
+    width, triangles and the packet's own intensity, the normal index advancing once per quad. The waving flag in the
+    attract mode and the rotating sign before the second tunnel are smoothly lit; the same code draws Prop Cycle's
+    score / time, Time Crisis' knives and Armadillo Racing's title logo.
+  - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
+    `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
 
 ## Putting a PC in a cabinet
 
@@ -238,7 +251,7 @@ cmake -S launcher -B launcher/build -G Ninja && ninja -C launcher/build
 ```
 
 Game folders: `tokyowar raverace acedriver victlap cybrcomm adillor airco22 alpiner alpines alpinr2 aquajet cybrcycc
-dirtdash timecris cybsled crszone gunwars tc2`.
+dirtdash timecris cybsled crszone gunwars tc2 ridgerac`.
 
 The new 68020 ports are translated from each game's own program with Ghidra and this fork's translator
 (`tools/gen/lift68k.py`, `tools/gen/ghidra/`); Gunmen Wars with its MIPS translator (`tools/gen/liftmips.py`,
