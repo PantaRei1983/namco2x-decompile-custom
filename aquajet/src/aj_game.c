@@ -30,7 +30,9 @@ static const eng_rom_t k_roms[] = {
     {"aj1ptru0.18f", 0x80000}, {"aj1ptru1.16f", 0x80000}, {"aj1ptru2.15f", 0x80000}, {"aj1ptru3.14f", 0x80000},
     {"aj1scg0.12f", 0x200000}, {"aj1scg1.10f", 0x200000}, {"aj1scg2.8f", 0x200000},
     {"aj1wavea.2l", 0x400000}, {"aj1waveb.1l", 0x400000},
-    {"aj2verb.1", 0x100000}, {"aj2verb.2", 0x100000}, {"aj2verb.3", 0x100000}, {"aj2verb.4", 0x100000},
+    /* older MAME sets name the program chips aj2ver-b.N (the same dumps, same CRCs) */
+    {"aj2verb.1", 0x100000, NULL, "aj2ver-b.1"}, {"aj2verb.2", 0x100000, NULL, "aj2ver-b.2"},
+    {"aj2verb.3", 0x100000, NULL, "aj2ver-b.3"}, {"aj2verb.4", 0x100000, NULL, "aj2ver-b.4"},
 };
 #define NROMS ((int)(sizeof k_roms / sizeof k_roms[0]))
 
@@ -143,6 +145,12 @@ static void aj_adc(uint16_t *adc)
     adc[2] = (uint16_t)l;
 }
 
+/* The water of the 2D sprite layer, by the tile each sprite draws (found by listing every sprite of an autoplay race against the sprite ROM's pictures):
+ * 1..800 the spray thrown over the screen's edges while riding (eight frames, each four 5x5-tile pieces); 1346..3585 the wall of water when the course
+ * runs under the waterfall. 801.. are the TIME digits, the banners and the course pictures; from 3586 the ranking and the staff roll's letters. The
+ * Display menu's "Effects" option smooths exactly these. */
+static const int fx_tiles[][2] = { { 1, 800 }, { 1346, 3585 } };
+
 static const ss22_game game = {
     .name = "Aqua Jet", .tag = "AJ", .lname = "aj", .logname = "aquajet.log", .zip = "aquajet.zip",
     .board = &aj_board,
@@ -153,7 +161,8 @@ static const ss22_game game = {
     .snd = { "aj1data.8k", { "aj1wavea.2l", "aj1waveb.1l" }, { 0, 0x800000 }, 0x1000000, 0xFFFF, { 1, 2 },
              .aux = { [0] = { "Tank speaker", 1.0f } } },
     .video = { { "aj1cg0.8d", "aj1cg1.10d", "aj1cg2.12d", "aj1cg3.13d", "aj1cg4.14d", "aj1cg5.16d", "aj1cg6.18d", "aj1cg7.19d" },
-               "aj1ccrl.3d", "aj1ccrh.1d", { "aj1scg0.12f", "aj1scg1.10f", "aj1scg2.8f" }, 3, 0x1000000, 0xFF },
+               "aj1ccrl.3d", "aj1ccrh.1d", { "aj1scg0.12f", "aj1scg1.10f", "aj1scg2.8f" }, 3, 0x1000000, 0xFF,
+               .fx = fx_tiles, .n_fx = 2 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_800,

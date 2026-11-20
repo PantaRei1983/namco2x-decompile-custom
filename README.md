@@ -132,7 +132,8 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   - Rave Racer has its own Display rows for the same filters. Cyber Sled has no textures, so no filter rows.
 - **Effects (Display > Effects):** smoothing for the 2D effect sprites of Dirt Dash (dust, mud, spray and a softer
   headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks), Armadillo
-  Racing (dust) and Alpine Racer 2 (the snow spray, ice chips and clumps of earth thrown up by the skis).
+  Racing (dust), Alpine Racer 2 (the snow spray, ice chips and clumps of earth thrown up by the skis) and Aqua Jet (the
+  spray thrown over the screen's edges while riding, and the wall of water under the waterfall).
   - Effects are matched by the tile a sprite actually draws. Alpine Racer 2 draws its spray as linked sprites (tile 0
     plus a word from the link table), so the base tile alone would not tell them apart. `ENG_SPRLOG=-1` lists every
     sprite of every update, with both numbers.
