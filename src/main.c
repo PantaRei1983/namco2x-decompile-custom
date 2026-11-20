@@ -82,6 +82,7 @@ static bool no_audio = false;   /* --noaudio; see AUDIO_PLAN.md phase 1 */
 static char shot_dir[256] = "screenshots";
 static bool shot_pending = false;   /* F12 armed a capture */
 static int  shot_every = 0;         /* PROPCYCL_SHOT_EVERY=N */
+static long shot_from = 0, shot_to = -1;   /* PROPCYCL_SHOT_FROM / _TO: only within these frames */
 FILE *g_sndcmd_f;                   /* PROPCYCL_SNDCMDLOG=<path> */
 static const char* screenshot_path = "screenshot.ppm";
 static int screenshot_frame = 10;  /* capture after N frames */
@@ -904,7 +905,9 @@ int main(int argc, char* argv[]) {
     /* PROPCYCL_SHOT_EVERY=N captures every N frames without a keypress, so a
      * headless or offscreen run produces the same PNGs F12 does. */
     { const char *e = getenv("PROPCYCL_SHOT_EVERY");
-      if (e) shot_every = atoi(e); }
+      if (e) shot_every = atoi(e);
+      if ((e = getenv("PROPCYCL_SHOT_FROM"))) shot_from = atol(e);
+      if ((e = getenv("PROPCYCL_SHOT_TO")))   shot_to = atol(e); }
     input_init();
     { extern void pedal_enc_init(int); pedal_enc_init(!headless); }   /* reads PROPCYCL_ENC once */
     renderer2d_init();
@@ -1780,7 +1783,8 @@ int main(int argc, char* argv[]) {
          * UI included. Headless has a real GL context too (offscreen
          * driver), so a frame-triggered capture works there as well. */
         if (shot_pending ||
-            (shot_every > 0 && g_sys.frame_count % (unsigned)shot_every == 0)) {
+            (shot_every > 0 && g_sys.frame_count % (unsigned)shot_every == 0 &&
+             (long)g_sys.frame_count >= shot_from && (shot_to < 0 || (long)g_sys.frame_count <= shot_to))) {
             shot_pending = false;
             screenshot_capture(window, shot_dir, g_sys.frame_count);
             { extern void blinklog_mark(const char *, unsigned);

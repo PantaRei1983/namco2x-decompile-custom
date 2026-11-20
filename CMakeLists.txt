@@ -117,6 +117,7 @@ set(PROPCYCL_ENGINE_SRC
     src/game_dsp3d.c
     src/game_eeprom.c
     src/game_ending.c
+    src/game_story.c
     src/game_gameplay.c
     src/game_hud.c
     src/game_math.c
@@ -195,6 +196,7 @@ set_source_files_properties(
     src/input.c src/pedal_enc.c src/pedal_enc_core.c src/pedal_enc_serial.c
     src/rom_loader.c src/game_logic.c src/flight_rec.c
     src/level_select.c
+    src/game_story.c
     src/rom_decode.c
     src/audio_hle.c
     src/mcu_sound.c

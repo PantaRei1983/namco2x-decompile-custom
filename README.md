@@ -154,6 +154,11 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   after day 3, 71 in the ending). The last group loaded lost its last nodes: the boy's head after day 2, the old man's
   head, arms or whole upper body after day 3. `PROPCYCL_LEVEL=inter:<day>` jumps straight to the intermission after a
   day, and `PROPCYCL_NODEDUMP=<frame>` lists the chain's nodes at that frame.
+- **Prop Cycle:** the attract mode plays the story introduction again ("IN THE FUTURE PEOPLE LIVE IN PEACE..." to "IS
+  THE HERO OF SOLITAR!", nine scenes, about 35 seconds). It was never ported: the attract's step 14 called another
+  scene's code, which ended at once, so the story was skipped. `src/game_story.c` ports it from the ROM (0x0300AC..
+  0x03164C), and the sacred altar picture gets its frame number again. `PROPCYCL_SHOT_FROM` / `PROPCYCL_SHOT_TO` limit
+  `PROPCYCL_SHOT_EVERY` captures to a range of frames.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
 - **Widescreen fog (System 22 games):** the depth fog of a quad past the 4:3 sides is taken as far as the frame's edge would
   see it. The fog level is the depth along the view axis, so the sky panels out to the side -- seen only in a wider picture --
