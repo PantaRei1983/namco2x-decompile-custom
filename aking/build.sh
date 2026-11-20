@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Angler King from source (Linux). It builds against the System 23 host in ../tc2 (the same tree).
+# Build Angler King from source (Linux). It builds against the System 23 host in ../s23 (the same tree).
 #   ./build.sh /path/to/aking.zip [/path/to/namco_fca10.zip]     first time (unpacks the ROM: the two H8 programs are translated from it at build time;
 #                                    current MAME sets keep the I/O board ROM in namco_fca10.zip)
 #   ./build.sh                           later: just rebuild

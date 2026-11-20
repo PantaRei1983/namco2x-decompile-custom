@@ -1,10 +1,10 @@
-/* ak_game.c -- ANGLER KING's table for the System 23 host (../tc2/include/tc2_game.h): MAME's aking set (Japan, AG1 Ver. A), SUPER System 23
+/* ak_game.c -- ANGLER KING's table for the System 23 host (../s23/include/s23_game.h): MAME's aking set (Japan, AG1 Ver. A), SUPER System 23
  * (MAME machine ss23: the System 23 map and clocks, as Time Crisis 2). Values from MAME's namcos23.cpp (ss23, ROM_START(aking)); the I/O board
  * is JVS namco_fca10 ("FCA-1 ... Multipurpose + Rotary Encoder"), an H8/3334 like Time Crisis 2's gun board. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tc2_game.h"
+#include "s23_game.h"
 
 /* The I/O board's JVS identification string, at 0x1082 in its ROM. MAME's current device ROM (asc3_io-c.ic14) calls the board
  * "ASCA-3;Ver2.04"; Angler King insists on an FCA-1 and refuses to start with anything else. The 8 KB of program are the same in both
@@ -44,14 +44,14 @@ static const eng_rom_t chips[] = {
  * then any download named "Angler King*.zip" (a bundle of those zips: read inside, one level) */
 static const char *const zips[] = { "aking.zip", "namco_fca10.zip", "500gp.zip", "Angler King*" };
 
-int tc2_rom_read(const char *dir, const char *name, uint8_t *dst, size_t n);   /* ../tc2/src/tc2_rom.c */
+int s23_rom_read(const char *dir, const char *name, uint8_t *dst, size_t n);   /* ../s23/src/s23_rom.c */
 
 /* the boot ROM (4 MB at 0x1FC00000): ag1vera.ic2 and .ic1 byte-interleaved, .ic2 first (MAME ROM_LOAD16_BYTE), as Time Crisis 2's;
  * the NMON monitor ("for SYSTEM23 P1") and, 0x20000 on, the game's ELF (tools/make_prog.py prints the layout) */
 static int rom_boot(const char *dir, uint8_t *boot)
 {
     uint8_t *a = malloc(0x200000), *b = malloc(0x200000);
-    const int ok = a && b && tc2_rom_read(dir, "ag1vera.ic1", a, 0x200000) && tc2_rom_read(dir, "ag1vera.ic2", b, 0x200000);
+    const int ok = a && b && s23_rom_read(dir, "ag1vera.ic1", a, 0x200000) && s23_rom_read(dir, "ag1vera.ic2", b, 0x200000);
     if (ok) for (size_t k = 0; k < 0x200000; k++) { boot[2 * k] = b[k]; boot[2 * k + 1] = a[k]; }
     free(a); free(b);
     return ok;
@@ -60,7 +60,7 @@ static void unswap(uint8_t *d, size_t n) { for (size_t k = 0; k + 1 < n; k += 2)
 /* the sub-CPU's (H8/3002) program: ag1vera.ic3, word-swapped (MAME ROM_LOAD16_WORD_SWAP) */
 static int rom_sub(const char *dir, uint8_t *dst, size_t n)
 {
-    if (n < 0x80000 || !tc2_rom_read(dir, "ag1vera.ic3", dst, 0x80000)) return 0;
+    if (n < 0x80000 || !s23_rom_read(dir, "ag1vera.ic3", dst, 0x80000)) return 0;
     unswap(dst, 0x80000);
     return 1;
 }
@@ -68,7 +68,7 @@ static int rom_sub(const char *dir, uint8_t *dst, size_t n)
 static int rom_io(const char *dir, uint8_t *dst, size_t n)
 {
     uint8_t *all = malloc(0x20000);
-    const int ok = all && n <= 0x20000 && tc2_rom_read(dir, "asc3_io-c1.ic14", all, 0x20000);
+    const int ok = all && n <= 0x20000 && s23_rom_read(dir, "asc3_io-c1.ic14", all, 0x20000);
     if (ok && !memcmp(all + AK_IO_ID_AT, ak_id_asca3, sizeof ak_id_asca3)) {      /* an ASCA-3 dump renamed by hand (GitHub #89): the FCA-1 name */
         fprintf(stderr, "[ROM] asc3_io-c1.ic14 is the ASCA-3 revision (asc3_io-c.ic14): answering as the FCA-1 board Angler King needs\n");
         ak_io_fca1(all, 0x20000);
@@ -78,7 +78,7 @@ static int rom_io(const char *dir, uint8_t *dst, size_t n)
     return ok;
 }
 
-const tc2_game_t tc2_game = {
+const s23_game_t s23_game = {
     .title = "Angler King", .tag = "aking", .window_title = "Angler King", .mame_set = "aking", .subtitles = "aking_subtitles.txt", .uv_edge = 1, .cz_fog = 1,
     .super23 = 1, .io_asca3 = 1,                                /* the C361 acknowledge at 0x0100005C (MAME 0.289 namcoss23_state); the I/O board an FCA-1 = ASCA-3 */
     .zip_help = "MAME's aking.zip (Angler King, Japan, AG1 Ver. A), plus namco_fca10.zip if your MAME set has one (current sets keep the I/O board ROM asc3_io-c.ic14 there),",
@@ -88,10 +88,10 @@ const tc2_game_t tc2_game = {
     .sub_div = 10,                                /* 16.9344 MHz */
     .io_num = 64, .io_den = 735,                  /* 14.7456 MHz */
     .c352_div = 1920,                             /* 88200 Hz */
-    .ip = { [TC2_SRC_VBLANK] = TC2_IP(0), [TC2_SRC_C361] = TC2_IP(1), [TC2_SRC_SUB] = TC2_IP(1), [TC2_SRC_C435] = TC2_IP(2),
-            [TC2_SRC_C422] = TC2_IP(3), [TC2_SRC_TIMER] = TC2_IP(5) },   /* System 23's routing, as Time Crisis 2 */
+    .ip = { [S23_SRC_VBLANK] = S23_IP(0), [S23_SRC_C361] = S23_IP(1), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C435] = S23_IP(2),
+            [S23_SRC_C422] = S23_IP(3), [S23_SRC_TIMER] = S23_IP(5) },   /* System 23's routing, as Time Crisis 2 */
     .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 0,
-    .gun_x0 = 0, .gun_xw = 1023, .gun_y0 = 0, .gun_yh = 1023,   /* no gun: the pointer aims the ROD in 0..1023 (../tc2/src/tc2_input.c ak_send_inputs) */
+    .gun_x0 = 0, .gun_xw = 1023, .gun_y0 = 0, .gun_yh = 1023,   /* no gun: the pointer aims the ROD in 0..1023 (../s23/src/s23_input.c ak_send_inputs) */
     .data_rom = { { "ag1mtah.2j", "ag1mtal.2h" }, { "ag1mtbh.2m", "ag1mtbl.2f" } },
     .npt = 4, .pt_rom = { { "ag1pt0h.7a", "ag1pt0l.7c" }, { "ag1pt1h.5a", "ag1pt1l.5c" }, { "ag1pt2h.4a", "ag1pt2l.4c" }, { "ag1pt3h.3a", "ag1pt3l.3c" } },
     .ccrl = "ag1ccrl.7f", .ccrh = "ag1ccrh.7e", .cg = { "ag1cgll.4m", "ag1cglm.4k", "ag1cgum.4j", "ag1cguu.4f" },

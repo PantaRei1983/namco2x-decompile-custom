@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(aking C)
-# Angler King (Namco Super System 23) on the SHARED System 23 host (../tc2/host.cmake): this directory adds only the game's table
+# Angler King (Namco Super System 23) on the SHARED System 23 host (../s23/host.cmake): this directory adds only the game's table
 # (src/ak_game.c), its lifted main program (gen/aking_lifted_NN.c) and its two translated H8 programs.
 # gen/aking_lifted_NN.c: ghidra/run_all.sh, then (see PLAN.md)
 #   LIFT_IDLE_LOOPS=tools/idle_loops.txt python3 ../tc2/tools/lift/lift.py decompiled/pcode.txt gen aking prog.bin
@@ -12,29 +12,29 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS ON)
 add_compile_options(-fno-strict-aliasing -fwrapv)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../tc2/host.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../s23/host.cmake)
 file(GLOB AK_LIFTED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen/aking_lifted_*.c)
 if(NOT AK_LIFTED)
   message(FATAL_ERROR "gen/aking_lifted_NN.c missing: run the lift (see the comment above)")
 endif()
-set_source_files_properties(${AK_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${TC2_HOST_DIR}/include/tc2_mips_rt.h")
-# THE TWO H8 PROGRAMS, translated at build time with tc2's translator from sub.bin / io.bin (tools/make_prog.py) and MAME's coverage of them
+set_source_files_properties(${AK_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${S23_HOST_DIR}/include/s23_mips_rt.h")
+# THE TWO H8 PROGRAMS, translated at build time with the System 23 translator from sub.bin / io.bin (tools/make_prog.py) and MAME's coverage of them
 file(GLOB H8SUB_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8sub_*.pcs)
 file(GLOB H8IO_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8io_*.pcs)
 string(REPLACE ".pcs" "" H8SUB_PREFIX "${H8SUB_COV}")
 string(REPLACE ".pcs" "" H8IO_PREFIX "${H8IO_COV}")
-set(H8T ${TC2_HOST_DIR}/tools/h8)
+set(H8T ${S23_HOST_DIR}/tools/h8)
 set(H8_TOOLS ${H8T}/h8_translate.py ${H8T}/h8_decode.py ${H8T}/h8_ops.txt ${H8T}/h8_timing.txt)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/ak_sub.c
-    COMMAND python3 ${H8T}/h8_translate.py sub.bin 1 tc2sub gen/ak_sub.c ${H8SUB_PREFIX}
+    COMMAND python3 ${H8T}/h8_translate.py sub.bin 1 s23sub gen/ak_sub.c ${H8SUB_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sub.bin ${H8_TOOLS} ${H8SUB_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/ak_io.c
-    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 ${H8T}/h8_translate.py io.bin 0 tc2io gen/ak_io.c ${H8IO_PREFIX}
+    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 ${H8T}/h8_translate.py io.bin 0 s23io gen/ak_io.c ${H8IO_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/io.bin ${H8_TOOLS} ${H8IO_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-set(AK_SRC ${TC2_HOST_SRC} src/ak_game.c gen/ak_sub.c gen/ak_io.c ${AK_LIFTED})
+set(AK_SRC ${S23_HOST_SRC} src/ak_game.c gen/ak_sub.c gen/ak_io.c ${AK_LIFTED} ${S23_HOST_TAIL})
 option(PORTABLE "Bind glibc symbols to baseline versions (runs on glibc >= 2.34)" ON)
 if(PORTABLE AND NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-  add_compile_options(-include ${TC2_HOST_DIR}/include/glibc_compat.h)
+  add_compile_options(-include ${S23_HOST_DIR}/include/glibc_compat.h)
 endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -45,10 +45,10 @@ find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 if(WIN32)
   # Windows (MinGW-w64, ./build-windows.sh): Time Crisis 2's block -- no console, one static .exe, opengl32, Winsock for the recoil output
-  add_compile_options(-include ${TC2_HOST_DIR}/include/win_compat.h)
+  add_compile_options(-include ${S23_HOST_DIR}/include/win_compat.h)
   set(AK_TARGETS aking)
   set(AK_SYS_LIBS opengl32 ws2_32)
-  set(AK_LINK_OPTS -mwindows -static -static-libgcc)
+  set(AK_LINK_OPTS -mwindows -static -static-libgcc -Wl,--stack,268435456)   # 256 MB main stack (as Gunmen Wars and Crisis Zone: the lifted code nests a C frame per MIPS call)
 else()
   set(OpenGL_GL_PREFERENCE GLVND)
   find_package(OpenGL REQUIRED)
@@ -58,8 +58,8 @@ else()
 endif()
 foreach(t ${AK_TARGETS})
   add_executable(${t} ${AK_SRC})
-  # include/ first: its tc2_lifted.h names THIS game's lifted program
-  target_include_directories(${t} PRIVATE include gen ${TC2_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
+  # include/ first: its s23_lifted.h names THIS game's lifted program
+  target_include_directories(${t} PRIVATE include gen ${S23_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
   if(WIN32)
     target_link_libraries(${t} ${SDL2_STATIC_LDFLAGS} ZLIB::ZLIB Threads::Threads ${AK_SYS_LIBS})
   else()
