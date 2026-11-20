@@ -54,6 +54,7 @@ static unsigned ls_armed;   /* frame the request was made */
 static int     ls_end;          /* 1 = the request is the ENDING */
 static int     ls_end_cleared;
 static int32_t ls_end_total;
+static int     ls_inter;        /* >0 = the request is the story INTERMISSION after that day (1..3) */
 
 
 /* No getenv here: this runs inside the frame loop, where register row 40
@@ -96,6 +97,28 @@ void level_select_request(int adv, int course) {
 int level_select_apply(void) {
     if (ls_state != LS_PENDING) return 0;
     int c = ls_course;
+    if (ls_inter > 0) {                    /* PROPCYCL_LEVEL=inter:<day>: the intermission after DAY <day> */
+        int d = ls_inter;
+        ls_inter = 0;
+        sync_post();
+        camera_state_reset();
+        sound_reset_all();
+        W[0x2C12] = 0;
+        W[0x0CAC] = 0;
+        W16_SET(0xE10, 1);                 /* story mode */
+        W[0x0E0C] = d - 1;                 /* the course just cleared */
+        /* The progress the results screen leaves after clearing day d (case 7: E2C ^= 1 << course, E64++, E66++): sub 26 picks the
+         * intermission by E66 (its parameters at 0x399A4 + E66 * 8), and the DAY screen it ends on lists what E2C has left. */
+        W16_SET(0xE2C, 0xF & ~((1 << d) - 1));
+        W16_SET(0xE12, 0);
+        W16_SET(0xE64, d);
+        W16_SET(0xE66, d);
+        W16_SET(0xE6A, 0);
+        W[0x0CC0] = 26;                    /* gameplay_sub26_init */
+        ls_state = LS_IDLE;
+        if (dbg()) fprintf(stderr, "[LEVEL] f%u intermission after day %d\n", g_sys.frame_count, d);
+        return 1;
+    }
     if (ls_end) {                          /* Escape -> Levels -> ENDING */
         ls_end = 0;
         sync_post();
@@ -230,6 +253,28 @@ void level_select_ending(int cleared, int phase, int32_t total)
     if (g_ending_phase_req >= 0) printf("[LEVEL]   phase %d\n", g_ending_phase_req);
 }
 
+/* PROPCYCL_LEVEL=inter:<day>[@frame] -- the story intermission after DAY <day> (1..3), through the same stage start as a stage. */
+int level_select_parse_inter(const char *s, int *day, long *frame)
+{
+    const char *p, *at;
+    if (!s || strncmp(s, "inter", 5) != 0) return 0;
+    p = strchr(s, ':');
+    *day = p ? atoi(p + 1) : 1;
+    if (*day < 1) *day = 1;
+    if (*day > 3) *day = 3;
+    *frame = 10;
+    at = strchr(s, '@');
+    if (at) *frame = atol(at + 1);
+    return 1;
+}
+
+void level_select_inter(int day)
+{
+    level_select_request(1, day - 1);
+    ls_inter = day;
+    printf("[LEVEL] INTERMISSION after day %d\n", day);
+}
+
 /* PROPCYCL_LEVEL=end:<clear|bad>[:phase][@frame] -- the ending. Returns 1 and
  * fills the fields when `s` names the ending. */
 int level_select_parse_ending(const char *s, int *cleared, int *phase, long *frame)
@@ -251,7 +296,7 @@ int level_select_parse_ending(const char *s, int *cleared, int *phase, long *fra
 
 /* PROPCYCL_LEVEL=<adv|nov>:<course>[@frame] / --level: the headless form. */
 int level_select_parse(const char *s, int *adv, int *course, long *frame) {
-    if (!s || !*s || !strncmp(s, "end", 3)) return 0;
+    if (!s || !*s || !strncmp(s, "end", 3) || !strncmp(s, "inter", 5)) return 0;
     *adv = 1; *frame = 10;
     if (!strncmp(s, "adv", 3) || s[0] == 'a' || s[0] == 'A') *adv = 1;
     else if (!strncmp(s, "nov", 3) || s[0] == 'n' || s[0] == 'N') *adv = 0;

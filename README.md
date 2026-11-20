@@ -149,6 +149,11 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     and the buffer is decoded again; the full-screen quad and letterbox bars that the game keeps there with bit 15 set
     are skipped.
 - **Prop Cycle:** the end-of-game replay of the player's own run is in sync again.
+- **Prop Cycle:** the story intermissions and the good ending draw their whole cast. The rewrite stopped every walk of
+  the animation chain at 64 nodes; the ROM has no limit, and these scenes go past it (68 nodes after day 2, up to 81
+  after day 3, 71 in the ending). The last group loaded lost its last nodes: the boy's head after day 2, the old man's
+  head, arms or whole upper body after day 3. `PROPCYCL_LEVEL=inter:<day>` jumps straight to the intermission after a
+  day, and `PROPCYCL_NODEDUMP=<frame>` lists the chain's nodes at that frame.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
 - **Widescreen fog (System 22 games):** the depth fog of a quad past the 4:3 sides is taken as far as the frame's edge would
   see it. The fog level is the depth along the view axis, so the sky panels out to the side -- seen only in a wider picture --

@@ -699,7 +699,7 @@ intptr_t anim_load_list(intptr_t a1, uint32_t d1)
   int guard = 0;
   if (a1 < 0 || a1 + 0x80 > WORK_RAM_SIZE) return a1;
   W[0x169F4] = (int32_t)d1;
-  while (d1 != 0 && d1 + 4 <= ROM_SIZE && vrd32(d1) != 0 && guard++ < 64 &&
+  while (d1 != 0 && d1 + 4 <= ROM_SIZE && vrd32(d1) != 0 && guard++ < 256 &&     /* no limit in the ROM (game_dsp3d.c's ANIM_CHAIN_MAX) */
          a1 + 0x100 <= WORK_RAM_SIZE) {
     uint32_t src = vrd32(d1), d3;
     int32_t flags;
@@ -745,6 +745,9 @@ intptr_t anim_load_list(intptr_t a1, uint32_t d1)
     a1 += 0x80;
     d1 += 4;
   }
+  { extern int g_stagedbg;      /* PROPCYCL_STAGEDBG: each list's node count, and the chain's length after it */
+    if (g_stagedbg) fprintf(stderr, "[ANIMLOAD] f%u list %06X: %d nodes, chain now ends at node %ld\n", g_sys.frame_count,
+                            (unsigned)W[0x169F4], guard, (long)((a1 - 0xAB04) / 0x80)); }
   W[a1] = -1;                                                       /* 0x0269AC */
   W[0xEB06] = 0;
   W[0xEB04] = 0;
