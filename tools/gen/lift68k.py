@@ -402,11 +402,27 @@ class Lifter:
         ins.ops = ops[:k] + [('RAWC', '-', [c])]
         self.note('%s rewritten' % mn.split('.')[0])
 
+    def fix_xflag(self, ins):
+        """GHIDRA'S X FLAG: CMP / CMPI / CMPA / CMPM leave X unchanged on a 68000 (Ghidra writes X = C), and ADDX / SUBX / NEGX set
+        X = C (Ghidra leaves it). A BCD timer that runs  moveq #0,D4 / addx.w D4,D4 / cmpi.w #$60,D2 / abcd D4b,D3b  then adds one
+        unit too many: Ridge Racer's and Ridge Racer 2's lap time gained a minute (the first Ridge Racer 2 lift was fixed after the fact,
+        fix_lifted_x_flag.py; this does it in the translator)."""
+        mn = (ins.text.split()[0] if ins.text else '').split('.')[0]
+        if mn in ('cmp', 'cmpi', 'cmpa', 'cmpm'):
+            n = len(ins.ops)
+            ins.ops = [o for o in ins.ops if not (o[1].startswith('register:43:'))]
+            if len(ins.ops) != n: self.note('X flag kept by %s' % mn)
+        elif mn in ('addx', 'subx', 'negx'):
+            if not any(o[1].startswith('register:43:') for o in ins.ops):
+                ins.ops = ins.ops + [('RAWC', '-', ['RS1(0x43, RG1(0x47));'])]
+                self.note('X flag set by %s' % mn)
+
     def function(self, f, out):
         ins = f.ins
         for i in ins: self.fix_preindexed(i)
         for i in ins: self.fix_divide(i)
         for i in ins: self.fix_cmp2(i)
+        for i in ins: self.fix_xflag(i)
         self.cur_addrs = {i.addr for i in ins}
         self.lo, self.hi = min(self.cur_addrs), max(self.cur_addrs)
         self.temps = set()

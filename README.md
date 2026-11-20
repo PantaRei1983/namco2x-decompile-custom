@@ -156,6 +156,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     the effective address (they are AT it), compares the whole data register, and reads a PC-relative pair 2 bytes early.
     Ridge Racer's course culling uses it, and drew no road or ground until it was fixed. Re-run a game's `tools/regen.sh`
     to get the fix in its translation.
+  - The translator also keeps the 68000's X flag: CMP / CMPI / CMPA / CMPM leave it alone and ADDX sets it (Ghidra does the
+    opposite). Ridge Racer's BCD lap time gained a minute at every lap and its gold TIME digits went to garbage -- the same
+    bug Ridge Racer 2's first translation had (fixed there after the fact).
   - Vertex lighting (point ROM packet 0x10) follows MAME's current `namcos22_v.cpp` (after 0.289): flat or Gouraud, the mesh
     width, triangles and the packet's own intensity, the normal index advancing once per quad. The waving flag in the
     attract mode and the rotating sign before the second tunnel are smoothly lit; the same code draws Prop Cycle's
