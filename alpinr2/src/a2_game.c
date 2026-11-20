@@ -190,6 +190,8 @@ static const ss22_game game = {
     .link_id_byte = 0x32,
     .link_game_id = a2_link_game_id, .link_report = a2_link_report, .link_good = a2_link_good,
     .frame = a2_frame,
+    .pdp_in_list = 1,                   /* MAME simulate_slavedsp: the title's spinning "Alpine Racer 2" in ice is drawn from point RAM that a PDP
+                                         * block inside the display list writes on the fly (code 0xFFF8) -- without it the list ended there */
 };
 
 extern int g_eng_tex_smooth_default;           /* engine/tex_bake.c */

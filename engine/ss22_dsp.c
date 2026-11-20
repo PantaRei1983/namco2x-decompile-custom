@@ -244,6 +244,8 @@ void ss22_dsp_vblank(void) { if (running && irq_on) for (int i = 0; i < nm; i++)
 void ss22_dsp_serial(void) { if (running && irq_on) for (int i = 0; i < nm; i++) c71_irq(m[i], 0x10 | 0x20); }
 bool ss22_dsp_active(void) { return m[0] && running; }
 bool ss22_dsp_slave_active(void) { return slave_on; }
+int32_t ss22_dsp_pointram_read(uint32_t a) { return m[0] ? c71_pointram_read(m[0], a) : -1; }
+void ss22_dsp_pdp_commands(int offs) { for (int i = 0; i < nm; i++) if (m[i]) c71_pdp_commands(m[i], (uint32_t)offs); }
 bool ss22_dsp_faulted(void) { return faulted; }
 uint32_t ss22_dsp_pdp_begins(void) { return m[0] ? m[0]->pdp_begins : 0; }
 

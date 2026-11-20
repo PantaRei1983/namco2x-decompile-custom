@@ -169,7 +169,7 @@ void ss22_prepare(const ss22_regs *r)
     static int held;                                  /* updates in a row that kept the last list (r->hold_frames) */
     if (r->walk) {
         held = 0; qn = 0; qorder = 0;
-        eng_list_cfg cfg = { ENG_LIST_HEAD_SS22, 0, NULL, NULL, NULL, NULL };
+        eng_list_cfg cfg = { ENG_LIST_HEAD_SS22, 0, NULL, NULL, NULL, NULL, r->pdp_in_list };
         eng_walk_list(r->poly_word, &cfg, push_quad, NULL);
         eng_quad_sort(qbuf, qn, 0);
     } else if (held < r->hold_frames) held++;         /* a dropped update: the last list again, not a black 3D layer */

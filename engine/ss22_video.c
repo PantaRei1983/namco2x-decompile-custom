@@ -57,6 +57,7 @@ bool ss22_video_init(const char *dir)
     g_sprite_vics_linked = c->vics_linked && !getenv("VICS_UNLINKED");   /* (TEST VICS_UNLINKED=1: draw both sets as MAME does) */
 
     g_eng_pointrom = g_ss22_pointrom; g_eng_pointrom_n = g_ss22_pointrom_words;
+    { int32_t ss22_dsp_pointram_read(uint32_t a); g_eng_pointram = ss22_dsp_pointram_read; }   /* MAME point_read: past the ROM, point RAM 0xF80000 (else -1) */
     return g_eng_pointrom != NULL;
 }
 
@@ -68,6 +69,7 @@ void ss22_video_prepare(void)
     r.walk = eng_frame_walks(from_capture || ss22_dsp_slave_active());
     if (pdp_log()) fprintf(stderr, "[PDP] f%u update: %s\n", rr_frame, r.walk ? "drawn" : "NO 3D");
     r.poly_word = poly_word;
+    if (g_ss22_game->pdp_in_list) { void ss22_dsp_pdp_commands(int offs); r.pdp_in_list = ss22_dsp_pdp_commands; }
     r.pal = g_ss22.pal;
     r.mixer = g_ss22.mixer;
     for (int i = 0; i < 8; i++) { r.czattr[i] = g_ss22.czattr[i]; r.tilemapattr[i] = g_ss22.tilemapattr[i]; }

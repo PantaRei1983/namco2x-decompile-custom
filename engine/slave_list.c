@@ -71,6 +71,11 @@ int eng_walk_list(eng_word_fn pw, const eng_list_cfg *cfg, geo_quad_cb cb, void 
     while (guard++ < 4096) {
         uint32_t code = pw(src) & 0xFFFF;
         uint32_t len  = pw(src + 1) & 0xFFFF;
+        if (code == 0xFFF8 && cfg->pdp_in_list) {      /* MAME: pdp_handle_commands(index - 2); src += 0x56; continue */
+            cfg->pdp_in_list(src);
+            src += 2 + 0x56;
+            continue;
+        }
         const int p = src + 2;                        /* payload base */
 
         if (len == 0x15) {                            /* bb0003: viewport */
