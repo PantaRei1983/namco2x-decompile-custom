@@ -272,6 +272,18 @@ public class SeedTables extends GhidraScript {
                 if (in.getLength() < 4) continue;
                 long a = in.getAddress().getOffset();
                 int op = mem.getShort(toAddr(a)) & 0xFFFF;
+                if ((op & 0xF9F8) == 0x00D0 && ((op >> 9) & 3) != 3) {        // cmp2 / chk2 (An): its bound pair is DATA -- where a
+                    int bsz = 1 << ((op >> 9) & 3), reg = op & 7;             // lea (d16,PC),An before it points (Ridge Racer's test
+                    Instruction b = in.getPrevious();                         // menu: the pairs before 0x19B00 / 0x19660 were read as
+                    for (int k = 0; k < 16 && b != null; k++, b = b.getPrevious()) {   // code that swallowed the next routine)
+                        long ba = b.getAddress().getOffset();
+                        if ((mem.getShort(toAddr(ba)) & 0xFFFF) == (0x41FA | reg << 9)) {
+                            long bt = ba + 2 + (short) mem.getShort(toAddr(ba + 2));
+                            if (bt > 0 && bt + 2L * bsz <= size && !inTable(bt)) clears.add(new long[] { bt, bt + 2L * bsz - 1, a });
+                        }
+                    }
+                    continue;
+                }
                 boolean viaReg = (op & 0xFFB8) == 0x4EB0;                    // jsr / jmp (d8,An,Xn): the table's address is in An
                 if (op != 0x4EBB && op != 0x4EFB && !viaReg) continue;       // jsr / jmp (d8,PC,Xn) and its full-format forms
                 int ext = mem.getShort(toAddr(a + 2)) & 0xFFFF;
@@ -317,8 +329,8 @@ public class SeedTables extends GhidraScript {
                         if (!plausible(t) || (t & 1) != 0) break;            // (a case may sit before the dispatch: Ridge Racer's 0xA776 -> 0xA4EE)
                         if (stop == size && k >= 64) break;                  // no case after the table yet: not a table this long
                         if (t > table && t < stop) stop = t;
-                        targets.add(t);
-                    }
+                        forced.add(t);                                       // a case of a real dispatch: code, even where Ghidra's
+                    }                                                        // run from it bumps into wrong instructions (0x19A7C, test mode)
                     if (k > 0) clears.add(new long[] { table, table + 2L * k - 1, a });
                     continue;
                 }
