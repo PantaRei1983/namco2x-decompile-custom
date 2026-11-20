@@ -100,6 +100,7 @@ typedef struct {
 } geo_stats;
 extern geo_stats g_geo_stats;
 extern unsigned  g_eng_frame;   /* set by the game each frame; diagnostics only */
+extern int g_geo_wide_fog;     /* set by a System 22 renderer each frame: the picture is wider than 4:3 (the depth fog of quads past its sides) */
 extern int       g_bbox_cur;    /* object code being walked, -1 = none */
 
 typedef void (*geo_quad_cb)(const geo_quad *q, void *user);

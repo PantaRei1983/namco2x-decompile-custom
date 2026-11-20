@@ -353,6 +353,7 @@ void rr_gl_prepare(bool slave_active)
     frame_bg_palbase   = mixer_b(0x04) << 8 & 0x7f00;
     frame_text_palbase = mixer_b(0x07) << 8 & 0x7f00;
 
+    g_geo_wide_fog = g_scene_x0 < -0.5f;                /* widescreen: the depth fog of quads past the 4:3 sides (geo_hw.c; the width the last picture had) */
     /* direct polys first (they arrived during the frame), then the list */
     const bool walk = rr_scene_frame(slave_active);
     qn = 0; qorder = 0;

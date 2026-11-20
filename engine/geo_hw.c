@@ -164,6 +164,7 @@ static void register_normals(uint32_t addr)
  * the screen cannot tell them apart; these can. */
 geo_stats g_geo_stats;
 unsigned  g_eng_frame;
+int g_geo_wide_fog;   /* the picture is wider than 4:3: the System 22 depth fog reaches past the frame's sides (quad_fixed, cz_value) */
 int       g_bbox_cur = -1;  /* the object code being walked (pickers, probes) */   /* the game's frame count, for diagnostics only */
 
 int g_zord_ap = 0, g_zord_os = 0;   /* last view's priority fields, for PROPCYCL_ZORD */
@@ -321,7 +322,25 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
     }
     {   /* cz_value = min(0x1fffff, zmax) >> 8, computed from the PRE-clamp
          * zmax (the oracle uses the raw zmax, not the zsort-clamped one). */
-        int32_t zc = zmax; if (zc > 0x1fffff) zc = 0x1fffff;
+        int32_t zc = zmax;
+        if (g_geo_wide_fog) {
+            /* WIDESCREEN: the fog level is the quad's depth along the view axis, so a quad far out to the side -- seen only in a wider
+             * picture -- has a smaller depth than one ahead at the same distance, and less fog. Ridge Racer's sunset and dawn are fog
+             * (red, then white) on the sky dome: in 16:9 the panels past the 4:3 frame stayed blue. A vertex outside the 4:3 frame
+             * counts as far as the frame's edge would see it (depth x its slant / the edge's slant): inside the frame nothing changes. */
+            const double f = (double)mant / (double)(1u << (shift > 30 ? 30 : shift < 0 ? 0 : shift));
+            int32_t zw = 0;
+            for (int i = 0; i < 4; i++) {
+                if (vz[i] <= 0 || f <= 0.0) continue;
+                const double sxo = (double)vx[i] * f / (double)vz[i];
+                const double edge = sxo < 0.0 ? (double)cx : (double)(640 - cx);
+                double z = (double)vz[i];
+                if (edge > 0.0 && fabs(sxo) > edge) z *= sqrt(f * f + sxo * sxo) / sqrt(f * f + edge * edge);
+                if (z > (double)zw) zw = z > 2.0e9 ? 2000000000 : (int32_t)z;
+            }
+            if (zw > zc) zc = zw;
+        }
+        if (zc > 0x1fffff) zc = 0x1fffff;
         q.cz_value = zc >> 8;
     }
 

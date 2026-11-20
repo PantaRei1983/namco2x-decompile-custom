@@ -146,6 +146,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     are skipped.
 - **Prop Cycle:** the end-of-game replay of the player's own run is in sync again.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Widescreen fog (System 22 games):** the depth fog of a quad past the 4:3 sides is taken as far as the frame's edge would
+  see it. The fog level is the depth along the view axis, so the sky panels out to the side -- seen only in a wider picture --
+  had less of it: Ridge Racer's sunset (red) and dawn (white), which are fog on the sky dome, left a blue strip of sky at the
+  picture's edges. Inside the 4:3 frame nothing changes, and 4:3 is untouched.
 - **Alpine Racer 2:** the title's ice block turning into the "Alpine Racer 2" ice logo is drawn. It is a point-RAM object
   (code 5) that a PDP block inside the display list writes on the fly: the block is run (MAME `simulate_slavedsp`), Super 22
   geometry reads point RAM (0xF80000), and a model's list address comes from its point word for every code, as MAME's
