@@ -160,10 +160,10 @@ void ss22_prepare(const ss22_regs *r)
         ni = sprite_collect(&sst, &g_fog, items, (int)(sizeof items / sizeof items[0]));
         static int sprlog = -1;                      /* ENG_SPRLOG=<n>: the sprite list of update n, one line each (finding a HUD's parts) */
         if (sprlog < 0) { const char *e = getenv("ENG_SPRLOG"); sprlog = e ? atoi(e) : 0; }
-        if (sprlog && frames == sprlog)
+        if (sprlog && (frames == sprlog || sprlog < 0))   /* -1: every update (listing a whole attract loop's sprites) */
             for (int i = 0; i < ni; i++)
-                fprintf(stderr, "[SPR] %3d z %06X layer %u  x %4d y %4d  %3d x %3d  idx %d  tile %d%s\n", i, items[i].z, items[i].z >> 21, items[i].x0, items[i].y0,
-                        items[i].w, items[i].h, items[i].idx, items[i].tile, items[i].prioverchar ? "  prio" : "");
+                fprintf(stderr, "[SPR] f%u %3d z %06X layer %u  x %4d y %4d  %3d x %3d  idx %d  tile %d art %d%s\n", frames, i, items[i].z, items[i].z >> 21, items[i].x0, items[i].y0,
+                        items[i].w, items[i].h, items[i].idx, items[i].tile, items[i].art, items[i].prioverchar ? "  prio" : "");
     }
 
     static int held;                                  /* updates in a row that kept the last list (r->hold_frames) */

@@ -169,6 +169,12 @@ static void a2_link_report(char *buf, int n)
              w16(0xE1867E), w16(0xE18668), (unsigned)rr_read(0xE1866C, 4), (unsigned)rr_read(0xE18660, 4), (unsigned)rr_read(0xE18664, 4));
 }
 
+/* The snow spray, the ice chips and the clumps of earth thrown up by the skis, by the tile each sprite draws (found by listing every sprite of the attract loop's
+ * runs against the sprite ROM's pictures): the game draws them as LINKED sprites -- tile 0 plus a word of the link table (engine/sprite_hw.c's art), 8..53 for the
+ * spray behind a skier, 232..296 for the bursts. The ROM keeps the whole effect family in 1..303 (1 the round flake, 2..7 solid blocks left out); from 304 on
+ * are the HUD's banners and letters (REAR, the digits, CHECKPOINT, TIME EXTENDED). The Display menu's "Effects" option smooths exactly these. */
+static const int fx_tiles[][2] = { { 1, 1 }, { 8, 303 } };
+
 static const ss22_game game = {
     .name = "Alpine Racer 2", .tag = "A2", .lname = "a2", .logname = "alpinr2.log", .zip = "alpinr2a.zip",
     .more_zips = (const char *const[]){ "alpinr2b.zip", NULL },      /* a split MAME set keeps the shared chips in the parent (Ver.B) zip */
@@ -179,7 +185,8 @@ static const ss22_game game = {
     /* MAME's c352 region: ars1wavea.2l at 0, ars2waveb.1l at 0x800000. INPUTS idle: everything released, the motor "locked" */
     .snd = { "ars2data.8k", { "ars1wavea.2l", "ars2waveb.1l" }, { 0, 0x800000 }, 0x1000000, 0xFFFF, { 1, 3 } },
     .video = { { "ars1cg0.8d", "ars1cg1.10d", "ars1cg2.12d", "ars1cg3.13d", "ars1cg4.14d", "ars1cg5.16d", NULL, NULL },
-               "ars1ccrl.3d", "ars1ccrh.1d", { "ars1scg0.12f" }, 1, 0x1000000, 0xFF },
+               "ars1ccrl.3d", "ars1ccrh.1d", { "ars1scg0.12f" }, 1, 0x1000000, 0xFF,
+               .fx = fx_tiles, .n_fx = 2 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_8B4,

@@ -131,8 +131,11 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     `S23_TEX_ANISO`.
   - Rave Racer has its own Display rows for the same filters. Cyber Sled has no textures, so no filter rows.
 - **Effects (Display > Effects):** smoothing for the 2D effect sprites of Dirt Dash (dust, mud, spray and a softer
-  headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks) and Armadillo
-  Racing (dust).
+  headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks), Armadillo
+  Racing (dust) and Alpine Racer 2 (the snow spray, ice chips and clumps of earth thrown up by the skis).
+  - Effects are matched by the tile a sprite actually draws. Alpine Racer 2 draws its spray as linked sprites (tile 0
+    plus a word from the link table), so the base tile alone would not tell them apart. `ENG_SPRLOG=-1` lists every
+    sprite of every update, with both numbers.
   - Rapid River (Gorgon): the water spray and foam sprites. With the option on, each sprite tile is drawn as a filtered
     quad at the output resolution, with no seams between tiles, instead of being stretched with nearest-neighbour
     sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:

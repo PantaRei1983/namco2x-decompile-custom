@@ -78,13 +78,13 @@ void sprite_set_soft_tiles(const int (*ranges)[2], int n)
 int sprite_item_soft(const sprite_item *it)
 {
     if (!g_sprite_smooth) return 0;
-    for (int i = 0; i < g_soft_n; i++) if (it->tile >= g_soft_tiles[i][0] && it->tile <= g_soft_tiles[i][1]) return 1;
+    for (int i = 0; i < g_soft_n; i++) if (it->art >= g_soft_tiles[i][0] && it->art <= g_soft_tiles[i][1]) return 1;
     return 0;
 }
 int sprite_item_smooth(const sprite_item *it)
 {
     if (!g_sprite_smooth) return 0;
-    for (int i = 0; i < g_fx_n; i++) if (it->tile >= g_fx_tiles[i][0] && it->tile <= g_fx_tiles[i][1]) return 1;
+    for (int i = 0; i < g_fx_n; i++) if (it->art >= g_fx_tiles[i][0] && it->art <= g_fx_tiles[i][1]) return 1;
     return 0;
 }
 /* The item's pixels made ready for a LINEAR texture: premultiplied by alpha (no dark halo where a transparent texel meets an opaque one) in a
@@ -574,6 +574,7 @@ int sprite_collect(const sprite_state *st, const fog_state *fog,
         out[n].idx = i;
         out[n].prioverchar = d.c.prioverchar;
         out[n].tile = d.tile;
+        out[n].art  = (int)(d.linktype == 0xFF ? d.tile : d.tile + nthword(st->spr, 0x400 + d.linktype * 4));
         n++;
     }
     qsort(out, n, sizeof out[0], item_cmp);

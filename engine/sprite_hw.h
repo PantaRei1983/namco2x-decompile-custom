@@ -83,6 +83,8 @@ typedef struct {
     int      idx;            /* index into the frame's sprite list */
     int      prioverchar;    /* drawn over the text layer (the text shows nothing where this sprite has a pixel) */
     int      tile;           /* the sprite's first tile number (which art it is: a game can tell a HUD's parts by it) */
+    int      art;            /* the tile its first cell draws: = tile, or (a linked sprite, link type != 0xFF) tile + its link-table word --
+                              * Alpine Racer 2 draws every spray puff as tile 0 plus a table offset. The Effects option matches this */
 } sprite_item;
 
 int  sprite_collect(const sprite_state *st, const fog_state *fog,
