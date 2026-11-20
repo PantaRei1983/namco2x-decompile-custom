@@ -222,6 +222,15 @@ class Lifter:
             if m:
                 s, d = int(m.group(2)) * 4 + 3, int(m.group(3)) * 4 + 3
                 return ['RS1(0x%X, rr_%s((uint32_t)RG1(0x%X), (uint32_t)RG1(0x%X)));' % (d, m.group(1), d, s)]
+            m = re.match(r'(abcd|sbcd) -\(A(\d)\),-\(A(\d)\)$', ins.text)       # the memory form too (Ridge Racer's TIME countdown,
+            if m:                                                              # sbcd -(A3),-(A2) at 0x11FCC: it went 50 -> 4F -> 4E ...)
+                ys, xs = int(m.group(2)), int(m.group(3))
+                ry, rx = 0x20 + ys * 4, 0x20 + xs * 4
+                dy, dx = (2 if ys == 7 else 1), (2 if xs == 7 else 1)        # (A7 stays word aligned)
+                self.note('%s memory form' % m.group(1))
+                return ['RS4(0x%X, RG4(0x%X) - %d); RS4(0x%X, RG4(0x%X) - %d);' % (ry, ry, dy, rx, rx, dx),
+                        '{ uint32_t s_ = (uint32_t)MRD1((uint32_t)RG4(0x%X)), d_ = (uint32_t)MRD1((uint32_t)RG4(0x%X)); MWR1((uint32_t)RG4(0x%X), rr_%s(d_, s_)); }'
+                        % (ry, rx, rx, m.group(1))]
         if mn == 'stop':                                                  # wait for an interrupt: the scheduler runs until one is taken
             m = re.search(r'#(-?0x[0-9a-fA-F]+|-?\d+)', ins.text)
             sr = int(m.group(1), 0) & 0xFFFF if m else 0x2000
