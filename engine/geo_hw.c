@@ -47,7 +47,7 @@ int g_objlog_on;                                   /* ENG_OBJLOG: set by slave_l
 /* ---- point data ----------------------------------------------------------
  * The board's point ROM (sign-extended 24-bit at load time, which matches the
  * oracle's pt.read()) and, on System 22, point RAM past it (eng.h). */
-static inline int32_t pt_read(uint32_t addr) { return eng_point_read(addr); }
+static inline int32_t pt_read(uint32_t addr) { return eng_point_read(addr & 0x00ffffffu); }   /* MAME point_read: 24-bit addressing */
 
 /* Truncating signed division. C already truncates toward zero, which is
  * what the oracle's sdiv() reimplements because Python's // floors. */
@@ -555,22 +555,21 @@ static void blit_quads(uint32_t addr, uint32_t length,
 /* ---- object walk (GeoFixed.blit_polyobject_fixed) ---------------------- */
 void geo_hw_object(int32_t code, geo_quad_cb cb, void *user)
 {
-    /* Code 0x5 is a POINT-RAM object (System 22: the list starts at point RAM
-     * 0xF00000, and a negative entry other than -1 is an address with its top
-     * bits set). Only boards that supply point RAM have them. */
-    const int pointram = (code == 0x5);
-    if (pointram && !g_eng_pointram) return;
+    /* MAME blit_polyobject: the list address is the point word at `code` for every code -- code 0x5's points into point RAM (System 22
+     * 0xF00000, Super 22 0xF80000: Alpine Racer 2's spinning title, written there by a PDP block in the display list); a negative
+     * entry other than -1 (the end) is an address with its top bits set. Point addresses are 24 bits. */
+    if (code == 0x5 && !g_eng_pointram) return;
     g_lit_n = 0; g_lit_idx = 0;               /* lit_fx is per object */
-    uint32_t list_addr = pointram ? 0xf00000u : (uint32_t)pt_read(code);
+    uint32_t list_addr = (uint32_t)pt_read((uint32_t)code) & 0x00ffffffu;
     for (int guard = 0; guard < 4096; guard++) {
-        int32_t object_addr = pt_read(list_addr); list_addr += 1;
-        if (object_addr < 0) {                /* -1 terminator (non-pointram) */
-            if (object_addr == -1 || !pointram) break;
+        int32_t object_addr = pt_read(list_addr & 0x00ffffffu); list_addr += 1;
+        if (object_addr < 0) {
+            if (object_addr == -1) break;     /* 0xFFFFFF: the end of the list */
             object_addr &= 0x00ffffff;
         }
-        uint32_t chunklength = (uint32_t)pt_read(object_addr);
+        uint32_t chunklength = (uint32_t)pt_read((uint32_t)object_addr & 0x00ffffffu);
         object_addr += 1;
         if (chunklength > 0x100) { g_geo_stats.rej_chunk++; break; }
-        blit_quads((uint32_t)object_addr, chunklength, cb, user);
+        blit_quads((uint32_t)object_addr & 0x00ffffffu, chunklength, cb, user);
     }
 }

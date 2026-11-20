@@ -146,6 +146,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     are skipped.
 - **Prop Cycle:** the end-of-game replay of the player's own run is in sync again.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Alpine Racer 2:** the title's ice block turning into the "Alpine Racer 2" ice logo is drawn. It is a point-RAM object
+  (code 5) that a PDP block inside the display list writes on the fly: the block is run (MAME `simulate_slavedsp`), Super 22
+  geometry reads point RAM (0xF80000), and a model's list address comes from its point word for every code, as MAME's
+  `blit_polyobject`.
 - **Ridge Racer (new port):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
   master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
   - The translator (`tools/gen/lift68k.py`) rewrites `cmp2` / `chk2`: Ghidra reads the bounds through a pointer it loads from
