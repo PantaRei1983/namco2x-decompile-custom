@@ -60,5 +60,7 @@ set(AD_CORE ${RR}/src/rr_romzip.c ${NAMCO22_ENGINE_DIR}/romzip.c ${RR}/src/rr_ma
 # THE GAME
 add_executable(vl ${RR}/src/rr_win.c ${AD_CORE} ${AD_GL_SRC})
 target_include_directories(vl PRIVATE ${SDL2_INCLUDE_DIRS} ${RR}/src/snd)
-target_link_options(vl PRIVATE -Wl,--stack,67108864)   # 64 MB: the lifted program nests C calls (a safety margin, Windows default is 1 MB)
+if(WIN32)
+  target_link_options(vl PRIVATE -Wl,--stack,67108864)   # 64 MB: the lifted program nests C calls (a safety margin, Windows default is 1 MB; a PE-only option)
+endif()
 target_link_libraries(vl ${SDL2_LIBRARIES} ${AD_GL_LIB} ZLIB::ZLIB ${AD_NET_LIB} m)

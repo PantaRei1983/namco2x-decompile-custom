@@ -7,7 +7,9 @@ ROUNDS=${1:-20}; FRAMES=${2:-12000}; shift 2 2>/dev/null
 cd "$HERE"
 last=
 for ((r = 1; r <= ROUNDS; r++)); do
-    ./build/vl.exe "$(pwd -W)/extracted" --frames "$FRAMES" "$@" > run.out 2>&1
+    BIN=./build/vl; [ -x ./build/vl.exe ] && BIN=./build/vl.exe          # Windows or Linux
+    ROMS="$( (pwd -W) 2>/dev/null || pwd)/extracted"
+    "$BIN" "$ROMS" --frames "$FRAMES" "$@" > run.out 2>&1
     t=$(grep -a -m1 '^\[TRAP\]' build/victlap.log | sed -n 's/.*-> 0x\([0-9A-Fa-f]*\):.*/\1/p')
     if [ -z "$t" ]; then echo "round $r: no trap in $FRAMES frames"; grep -a "^\[AL\] frame" build/victlap.log | tail -1; exit 0; fi
     echo "round $r: $(grep -a -m1 '^\[TRAP\]' build/victlap.log)"

@@ -180,6 +180,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     score / time, Time Crisis' knives and Armadillo Racing's title logo.
   - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
     `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
+- **Victory Lap builds the same way, on Windows (MSYS2) and Linux:** `victlap/build.sh victlap.zip namcoc74.zip`, then
+  `victlap/tools/import.sh` once with `N22TOOLS` set, then `victlap/build.sh` again; `./launch.sh vl` starts it. Its
+  scripts were Windows-only, the ROMs had to be set up by hand first, and the first import built nothing; on Linux the
+  link also failed (`--stack` is a Windows-only linker option).
 
 ## Putting a PC in a cabinet
 

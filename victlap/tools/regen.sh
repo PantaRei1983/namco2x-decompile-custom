@@ -1,23 +1,17 @@
 #!/bin/bash
-# Victory Lap: Ghidra (tables + seeds) -> p-code -> lifted C -> build. Run from anywhere:  victlap/tools/regen.sh
-# Needs the Ghidra project made by the first import (see docs in CMakeLists.txt) in $WORK.
+# Victory Lap: Ghidra (tables + seeds) -> p-code -> lifted C -> build, re-reading the project tools/import.sh made. Run from anywhere.
 set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-# the tools folder: ghidra_12.1.4_PUBLIC, jdk-21.0.12.1+1 and the Ghidra project folder work/ (e.g. N22TOOLS=/c/n22tools)
-T="${N22TOOLS:?set N22TOOLS to the tools folder (ghidra_12.1.4_PUBLIC, jdk-21.0.12.1+1, work/)}"
-TW="$(cygpath -w "$T")"
-WORK=$T/work
-GH=$T/ghidra_12.1.4_PUBLIC
-export JAVA_HOME="$TW\jdk-21.0.12.1+1"
-export PATH="$T/jdk-21.0.12.1+1/bin:$PATH"
+. "$HERE/tools/env.sh"
 cp "$ROOT/tools/gen/ghidra/"*.java "$WORK/scripts/"
 touch "$HERE/seeds.txt"; cp "$HERE/seeds.txt" "$WORK/vl_seeds.txt"
-( cd "$WORK" && "$GH/support/analyzeHeadless.bat" "$TW\work" victlap -process victlap_main.bin -noanalysis \
-    -scriptPath "$TW\work\scripts" \
-    -postScript SeedTables.java "$TW\work\vl_seeds.txt" \
-    -postScript DumpPcode.java "$TW\work\victlap.pcode" > vl_regen.log 2>&1 )
+( cd "$WORK" && "$HEADLESS" "$WW" victlap -process victlap_main.bin -noanalysis \
+    -scriptPath "$WW${SEP}scripts" \
+    -postScript SeedTables.java "$WW${SEP}vl_seeds.txt" \
+    -postScript DumpPcode.java "$WW${SEP}victlap.pcode" > vl_regen.log 2>&1 ) || { echo "Ghidra failed: see $WORK/vl_regen.log"; tail -5 "$WORK/vl_regen.log"; exit 1; }
 grep -E "SeedTables:|DumpPcode:" "$WORK/vl_regen.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
 cp "$WORK/victlap.pcode" "$HERE/victlap.pcode"
-( cd "$ROOT" && python -I tools/gen/lift68k.py victlap/victlap.pcode victlap/gen rr 8 victlap/victlap_main.bin | grep -v "untranslated\|CALLOTHER" )
-if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build vl 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)
+rm -f "$HERE"/gen/rr_lifted_*.c
+( cd "$ROOT" && $PY -I tools/gen/lift68k.py victlap/victlap.pcode victlap/gen rr 8 victlap/victlap_main.bin | grep -v "untranslated\|CALLOTHER" )
+NINJA_OR_MAKE

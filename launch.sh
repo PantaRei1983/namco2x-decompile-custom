@@ -18,6 +18,7 @@
 #   ./launch.sh cc           Cyber Commando (add a number for the window size: cc 3)
 #   ./launch.sh r2           Ridge Racer 2 (add a number for the window size: r2 3)
 #   ./launch.sh rr1          Ridge Racer (add a number for the window size: rr1 3)
+#   ./launch.sh vl           Ace Driver: Victory Lap (add a number for the window size: vl 3)
 #   ./launch.sh cs           Cyber Sled (add a number for the window size: cs 2)
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
@@ -182,6 +183,17 @@ case "$game" in
         fi
         exec ./build/r2 extracted "$@"
         ;;
+    vl|victlap|victorylap)
+        if [ ! -f victlap/build/CMakeCache.txt ]; then
+            echo "Victory Lap is not built yet. Run:  victlap/build.sh /path/to/victlap.zip /path/to/namcoc74.zip  (and victlap/tools/import.sh once)"; exit 1
+        fi
+        rebuild victlap vl
+        cd victlap
+        if play_args "$@"; then
+            exec ./build/vl extracted --window $SCALE ${PARGS[@]+"${PARGS[@]}"}
+        fi
+        exec ./build/vl extracted "$@"
+        ;;
     rr1|ridgerac|ridgeracer)
         if [ ! -f ridgerac/build/CMakeCache.txt ]; then
             echo "Ridge Racer is not built yet. Run:  ridgerac/build.sh /path/to/ridgerac.zip /path/to/namcoc74.zip  (and ridgerac/tools/import.sh once)"; exit 1
@@ -209,6 +221,6 @@ case "$game" in
         exec ./build/cs21 extracted "$@"
         ;;
     *)
-        sed -n '2,42p' "$0" | sed 's/^# \?//'
+        sed -n '2,44p' "$0" | sed 's/^# \?//'
         ;;
 esac
