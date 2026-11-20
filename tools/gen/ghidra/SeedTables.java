@@ -226,6 +226,8 @@ public class SeedTables extends GhidraScript {
         return n;
     }
 
+    private final java.util.ArrayList<Long> userSeeds = new java.util.ArrayList<>();   // the seeds file's addresses (run())
+
     @Override
     public void run() throws Exception {
         mem = currentProgram.getMemory();
@@ -253,6 +255,7 @@ public class SeedTables extends GhidraScript {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#") || line.split("\\s+")[0].contains("-")) continue;
                 long t = Long.parseLong(line.split("\\s+")[0], 16);
+                if (plausible(t)) userSeeds.add(t);
                 if (plausible(t) && seed(t, true)) n++;
             }
             r.close();
@@ -272,7 +275,8 @@ public class SeedTables extends GhidraScript {
                 boolean viaReg = (op & 0xFFB8) == 0x4EB0;                    // jsr / jmp (d8,An,Xn): the table's address is in An
                 if (op != 0x4EBB && op != 0x4EFB && !viaReg) continue;       // jsr / jmp (d8,PC,Xn) and its full-format forms
                 int ext = mem.getShort(toAddr(a + 2)) & 0xFFFF;
-                if (op == 0x4EFB && (ext & 0x100) == 0) {                    // a SWITCH (Alpine Racer 2's compiler):  move.w (d8,PC,Dn.w*2),Dn
+                if ((op == 0x4EFB || op == 0x4EBB) && (ext & 0x100) == 0) {  // a SWITCH (Alpine Racer 2's compiler):  move.w (d8,PC,Dn.w*2),Dn
+                                                                             // (jsr too: Ridge Racer's per-object state calls, 0xCF76 / 0x1DA3C)
                     boolean sw = false;                                      //  [nop]  jmp (d8,PC,Dn.w) -- a table of 16-bit offsets from its own start
                     Instruction b = in.getPrevious();
                     for (int k = 0; k < 3 && b != null; k++, b = b.getPrevious())
@@ -301,16 +305,21 @@ public class SeedTables extends GhidraScript {
                         }
                         continue;
                     }
-                    long stop = size;
-                    for (int k = 0; k < 256; k++) {
+                    // no bound test (a state machine's index): the table runs up to the first routine it names. Ghidra often made
+                    // instructions of the table itself (0x0037 0x00xx words read as ori.b ...): those do not end it -- only a real
+                    // routine does (a function, or an odd / implausible offset) -- and they are cleared so the cases disassemble
+                    long stop = size; int k = 0;
+                    for (; k < 256; k++) {
                         long ea = table + 2L * k;
                         if (ea + 2 > size || ea + 2 > stop) break;
-                        if (k > 0 && currentProgram.getListing().getInstructionAt(toAddr(ea)) != null) break;
+                        if (k > 0 && currentProgram.getFunctionManager().getFunctionAt(toAddr(ea)) != null) break;
                         long t = table + (short) mem.getShort(toAddr(ea));
-                        if (!plausible(t) || t <= a) break;
-                        if (t < stop) stop = t;
+                        if (!plausible(t) || (t & 1) != 0) break;            // (a case may sit before the dispatch: Ridge Racer's 0xA776 -> 0xA4EE)
+                        if (stop == size && k >= 64) break;                  // no case after the table yet: not a table this long
+                        if (t > table && t < stop) stop = t;
                         targets.add(t);
                     }
+                    if (k > 0) clears.add(new long[] { table, table + 2L * k - 1, a });
                     continue;
                 }
                 if ((ext & 0x100) == 0 || (ext & 0x40) != 0) continue;       // brief format, or no index
@@ -368,6 +377,19 @@ public class SeedTables extends GhidraScript {
             if (added == 0) break;
             analyzeAll(currentProgram);
         }
+        // THE SEEDS AGAIN: a table pass can clear code a seed made (Ridge Racer's 0x7568, inside a range read as a table) -- in a project
+        // seeded one round at a time it survived, from a fresh import it did not. A seed is an address the program was SEEN to run.
+        for (int pass = 0; pass < 3; pass++) {
+            int back = 0;
+            for (long t : userSeeds)
+                if (currentProgram.getListing().getInstructionAt(toAddr(t)) == null && seed(t, true)) back++;
+            if (back == 0) break;
+            println("SeedTables: " + back + " seeds put back after the table passes");
+            total += back;
+            analyzeAll(currentProgram);
+        }
+        for (long t : userSeeds)
+            if (currentProgram.getListing().getInstructionAt(toAddr(t)) == null) println(String.format("SeedTables: seed %X is still not code", t));
         println("SeedTables: " + total + " entry points added in all, " + carved + " wrong instructions cleared");
     }
 }
