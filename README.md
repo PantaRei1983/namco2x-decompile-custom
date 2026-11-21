@@ -64,7 +64,7 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
 
 ## Fixes and improvements over the original project
 
-### The cabinet link (all new in this fork)
+### The cabinet link (made by LuKa-86)
 
 - **A local-network link** for 11 games, modelled on Namco's own link chips (the C139 on System 21/22, the C422 on
   System 23, the GMEN board's FireWire link for Gunmen Wars). The games run their original link code unchanged.
@@ -86,7 +86,7 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   <img src="docs/images/tokyowar-link-4cab.jpg" alt="Tokyo Wars: the four cabinets' screens during one linked battle" width="80%">
 </p>
 
-### Running in a cabinet
+### Running in a cabinet (made by LuKa-86)
 
 - **A full-screen launcher** (`Namco 22 Arcade LAN.exe`) for every game, driven by keyboard, controller or mouse.
 - **One Link play switch** in the launcher's Settings, **off** out of the box: every game simply starts and plays. Turn
@@ -160,6 +160,8 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     quad at the output resolution, with no seams between tiles, instead of being stretched with nearest-neighbour
     sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:
     `S23_FX_FILTER` = 0 | 1.
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4760958b-16f1-4b90-80fd-00c1e316713c" />
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/b42699b2-e812-4bd4-b4ad-989b52e7ccdf" />
 - **Crisis Zone:**
   - The zone select's beam counter is read in System 23 Evolution 2's format (a line count from the start of vblank),
     so the game's own wait puts the ticker's scroll on the ticker rows only. This replaces the fixed row cut-off.
