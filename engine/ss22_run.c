@@ -570,6 +570,9 @@ int ss22_main(int argc, char **argv, const ss22_game *g)
     /* First run: take the ROMs out of MAME's zip if the ROM folder is incomplete (the shared engine/romzip.c) -- how the installed
      * packages and the Windows build are set up; chips unzipped loose into roms/ work too. */
     if (eng_romzip_missing(rom_dir, g->roms, g->n_roms) && !strcmp(rom_dir, "extracted") && !eng_romzip_missing("roms", g->roms, g->n_roms)) rom_dir = "roms";
+    /* started from its build folder (a double click on build/<game>.exe: Windows runs it there, engine/win_startup.c): the game's
+     * own extracted/, one folder up, where the source build's setup put the ROMs */
+    if (eng_romzip_missing(rom_dir, g->roms, g->n_roms) && !strcmp(rom_dir, "extracted") && !eng_romzip_missing("../extracted", g->roms, g->n_roms)) rom_dir = "../extracted";
     if (eng_romzip_missing(rom_dir, g->roms, g->n_roms)) {
         char err[512], *base = SDL_GetBasePath();
         const char *zips[8] = { g->zip };

@@ -32,9 +32,35 @@ static const eng_rom_t k_roms[] = {
     {"ar1ptru0.18f", 0x80000}, {"ar1ptru1.16f", 0x80000}, {"ar1ptru2.15f", 0x80000}, {"ar1ptru3.14f", 0x80000},
     {"ar1scg0.12f", 0x200000}, {"ar1scg1.10f", 0x200000},
     {"ar1wavea.2l", 0x200000},
-    /* the program chips differ per set (al_load_program): tools/setup_roms.py unpacks whichever set it finds */
+    /* + the program chips of one set (al_pick_set): the game's own first-run unpack (engine/romzip.c) takes them from the zip too */
 };
 #define NROMS ((int)(sizeof k_roms / sizeof k_roms[0]))
+static eng_rom_t g_roms[NROMS + 4];
+static int g_nroms;
+
+/* The set the build translated: extracted/SET, written by tools/setup_roms.py (beside the game, or one folder up when the .exe is
+ * started from build/); alpinerd, MAME's parent, when there is none. Its program chips join the list the engine checks / unpacks. */
+static void al_pick_set(void)
+{
+    static const eng_rom_t prog_d[] = { {"ar2verd.1", 0x100000}, {"ar2verd.2", 0x100000}, {"ar2verd.3", 0x100000}, {"ar2verd.4", 0x100000} };
+    static const eng_rom_t prog_c[] = { {"ar2verc.1", 0x100000}, {"ar2verc.2", 0x100000}, {"ar2verc.3", 0x100000}, {"ar2verc.4", 0x100000} };
+    static const eng_rom_t prog_jc[] = { {"ar1verc.1", 0x200000}, {"ar1verc.2", 0x200000} };
+    char set[32] = "alpinerd";
+    static const char *const where[] = { "extracted/SET", "../extracted/SET", "roms/SET" };
+    for (int i = 0; i < 3; i++) {
+        FILE *f = fopen(where[i], "r");
+        if (!f) continue;
+        if (fscanf(f, "%31s", set) != 1) strcpy(set, "alpinerd");
+        fclose(f);
+        break;
+    }
+    const eng_rom_t *p = prog_d; int np = 4;
+    if (!strcmp(set, "alpinerc")) p = prog_c;
+    else if (!strcmp(set, "alpinerjc")) { p = prog_jc; np = 2; }
+    memcpy(g_roms, k_roms, sizeof k_roms);
+    memcpy(g_roms + NROMS, p, (size_t)np * sizeof *p);
+    g_nroms = NROMS + np;
+}
 
 static bool al_read(const char *dir, const char *name, uint8_t *buf, size_t n)
 {
@@ -182,7 +208,7 @@ static void al_entry(void)
     rr_jump(((uint32_t)r[4] << 24) | ((uint32_t)r[5] << 16) | ((uint32_t)r[6] << 8) | r[7], 0);
 }
 
-static const ss22_game game = {
+static ss22_game game = {
     .name = "Alpine Racer", .tag = "AL", .lname = "al", .logname = "alpiner.log", .zip = "alpinerd.zip",
     .board = &al_board,
     .dsp = { { {"ar1ptrl0.18k", "ar1ptrl1.16k", "ar1ptrl2.15k", "ar1ptrl3.14k"},
@@ -193,7 +219,7 @@ static const ss22_game game = {
     .video = { { "ar1cg0.8d", "ar1cg1.10d", "ar1cg2.12d", "ar1cg3.13d", "ar1cg4.14d", "ar1cg5.16d", "ar1cg6.18d", "ar1cg7.19d" },
                "ar1ccrl.3d", "ar1ccrh.1d", { "ar1scg0.12f", "ar1scg1.10f" }, 2, 2 * 0x200000, 0xFF },
     .input = &input,
-    .roms = k_roms, .n_roms = NROMS,
+    .roms = g_roms,                     /* .n_roms: al_pick_set */
     .entry = al_entry,
     .polls_per_frame = 66772,           /* Tokyo Wars' figure (same CPU, same clock): not measured for this game */
     .presses = presses, .n_presses = (int)(sizeof presses / sizeof *presses),
@@ -203,4 +229,11 @@ static const ss22_game game = {
     .frame = al_frame,
 };
 
-int main(int argc, char **argv) { g_ss22_inputs_hook = al_inputs; g_ss22_adc_hook = al_adc; return ss22_main(argc, argv, &game); }
+int main(int argc, char **argv)
+{
+    al_pick_set();
+    game.n_roms = g_nroms;
+    game.zip = !strcmp(g_roms[NROMS].name, "ar2verc.1") ? "alpinerc.zip" : !strcmp(g_roms[NROMS].name, "ar1verc.1") ? "alpinerjc.zip" : "alpinerd.zip";
+    g_ss22_inputs_hook = al_inputs; g_ss22_adc_hook = al_adc;
+    return ss22_main(argc, argv, &game);
+}
