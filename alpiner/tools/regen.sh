@@ -1,23 +1,18 @@
 #!/bin/bash
-# Alpine Racer: Ghidra (tables + seeds) -> p-code -> lifted C -> build. Run from anywhere:  alpiner/tools/regen.sh
-# Needs the Ghidra project made by the first import (see docs in CMakeLists.txt) in $WORK.
+# Alpine Racer: Ghidra (tables + seeds) -> p-code -> lifted C -> build, re-reading the project tools/import.sh made. Run from anywhere.
 set -e
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-# the tools folder: ghidra_12.1.4_PUBLIC, jdk-21.0.12.1+1 and the Ghidra project folder work/ (e.g. N22TOOLS=/c/n22tools)
-T="${N22TOOLS:?set N22TOOLS to the tools folder (ghidra_12.1.4_PUBLIC, jdk-21.0.12.1+1, work/)}"
-TW="$(cygpath -w "$T")"
-WORK=$T/work
-GH=$T/ghidra_12.1.4_PUBLIC
-export JAVA_HOME="$TW\jdk-21.0.12.1+1"
-export PATH="$T/jdk-21.0.12.1+1/bin:$PATH"
+. "$HERE/tools/env.sh"
+SET=$(tr -d '\r\n' < "$HERE/extracted/SET"); SEEDS="$HERE/seeds_$SET.txt"; touch "$SEEDS"
 cp "$ROOT/tools/gen/ghidra/"*.java "$WORK/scripts/"
-touch "$HERE/seeds.txt"; cp "$HERE/seeds.txt" "$WORK/seeds.txt"
-( cd "$WORK" && "$GH/support/analyzeHeadless.bat" "$TW\work" alpiner -process alpiner_main.bin -noanalysis \
-    -scriptPath "$TW\work\scripts" \
-    -postScript SeedTables.java "$TW\work\seeds.txt" \
-    -postScript DumpPcode.java "$TW\work\alpiner.pcode" > ghidra_regen.log 2>&1 )
-grep -E "SeedTables:|DumpPcode:" "$WORK/ghidra_regen.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
+cp "$SEEDS" "$WORK/al_seeds.txt"
+( cd "$WORK" && "$HEADLESS" "$WW" alpiner -process alpiner_main.bin -noanalysis \
+    -scriptPath "$WW${SEP}scripts" \
+    -postScript SeedTables.java "$WW${SEP}al_seeds.txt" \
+    -postScript DumpPcode.java "$WW${SEP}alpiner.pcode" > al_regen.log 2>&1 ) || { echo "Ghidra failed: see $WORK/al_regen.log"; tail -5 "$WORK/al_regen.log"; exit 1; }
+grep -E "SeedTables:|DumpPcode:" "$WORK/al_regen.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
 cp "$WORK/alpiner.pcode" "$HERE/alpiner.pcode"
-( cd "$ROOT" && python -I tools/gen/lift68k.py alpiner/alpiner.pcode alpiner/gen al 8 alpiner/alpiner_main.bin | grep -v "untranslated\|CALLOTHER" )
-if [ -f "$HERE/build/build.ninja" ]; then ( cd "$HERE" && ninja -C build al 2>&1 | grep -E 'error|Linking' ); fi   # (no build/ yet on a first import: configure it with cmake, then ninja; MINGW64's own ninja, wherever MSYS2 is installed)
+rm -f "$HERE"/gen/al_lifted_*.c
+( cd "$ROOT" && $PY -I tools/gen/lift68k.py alpiner/alpiner.pcode alpiner/gen al 8 alpiner/alpiner_main.bin | grep -v "untranslated\|CALLOTHER" )
+NINJA_OR_MAKE

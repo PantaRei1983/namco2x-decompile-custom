@@ -1,5 +1,7 @@
 /*
- * al_game.c -- Alpine Racer (Namco 1994, Super System 22, MAME `alpinerjc`, Japan AR1 Ver.C) as a table for the shared Super 22 host
+ * al_game.c -- Alpine Racer (Namco 1994, Super System 22) as a table for the shared Super 22 host. Any of MAME's three sets: `alpinerd`
+ * (World AR2 Ver.D, the parent), `alpinerc` (World AR2 Ver.C) or `alpinerjc` (Japan AR1 Ver.C) -- the program is translated from the
+ * one you have (tools/setup_roms.py, tools/import.sh)
  * (engine/ss22_run.c ...). A FEASIBILITY TEST: can a game the original project does not have be brought up on its engine?
  *
  * The program is gen/al_lifted_NN.c, made by tools/gen/lift68k.py from Ghidra's p-code (tools/gen/ghidra). The master DSP and the
@@ -30,26 +32,49 @@ static const eng_rom_t k_roms[] = {
     {"ar1ptru0.18f", 0x80000}, {"ar1ptru1.16f", 0x80000}, {"ar1ptru2.15f", 0x80000}, {"ar1ptru3.14f", 0x80000},
     {"ar1scg0.12f", 0x200000}, {"ar1scg1.10f", 0x200000},
     {"ar1wavea.2l", 0x200000},
-    {"ar1verc.1", 0x200000}, {"ar1verc.2", 0x200000},
+    /* the program chips differ per set (al_load_program): tools/setup_roms.py unpacks whichever set it finds */
 };
 #define NROMS ((int)(sizeof k_roms / sizeof k_roms[0]))
 
+static bool al_read(const char *dir, const char *name, uint8_t *buf, size_t n)
+{
+    char p[1024]; snprintf(p, sizeof p, "%s/%s", dir, name);
+    FILE *f = fopen(p, "rb");
+    if (!f) return false;
+    const size_t got = fread(buf, 1, n, f);
+    fclose(f);
+    return got == n;
+}
+
+/* The program, whichever set extracted/ holds (the build translated that one):
+ *   alpinerd / alpinerc: ROM_LOAD32_BYTE ar2ver?.1 .. .4, chip .1 byte 3 of every long ... chip .4 byte 0
+ *   alpinerjc: ROM_LOAD32_WORD_SWAP, ar1verc.2 the high word of every long, ar1verc.1 the low word, each word stored low byte first */
 static bool al_load_program(const char *dir)
 {
-    /* MAME ROM_LOAD32_WORD_SWAP: ar1verc.2 is the high word of every long, ar1verc.1 the low word; each word is stored low byte first */
+    static uint8_t chip[0x200000];
+    static const char *const bytesets[2][4] = { { "ar2verd.1", "ar2verd.2", "ar2verd.3", "ar2verd.4" },
+                                                { "ar2verc.1", "ar2verc.2", "ar2verc.3", "ar2verc.4" } };
+    for (int s = 0; s < 2; s++) {
+        int k;
+        for (k = 0; k < 4; k++) {
+            if (!al_read(dir, bytesets[s][k], chip, 0x100000)) break;
+            for (uint32_t i = 0; i < 0x100000; i++) g_ss22.rom[i * 4 + (uint32_t)(3 - k)] = chip[i];
+        }
+        if (k == 4) { fprintf(stderr, "[AL] program: %s\n", s ? "alpinerc (AR2 Ver.C)" : "alpinerd (AR2 Ver.D)"); return true; }
+        if (k) { fprintf(stderr, "[AL] %s/%s missing\n", dir, bytesets[s][k]); return false; }
+    }
     static const char *half[2] = { "ar1verc.2", "ar1verc.1" };
     for (int h = 0; h < 2; h++) {
-        char p[1024]; snprintf(p, sizeof p, "%s/%s", dir, half[h]);
-        FILE *f = fopen(p, "rb");
-        if (!f) { fprintf(stderr, "cannot open %s\n", p); return false; }
-        for (uint32_t i = 0; i < SS22_ROM_SIZE / 4; i++) {
-            int lo = fgetc(f), hi = fgetc(f);
-            if (hi == EOF) { fclose(f); fprintf(stderr, "short %s\n", p); return false; }
-            g_ss22.rom[i * 4 + (uint32_t)h * 2] = (uint8_t)hi;
-            g_ss22.rom[i * 4 + (uint32_t)h * 2 + 1] = (uint8_t)lo;
+        if (!al_read(dir, half[h], chip, 0x200000)) {
+            fprintf(stderr, "[AL] no program in %s: ar2verd.1-4, ar2verc.1-4 or ar1verc.1-2 (run tools/setup_roms.py)\n", dir);
+            return false;
         }
-        fclose(f);
+        for (uint32_t i = 0; i < SS22_ROM_SIZE / 4; i++) {
+            g_ss22.rom[i * 4 + (uint32_t)h * 2] = chip[i * 2 + 1];
+            g_ss22.rom[i * 4 + (uint32_t)h * 2 + 1] = chip[i * 2];
+        }
     }
+    fprintf(stderr, "[AL] program: alpinerjc (AR1 Ver.C)\n");
     return true;
 }
 
@@ -149,8 +174,16 @@ static void al_adc(uint16_t *adc)
     adc[1] = mode == 0 ? 0x200 : mode == 2 ? (uint16_t)(0x400 - adc[0]) : adc[0];
 }
 
+/* the reset vector, from whichever program the build translated (0x89FC in all three sets): rr_jump finds its function */
+void rr_jump(uint32_t t, uint32_t at);
+static void al_entry(void)
+{
+    const uint8_t *r = g_ss22.rom;
+    rr_jump(((uint32_t)r[4] << 24) | ((uint32_t)r[5] << 16) | ((uint32_t)r[6] << 8) | r[7], 0);
+}
+
 static const ss22_game game = {
-    .name = "Alpine Racer", .tag = "AL", .lname = "al", .logname = "alpiner.log", .zip = "alpinerjc.zip",
+    .name = "Alpine Racer", .tag = "AL", .lname = "al", .logname = "alpiner.log", .zip = "alpinerd.zip",
     .board = &al_board,
     .dsp = { { {"ar1ptrl0.18k", "ar1ptrl1.16k", "ar1ptrl2.15k", "ar1ptrl3.14k"},
                {"ar1ptrm0.18j", "ar1ptrm1.16j", "ar1ptrm2.15j", "ar1ptrm3.14j"},
@@ -161,7 +194,7 @@ static const ss22_game game = {
                "ar1ccrl.3d", "ar1ccrh.1d", { "ar1scg0.12f", "ar1scg1.10f" }, 2, 2 * 0x200000, 0xFF },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
-    .entry = L_89FC,
+    .entry = al_entry,
     .polls_per_frame = 66772,           /* Tokyo Wars' figure (same CPU, same clock): not measured for this game */
     .presses = presses, .n_presses = (int)(sizeof presses / sizeof *presses),
     .autoplay = autoplay,

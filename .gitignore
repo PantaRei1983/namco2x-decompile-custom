@@ -133,6 +133,7 @@ __pycache__/
 /alpiner/*.pcode
 /alpiner/*.log
 /alpiner/run.out
+/alpiner/*.out
 /alpiner/*.nv
 /alpiner/*.cfg
 /alpiner/*.rec
