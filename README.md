@@ -207,6 +207,8 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   scripts were Windows-only, the ROMs had to be set up by hand first, and the first import built nothing; on Linux the
   link also failed (`--stack` is a Windows-only linker option).
 
+  [![Rapid Riper Decomp longplay video](https://img.youtube.com/vi/__qW4OUsvcM/maxresdefault.jpg)](https://www.youtube.com/watch?v=__qW4OUsvcM)
+
 ## Putting a PC in a cabinet
 
 - **Video**: an original 15 kHz arcade monitor needs a converter from the PC's VGA/HDMI output to the monitor's RGB
