@@ -1,16 +1,13 @@
-<p align="center">
-  <img src="docs/images/arcade-lan-header.jpg" alt="Namco 22: Arcade LAN - four linked Tokyo Wars cabinets" width="100%">
-</p>
 
-# Namco 22: Arcade LAN
+# Namco 2x: Arcade Custom Decompiled Version with LAN support made by [LuKa-86](https://github.com/LuKa-86/namco22-arcade-lan) and various game fixes plus Ridge Racer full decompiled and advanced texture filtering (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x) made by [PantaRei1983](https://github.com/PantaRei1983)
 
 **A fork of [namco22-decompile](https://github.com/spacestate1/namco22-decompile) by
 [spacestate1](https://github.com/spacestate1), made to keep real arcade cabinets running.**
 
-namco22-decompile rebuilds Namco's 1990s arcade games (System 21, 22 and 23) so they run natively on a PC. All of that
-work is spacestate1's. This fork puts those games into real cabinets: a PC in place of the original boards, the
+namco22-decompile rebuilds Namco's 1990s 3d arcade games (System 21, 22, Gorgon and 23) so they run natively on a PC. All of that
+work is spacestate1's. The [LuKa-86](https://github.com/LuKa-86/)'s fork puts those games into real cabinets: a PC in place of the original boards, the
 cabinets linked over a wired network the way the boards were linked by their cable, starting by themselves when the
-cabinet is switched on. Huge respect and thanks to spacestate1; please star and support
+cabinet is switched on, added full decompiled version of one of two Namco Gorgon (early System 23 family) games (Rapid River), one new System 23 game (Gunmen Wars), and all other Super System 22 games (Air Combat 22, Alpine Racer, Alpine Racer 2, Alpine Surfer, Aqua Jet, Cyber Cycles) and one new System 22 game (Ace Driver: Victory Lap). My fork added a full decompiled version of Ridge Racer (based on latest "ridgerac" main romset of MAME v0.289) various game fixes (especially on Prop Cycle, that now have full attract mode and correct replay working) and introduce new filter options on texture game (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x). In this fork all Namco System 22/Super System 22 games are decompiled! Huge respect and thanks to spacestate1; please star and support
 [the original project](https://github.com/spacestate1/namco22-decompile), and use it for playing at home or online.
 
 **You need your own copy of the games.** This repository contains no ROMs or game data.
@@ -44,7 +41,7 @@ cabinets on the network and links with them, with nobody touching a keyboard, ev
 | **Rave Racer** | 1995 | System 22 | up to 4, linked | Linked races |
 | **Ace Driver** | 1994 | System 22 | up to 8, linked | Linked races; the link is **new** (the original project's build plays solo) |
 | **Ace Driver: Victory Lap** | 1996 | System 22 | up to 4, linked | **New** port. Up to 8 is in the code but not yet reliable |
-| **Cyber Cycles** | 1995 | System 22 | up to 4, linked | **New** port |
+| **Cyber Cycles** | 1995 | Super 22 | up to 4, linked | **New** port |
 | **Cyber Commando** | 1994 | System 22 | 2, linked | Robot battles; the link is **new** |
 | **Armadillo Racing** | 1997 | Super 22 | up to 4, linked | Trackball racing; the link is **new** |
 | **Alpine Racer 2** | 1996 | Super 22 | 2, linked | **New** port; head-to-head races, party mode |
@@ -56,9 +53,9 @@ cabinets on the network and links with them, with nobody touching a keyboard, ev
 | **Air Combat 22** | 1995 | Super 22 | 1 | **New** port; jet-fighter missions |
 | **Aqua Jet** | 1996 | Super 22 | 1 | **New** port |
 | **Rapid River** | 1997 | Gorgon (System 23 family) | 1 | **New** port; white-water rafting |
-| **Ridge Racer** | 1993 | System 22 | 1 | **New** port (World, RR2 Ver.B); the waving flag lit as in MAME's current source |
+| **Ridge Racer** | 1993 | System 22 | 1 | **New** Port |
 | **Crisis Zone** | 1999 | System 23 | 1 | Built by this fork, with widescreen and graphics fixes |
-| **Prop Cycle** | 1996 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
+| **Prop Cycle** | 1996 | Super 22 | 1 | The original project's game, with various fixes: attract mode with story and replay fully working |
 | **Dirt Dash** | 1995 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
 | **Time Crisis** | 1995 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
 
@@ -104,7 +101,7 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   picture and a replayable capture of a glitch. A crash keeps its recording and log.
 - **Party modes:** 2 or 4 players on one PC, split screen, a controller each.
 
-### Game fixes
+### Game fixes made by LuKa-86
 
 - **Victory Lap:** collision tables and race crashes fixed; test mode works; the rev needle is no longer dimmed.
 - **Air Combat 22:** crashes in attract, at mission end and after the mission 2 refuel fixed; stuck sprites fixed; pitch
@@ -117,8 +114,28 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   polygons drawn.
 - **Menus:** quick clicks and touchpad taps are no longer lost; a controller's D-pad moves one row, not two.
 
-### Texture filters and fixes from PantaRei1983's namco22-decompile fork
+### New game, Texture filters and fixes from PantaRei1983's namco22-decompile fork
 
+- **Ridge Racer (new port):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
+  master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
+  - The translator (`tools/gen/lift68k.py`) rewrites `cmp2` / `chk2`: Ghidra reads the bounds through a pointer it loads from
+    the effective address (they are AT it), compares the whole data register, and reads a PC-relative pair 2 bytes early.
+    Ridge Racer's course culling uses it, and drew no road or ground until it was fixed. Re-run a game's `tools/regen.sh`
+    to get the fix in its translation.
+  - The translator also keeps the 68000's X flag: CMP / CMPI / CMPA / CMPM leave it alone and ADDX sets it (Ghidra does the
+    opposite). Ridge Racer's BCD lap time gained a minute at every lap -- the same bug Ridge Racer 2's first translation had
+    (fixed there after the fact).
+  - `abcd` / `sbcd` in their memory form (`-(Ay),-(Ax)`) are decimal too: Ghidra's p-code left them binary, so Ridge
+    Racer's gold TIME countdown went 50 -> 4F -> 4E ... and drew the wrong digit tiles. Now 50 -> 49.
+  - Vertex lighting (point ROM packet 0x10) follows MAME's current `namcos22_v.cpp` (after 0.289): flat or Gouraud, the mesh
+    width, triangles and the packet's own intensity, the normal index advancing once per quad. The waving flag in the
+    attract mode and the rotating sign before the second tunnel are smoothly lit; the same code draws Prop Cycle's
+    score / time, Time Crisis' knives and Armadillo Racing's title logo.
+  - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
+    `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/1e2cf134-51b9-469a-a7ee-7bc083d5a3cb" />
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e1dca4bb-4c7a-44f2-bd5d-bcabe9d2749f" />
+  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/af8bb80b-4ca6-45ae-a01b-165d0dd17aa3" />
 - **3D texture filter (Display > 3D texture filter)** for every textured game: **Off, Bilinear, Sharp bilinear, Trilinear,
   Sharp trilinear**, with **anisotropic filtering 2x / 4x / 8x / 16x** in the trilinear modes. Only the 3D polygons are
   filtered: the HUD, the text layer and the 2D sprites stay sharp. It replaces the Texture smoothing switch: Alpine
@@ -126,17 +143,19 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   - Super 22 / System 22 and Prop Cycle: atlas pages with mip levels; the sharp modes run in a small fragment shader.
     Config: `texture_filter` = `off | bilinear | sharp | trilinear | sharp-trilinear`, `texture_aniso`. Environment:
     `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`.
-  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Gunmen Wars, Rapid River): filtered per fragment in the polygon
+  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Rapid River): filtered per fragment in the polygon
     shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Environment: `S23_TEX_FILTER`,
     `S23_TEX_ANISO`.
   - Rave Racer has its own Display rows for the same filters. Cyber Sled has no textures, so no filter rows.
-- **Effects (Display > Effects):** smoothing for the 2D effect sprites of Dirt Dash (dust, mud, spray and a softer
-  headlight glow on the car select screen), Prop Cycle, Time Crisis, Tokyo Wars (smoke, fire, sparks), Armadillo
-  Racing (dust), Alpine Racer 2 (the snow spray, ice chips and clumps of earth thrown up by the skis) and Aqua Jet (the
-  spray thrown over the screen's edges while riding, and the wall of water under the waterfall).
+- **Effects (Display > Effects):** smoothing for the 2D effect sprites of Air Combat 22 (smoke and explosions), Cyber Commando
+  (smoke and explosions), Dirt Dash (dust, mud, spray and a softer headlight glow on the car select screen), Prop Cycle, Time Crisis,
+  Tokyo Wars (smoke, fire, sparks), Armadillo Racing (dust), Alpine Racer 2 (the snow spray, ice chips and clumps of earth
+  thrown up by the skis) and Aqua Jet (the spray thrown over the screen's edges while riding, and the wall of water under the waterfall).
   - Effects are matched by the tile a sprite actually draws. Alpine Racer 2 draws its spray as linked sprites (tile 0
     plus a word from the link table), so the base tile alone would not tell them apart. `ENG_SPRLOG=-1` lists every
     sprite of every update, with both numbers.
+  - Cyber Commando (System 22): a Display > Effects row smooths the explosions, which on System 22 are textured polygons (texture bank 5,
+  u 0..511, v 1024..1535; `fx_tex` in the game table).
   - Rapid River (Gorgon): the water spray and foam sprites. With the option on, each sprite tile is drawn as a filtered
     quad at the output resolution, with no seams between tiles, instead of being stretched with nearest-neighbour
     sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:
@@ -165,8 +184,6 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   the picture's edges (`edge_fill` in the game table).
 - **Air Combat 22:** Display > Effects smooths the explosions and the smoke (sprite art 2100..3583). Its translation scripts
   (`airco22/tools/*.sh`) also run on Linux now.
-- **Cyber Commando:** a Display > Effects row smooths the explosions, which on System 22 are textured polygons (texture bank 5,
-  u 0..511, v 1024..1535; `fx_tex` in the game table).
 - **Ridge Racer 2:** the test menu's GAME OPTIONS and COIN OPTIONS change again (gas held, wheel left / right) and are saved when the
   Test switch goes off: the four `cmp2.b` of the lifted code read their bounds from a wrong address, so every step "wrapped" and the
   value flickered between two settings (namco22-decompile issue #101). `ridgera2/tools/gen/fix_cmp2b.py` rewrites them.
@@ -178,23 +195,6 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   (code 5) that a PDP block inside the display list writes on the fly: the block is run (MAME `simulate_slavedsp`), Super 22
   geometry reads point RAM (0xF80000), and a model's list address comes from its point word for every code, as MAME's
   `blit_polyobject`.
-- **Ridge Racer (new port):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
-  master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
-  - The translator (`tools/gen/lift68k.py`) rewrites `cmp2` / `chk2`: Ghidra reads the bounds through a pointer it loads from
-    the effective address (they are AT it), compares the whole data register, and reads a PC-relative pair 2 bytes early.
-    Ridge Racer's course culling uses it, and drew no road or ground until it was fixed. Re-run a game's `tools/regen.sh`
-    to get the fix in its translation.
-  - The translator also keeps the 68000's X flag: CMP / CMPI / CMPA / CMPM leave it alone and ADDX sets it (Ghidra does the
-    opposite). Ridge Racer's BCD lap time gained a minute at every lap -- the same bug Ridge Racer 2's first translation had
-    (fixed there after the fact).
-  - `abcd` / `sbcd` in their memory form (`-(Ay),-(Ax)`) are decimal too: Ghidra's p-code left them binary, so Ridge
-    Racer's gold TIME countdown went 50 -> 4F -> 4E ... and drew the wrong digit tiles. Now 50 -> 49.
-  - Vertex lighting (point ROM packet 0x10) follows MAME's current `namcos22_v.cpp` (after 0.289): flat or Gouraud, the mesh
-    width, triangles and the packet's own intensity, the normal index advancing once per quad. The waving flag in the
-    attract mode and the rotating sign before the second tunnel are smoothly lit; the same code draws Prop Cycle's
-    score / time, Time Crisis' knives and Armadillo Racing's title logo.
-  - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
-    `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
 - **Alpine Racer from any of MAME's sets:** `alpinerd` (World AR2 Ver.D, the parent), `alpinerc` or `alpinerjc` -- the port
   was written for alpinerjc only, and MAME's parent set is a different program. `alpiner/build.sh alpinerd.zip`, then
   `alpiner/tools/import.sh` once with `N22TOOLS` set, then `alpiner/build.sh` again; `./launch.sh al` starts it. The
@@ -254,7 +254,7 @@ of `gunwars.cfg`); the game's **Network** page in its Esc menu edits them. The l
 | `record` | `on` (default) or `off`: the last session's inputs, `<game>_last.rec` |
 | `arcade_mode` | `on` (default) hides the original's online pages; `off` brings them back |
 
-## Version history
+## Version history of LuKa-86 LAN Project
 
 - **0.10.3, later** (November 2026): **Rapid River** (Namco Gorgon) port. The launcher's **Link play** switch (off by
   default), controller fixes in every game (triggers can be bound and stay analogue on pedals; the left stick moves
@@ -333,6 +333,7 @@ legally obtained copy of each game.
 - **[spacestate1](https://github.com/spacestate1)** for [namco22-decompile](https://github.com/spacestate1/namco22-decompile),
   the rebuilt games this fork is built on, and the long reverse-engineering work behind them. This fork would not exist
   without it. Their README is kept in [docs/ORIGINAL_README.md](docs/ORIGINAL_README.md).
+- **[LuKa-86](https://github.com/LuKa-86)** for [LAN VERSION](https://github.com/LuKa-86/namco22-arcade-lan) of namco22-decompile, and decompiled Ace Driver: Victory Lap, Gunmen Wars,    Rapid River and all other Super System 22 games.
 - **Claude** (Anthropic's AI, through Claude Code) wrote the fork's changes, the new ports and the launcher.
 - [MAME](https://www.mamedev.org) served as the reference for how the boards behave, and [Ghidra](https://ghidra-sre.org)
   made the analysis of the games' programs possible.
