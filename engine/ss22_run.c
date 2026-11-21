@@ -178,6 +178,16 @@ static void on_fatal(const char *why)
              g_ss22_game->name, why, kept[0] ? kept : g_ss22_game->logname);
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, g_ss22_game->name, msg, NULL);
 }
+/* a start that fails after the ROM check: in a window say so (a double-clicked game used to just vanish), the details are in the log */
+static int start_failed(const char *what)
+{
+    if (win_scale) {
+        char msg[512];
+        snprintf(msg, sizeof msg, "%s could not start: %s.\n\nDetails are in %s, beside the program.", g_ss22_game->name, what, fatal_log ? fatal_log : g_ss22_game->logname);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, g_ss22_game->name, msg, NULL);
+    }
+    return 2;
+}
 static void rep_read(void)
 {
     char line[256];
@@ -601,7 +611,7 @@ int ss22_main(int argc, char **argv, const ss22_game *g)
         return 0;
     }
     ss22_board_use(g->board);
-    if (!ss22_load_program(rom_dir)) return 2;
+    if (!ss22_load_program(rom_dir)) return start_failed("the program ROMs could not be read");
     ss22_hw_init(rom_dir);
     if (cab > 0) {
         if (g->link_id_byte < 0) { fprintf(stderr, "[%s] link play: %s's cabinet number is not known yet\n", g->tag, g->name); return 2; }
@@ -640,7 +650,7 @@ int ss22_main(int argc, char **argv, const ss22_game *g)
         if (g->link_id_written) g->link_id_written();
         fprintf(stderr, "[LINK] cabinet %d: the game's own ID set to %d (change it in the test menu)\n", link_host_id() + 1, (link_host_id() & 3) + 1);
     }
-    if (!ss22_dsp_init(rom_dir)) return 2;
+    if (!ss22_dsp_init(rom_dir)) return start_failed("the 3D DSP could not start");
     if (!ss22_snd_init(rom_dir)) fprintf(stderr, "[%s] no sound MCU: the game will read no inputs\n", g->tag);
     ss22_env_init(getenv(envname));                     /* dev trace build only */
     if (win_scale || shot_dir) {                        /* video: a window, or offscreen for --shots */
@@ -651,7 +661,7 @@ int ss22_main(int argc, char **argv, const ss22_game *g)
             ss22_snd_mix_load();
             eng_ui_set_mixer(&mixer);
         }
-        if (!video_on) { fprintf(stderr, "[%s] no picture: video could not start\n", g->tag); if (win_scale) return 2; }
+        if (!video_on) { fprintf(stderr, "[%s] no picture: video could not start\n", g->tag); if (win_scale) return start_failed("the video (OpenGL window) could not start"); }
     }
     if (g_link_mute) eng_audio_set_volume(0);
     link_host_gather(title, ss22_host_active() ? SDL_GL_GetCurrentWindow() : NULL, ss22_host_active() ? eng_ui_set_hint : NULL,

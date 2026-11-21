@@ -48,5 +48,8 @@ add_executable(al src/al_game.c src/al_interp.c src/al_snd_interp.c
     ${NAMCO22_ENGINE_GL_SRC} ${NAMCO22_ENGINE_SS22_SRC} ${NAMCO22_ENGINE_SS22_HOST_SRC} ${NAMCO22_ENGINE_UI_SRC} ${NAMCO22_ENGINE_ROMZIP_SRC} ${AL_GL_SRC}
     ${AL_LIFTED})
 target_compile_options(al PRIVATE -Wall)
+if(WIN32)
+  target_link_options(al PRIVATE -Wl,--stack,67108864)   # 64 MB like Ridge Racer / Victory Lap: the lifted program nests C calls (Windows' default is 1 MB)
+endif()
 target_link_libraries(al ${SDL2_LIBRARIES} ${AL_GL_LIB} ZLIB::ZLIB m)
 
