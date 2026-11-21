@@ -25,6 +25,7 @@ typedef struct {
     const eng_ui_page *(*extra_page)(void);  /* the game's own menu page after Controls (Time Crisis: Stages); NULL = none */
     void (*paused_tick)(void);               /* called while the game is stopped (P / the menu), ~every 10-16 ms: online keepalive
                                                 (eng_net_poll_paused, docs/NETPLAY.md); NULL = none */
+    bool no_link;                            /* a single-cabinet game (no link play): the menu has no Network page */
 } ss22_host_game;
 
 bool ss22_host_open(const ss22_host_game *g, int scale, bool fullscreen);   /* a real window; scale <= 0 = the saved window size */
@@ -36,4 +37,5 @@ bool ss22_host_pointer(float *nx, float *ny, bool *inside);
 bool ss22_host_frame(void);                                                  /* once per emulated frame, after the video is prepared: events, draw, present, pace; false = quit */
 void ss22_host_shot(const char *path);                                       /* the prepared frame, 640x480, to a PPM (any GL context) */
 void ss22_host_close(void);
+void ss22_host_message(const char *const *lines, int n);         /* a black window with a centred box of lines (the link's waiting screen) */
 #endif

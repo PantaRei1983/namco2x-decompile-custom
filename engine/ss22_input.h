@@ -64,6 +64,7 @@ void ss22_input_init(const ss22_input_game *g);         /* after the settings fi
 const eng_ui_page *ss22_input_page(void);
 void ss22_input_event(const SDL_Event *e);              /* controller hot-plug */
 void ss22_input_update(void);                           /* once per emulated frame: read the keys and pads, tell the MCU */
+bool ss22_input_trigger_bound(bool right);              /* a pad trigger is bound to an action on the Controls page */
 void ss22_input_neutral(void);                          /* release everything (the menu opened): a centred wheel, no buttons, no wheel force */
 /* a byte the sound MCU sent the Motor/Feedback PCB (UART0). Bit 0 = a command, bit 1 = the direction (set: toward the wheel's
  * higher A-D side), bits 2-7 = 63 - the strength with the bit order reversed; 0xFF = no force. The 68K sends one a frame, its

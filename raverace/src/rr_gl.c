@@ -196,6 +196,7 @@ static void direct_quad(const uint16_t *src)
  * 0xFC-0xFE as per-channel multipliers of what is under them. */
 static uint8_t txt_rgba[NW * NH * 4], shd_rgba[NW * NH * 4];
 static GLuint  txt_tex, shd_tex;
+static bool    shd_grey;                       /* every shadow pen this frame scales R, G and B alike (see the shadow pass) */
 
 static bool build_text(int text_palbase, bool shadow_enabled, bool *any_shadow)
 {
@@ -204,7 +205,7 @@ static bool build_text(int text_palbase, bool shadow_enabled, bool *any_shadow)
     const int sx = (a0 - 0x35c) & 0x3ff, sy = a1 & 0x3ff;
     uint8_t mix[3][3];
     for (int k = 0; k < 3; k++) for (int c = 0; c < 3; c++) mix[k][c] = mixer_b(0x08 + k * 3 + c);
-    bool any = false; *any_shadow = false;
+    bool any = false; *any_shadow = false; shd_grey = true;
     static uint8_t occ[NW * NH];                       /* where either layer draws: the widescreen HUD's pieces are found in it */
     memset(occ, 0, sizeof occ);
     memset(shd_rgba, 0xff, sizeof shd_rgba);
@@ -226,8 +227,11 @@ static bool build_text(int text_palbase, bool shadow_enabled, bool *any_shadow)
             if (pix == 0xf) continue;
             const uint8_t p8 = (uint8_t)((w >> 12) << 4 | pix);
             if (shadow_enabled && p8 >= 0xfc && p8 <= 0xfe) {
-                sd[0] = mix[p8 - 0xfc][0]; sd[1] = mix[p8 - 0xfc][1]; sd[2] = mix[p8 - 0xfc][2];
-                sd[3] = 255; *any_shadow = true;
+                const uint8_t *m = mix[p8 - 0xfc];
+                sd[0] = m[0]; sd[1] = m[1]; sd[2] = m[2];
+                sd[3] = m[0];                          /* our fork: a grey shadow's multiplier, for the prioverchar-aware pass */
+                if (m[0] != m[1] || m[0] != m[2]) shd_grey = false;
+                *any_shadow = true;
                 occ[(size_t)y * NW + x] = 1;
                 continue;
             }
@@ -349,6 +353,7 @@ void rr_gl_prepare(bool slave_active)
     frame_bg_palbase   = mixer_b(0x04) << 8 & 0x7f00;
     frame_text_palbase = mixer_b(0x07) << 8 & 0x7f00;
 
+    g_geo_wide_fog = g_scene_x0 < -0.5f;                /* widescreen: the depth fog of quads past the 4:3 sides (geo_hw.c; the width the last picture had) */
     /* direct polys first (they arrived during the frame), then the list */
     const bool walk = rr_scene_frame(slave_active);
     qn = 0; qorder = 0;
@@ -393,8 +398,13 @@ void rr_gl_prepare(bool slave_active)
                         if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
                     }
                     if (qbuf[i].nrv && x0 >= bx0 && x1 <= bx1 && y0 >= by0 && y1 <= by1)
-                        fprintf(stderr, "[BOXQ] pick %d  direct %d  band %d  clip %d..%d  x %d..%d  y %d..%d  zsort %06X nrv %d\n", qbuf[i].pick_code, qbuf[i].direct,
-                                (qbuf[i].zsort >> 21) & 7, qbuf[i].clip[0], qbuf[i].clip[1], x0, x1, y0, y1, qbuf[i].zsort & 0xffffff, qbuf[i].nrv);
+                        fprintf(stderr, "[BOXQ] #%d cmode %d grey %d  pick %d  direct %d  band %d  clip %d..%d  x %d..%d  y %d..%d  zsort %06X nrv %d\n", i, qbuf[i].cmode,
+                                (int)shd_grey, qbuf[i].pick_code, qbuf[i].direct, (qbuf[i].zsort >> 21) & 7, qbuf[i].clip[0], qbuf[i].clip[1], x0, x1, y0, y1, qbuf[i].zsort & 0xffffff, qbuf[i].nrv);
+                    if (qbuf[i].nrv && x0 >= bx0 && x1 <= bx1 && y0 >= by0 && y1 <= by1) {      /* its corners, in drawing order */
+                        fprintf(stderr, "        ");
+                        for (int k = 0; k < qbuf[i].nrv; k++) fprintf(stderr, " (%.2f,%.2f)", qbuf[i].rv[k].sx16 / 16.0, qbuf[i].rv[k].sy16 / 16.0);
+                        fprintf(stderr, "\n");
+                    }
                 } }
       }
       if (want && ++n == want) {
@@ -410,6 +420,20 @@ void rr_gl_prepare(bool slave_active)
 }
 
 int rr_gl_quads(void) { return qn; }
+
+/* The polygons that are the HUD, not the world, stay NEAREST when the 3D texture filter is on, like the text and sprite layers: the same pieces the
+ * widescreen HUD moves (engine/hud_edges.c, scanned just below with band 0 and zero depth): direct polygons, band 0 (map dots, mirror frame), depth 0 (the
+ * tacho needle). */
+extern int g_cfg_texfilter, g_cfg_texaniso;
+/* the game's 2D effects (rr_game_t.fx_tex): a quad whose whole UV box lies in one of its texture regions */
+static int fx_quad(const geo_quad *q)
+{
+    for (int i = 0; i < g_rr_game->n_fx_tex; i++) {
+        const uint16_t *f = g_rr_game->fx_tex[i];
+        if (q->texbank == f[0] && q->uvbox[0] >= f[1] && q->uvbox[1] <= f[2] && q->uvbox[2] >= f[3] && q->uvbox[3] <= f[4]) return 1;
+    }
+    return 0;
+}             /* rr_input.c: Display > 3D texture filter, anisotropic filter */
 
 void rr_gl_draw(int vw, int vh)
 {
@@ -454,9 +478,32 @@ void rr_gl_draw(int vw, int vh)
     dc.write_prio_alpha = 1;
     { static int tc = -1; if (tc < 0) { const char *e = getenv("RR_TEXEL_CENTRE"); tc = e ? atoi(e) : 1; }
       dc.texel_centre = tc; }
+    { static int ef = -2, ea = -2;                                         /* the 3D texture filter: 0 off (the board's NEAREST), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear */
+      if (ef == -2) { const char *e = getenv("ENG_TEX_FILTER"); ef = e && *e ? atoi(e) : -1; if (ef > 4) ef = 4; }
+      if (ea == -2) { const char *e = getenv("ENG_TEX_ANISO"); ea = e && *e ? atoi(e) : -1; }
+      g_eng_tex_filter = ef >= 0 ? ef : g_cfg_texfilter;                   /* env first (A/B), then the setting */
+      g_eng_tex_aniso = g_eng_tex_filter >= 3 ? (ea >= 0 ? ea : g_cfg_texaniso) : 0;
+      tex_bake_set_layout(g_eng_tex_filter >= 3);                          /* the mip layout (a no-op while unchanged) */
+      tex_bake_set_filtered(g_eng_tex_filter); }                           /* bakes made for filtering (a no-op while unchanged) */
+    { static int last = -1, lasta = -1;
+      if (g_eng_tex_filter != last || g_eng_tex_aniso != lasta) { last = g_eng_tex_filter; lasta = g_eng_tex_aniso;
+          static const char *const nm[5] = { "off", "bilinear", "sharp bilinear", "trilinear", "sharp trilinear" };
+          fprintf(stderr, "[TEX] 3D texture filter: %s, anisotropy %dx\n", nm[last], lasta ? lasta : 1); } }
+    dc.nofilter_quad = eng_hud_quad_piece;
+    { extern int g_cfg_fxfilter; static int ef = -2;                       /* Display > Effects (ENG_FX_FILTER=0|1 wins for a run) */
+      if (ef == -2) { const char *e = getenv("ENG_FX_FILTER"); ef = e && *e ? (atoi(e) != 0) : -1; }
+      dc.fx_quad = g_rr_game->n_fx_tex && (ef >= 0 ? ef : g_cfg_fxfilter) ? fx_quad : NULL; }
     dc.flat_white = seamtest == 1 || seamtest == 2;
     if (seamtest >= 3) { dc.flat_quad = seam_colour; seam_by_quad = seamtest == 4; }         /* RR_SEAMTEST=3: each object its own flat colour, to name the backdrop pieces */
     eng_draw_begin();
+    { static int ql = -1; if (ql < 0) ql = getenv("RR_QUADLOG") != NULL;     /* dev: every drawn quad (finding a game's effect models) */
+      if (ql) for (int i = 0; i < qn; i++) {
+          int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30);
+          for (int k = 0; k < qbuf[i].nrv; k++) { int x = qbuf[i].rv[k].sx16 >> 4, y = qbuf[i].rv[k].sy16 >> 4;
+              if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          fprintf(stderr, "[QL] %d pick %d direct %d bank %d cmode %d pal %02X x %d..%d y %d..%d uv %d..%d %d..%d z %06X\n", i, qbuf[i].pick_code, qbuf[i].direct,
+                  qbuf[i].texbank, qbuf[i].cmode, (qbuf[i].color >> 8) & 0x7F, x0, x1, y0, y1, qbuf[i].uvbox[0], qbuf[i].uvbox[1], qbuf[i].uvbox[2], qbuf[i].uvbox[3], qbuf[i].zsort & 0xFFFFFF);
+      } }
     for (int i = 0; i < qn; i++) {
         if (seamtest) {                                   /* RR_SEAMSKIP=<code>[-<hi>],...: leave the backdrop out, or it covers every crack */
             static int nsk = -1; static int sk[32][2];
@@ -487,21 +534,52 @@ void rr_gl_draw(int vw, int vh)
     { static int no = -1; if (no < 0) { const char *e = getenv("RR_NO_TEXT"); no = e && *e == '1'; }     /* dev: the picture without the text layer */
       if (no || seamtest) { any_text = false; any_shadow = false; } }
     glEnable(GL_BLEND);
-    if (any_shadow) {                                   /* rgb *= mix/256 */
-        { static uint8_t *last; upload(&shd_tex, shd_rgba, NW, NH, &last); }
-        glDisable(GL_ALPHA_TEST);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
-        glBlendFunc(GL_ZERO, GL_SRC_COLOR);
-        draw_layer(shd_tex);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glEnable(GL_ALPHA_TEST);
-    }
+    /* (text and shadow pens never share a pixel, so the order of the two passes is free: the text goes first, while the destination
+     * alpha is still the prioverchar mark both of them need) */
     if (any_text) {
         { static uint8_t *last; upload(&txt_tex, txt_rgba, NW, NH, &last); }
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
         glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_DST_ALPHA);
         draw_layer(txt_tex);
         glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+    }
+    if (any_shadow) {                                   /* rgb *= mix/256 */
+        { static uint8_t *last; upload(&shd_tex, shd_rgba, NW, NH, &last); }
+        glDisable(GL_ALPHA_TEST);
+        /* MAME namcos22_mix_text_layer: a shadow pen darkens the pixel only where the TEXT is over the polygons (pri 2) -- not where
+         * the last polygon set prioverchar (Victory Lap's rev needle over its gauge's dark face). So: keep the frame as it is, darken
+         * it all, then put the kept pixels back where the destination alpha (the prioverchar mark) is 1. */
+        static GLuint pre_tex; static int pre_w, pre_h;
+        if (!pre_tex || pre_w != vw || pre_h != vh) {
+            if (!pre_tex) glGenTextures(1, &pre_tex);
+            glBindTexture(GL_TEXTURE_2D, pre_tex);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, vw, vh, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+            pre_w = vw; pre_h = vh;
+        }
+        glBindTexture(GL_TEXTURE_2D, pre_tex);
+        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, vw, vh);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_FALSE);
+        glBlendFunc(GL_ZERO, GL_SRC_COLOR);
+        draw_layer(shd_tex);
+        glBlendFunc(GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA);          /* the marked pixels back */
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, pre_tex);
+        glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity(); glOrtho(0, 1, 0, 1, -1, 1);
+        glMatrixMode(GL_MODELVIEW);  glPushMatrix(); glLoadIdentity();
+        glColor4f(1, 1, 1, 1);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0, 0); glVertex2f(0, 0); glTexCoord2f(1, 0); glVertex2f(1, 0);
+        glTexCoord2f(1, 1); glVertex2f(1, 1); glTexCoord2f(0, 1); glVertex2f(0, 1);
+        glEnd();
+        glMatrixMode(GL_PROJECTION); glPopMatrix();
+        glMatrixMode(GL_MODELVIEW);  glPopMatrix();
+        glDisable(GL_TEXTURE_2D);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glEnable(GL_ALPHA_TEST);
     }
     glDisable(GL_BLEND);
     glDisable(GL_ALPHA_TEST);

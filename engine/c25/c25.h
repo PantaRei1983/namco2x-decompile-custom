@@ -130,6 +130,10 @@ void c71_reset(c71_t *d);
 bool c71_step(c71_t *d);
 /* `steps` steps -- the same result as calling c71_step that many times, with a halted (IDLE) DSP fast-forwarded. */
 bool c71_run(c71_t *d, long steps);
+/* the PDP's command block from polygon RAM word offs (MAME pdp_handle_commands: point RAM writes / block moves, up to the first
+ * record or a goto-self); Alpine Racer 2's title runs one from inside the display list (engine/slave_list.c) */
+void c71_pdp_commands(c71_t *d, uint32_t offs);
+int32_t c71_pointram_read(c71_t *d, uint32_t a);
 
 /* ---- the bus (engine/c25/c25_bus.c), used by the semantics ---------------- */
 uint16_t c25_dr(c71_t *d, uint32_t a);            /* data space read */

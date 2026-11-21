@@ -20,6 +20,7 @@
 #include "rr_game.h"
 #include "rr_dsp.h"
 #include "rr_sound.h"
+#include "lan139.h"
 #include "rr_link.h"
 
 rr_hw_t g_hw;
@@ -46,8 +47,40 @@ static void irqlevel(int line, uint8_t data)
     if ((g_hw.irq_state & bit) && !(g_hw.irq_enabled & bit)) g_hw.irq_state &= ~bit;
 }
 
+/* LINK PLAY (only with --link, so a normal run keeps its plain register RAM): the C139's 16-bit registers at 0x20020000, byte, word or
+ * long wide; and writes into its buffer at 0x20010000 while register 2 bit 1 is set, which carry the 9th bit (end of frame) */
+static bool link_on;
+static uint32_t sci_rd(vaddr_t a, int size)
+{
+    uint32_t v = 0;
+    for (int i = 0; i < size; i++) {
+        uint32_t o = (a + (uint32_t)i) - 0x20020000u;
+        uint16_t w = lan139_reg_r(o >> 1);
+        v = v << 8 | ((o & 1) ? (w & 0xFFu) : (uint32_t)(w >> 8));
+    }
+    return v;
+}
+static void sci_wr(vaddr_t a, int size, uint32_t v)
+{
+    for (int i = 0; i < size; ) {
+        uint32_t o = (a + (uint32_t)i) - 0x20020000u;
+        if (!(o & 1) && size - i >= 2) { lan139_reg_w(o >> 1, (uint16_t)(v >> ((size - i - 2) * 8)), 0xFFFF); i += 2; continue; }
+        uint16_t b = (uint16_t)((v >> ((size - i - 1) * 8)) & 0xFF);
+        if (o & 1) lan139_reg_w(o >> 1, b, 0x00FF); else lan139_reg_w(o >> 1, (uint16_t)(b << 8), 0xFF00);
+        i++;
+    }
+}
+static bool sci_buf_wr(vaddr_t a, int size, uint32_t v)
+{
+    uint32_t o = a - 0x20010000u;
+    for (int i = size - 1; i >= 0; i--) { g_rr.sci[(o + (uint32_t)i) & (RR_SCI_SIZE - 1)] = (uint8_t)v; v >>= 8; }
+    for (uint32_t w = o & ~1u; w < o + (uint32_t)size; w += 2) g_rr.sci[w & (RR_SCI_SIZE - 1)] |= 1;   /* bit 8 of each word written */
+    return true;
+}
+
 static bool io_read(vaddr_t a, int size, uint32_t *out)
 {
+    if (link_on && a >= 0x20020000u && a < 0x20020010u) { *out = sci_rd(a, size); return true; }   /* our link (link.cfg / --link): engine/lan139.c */
     if (a >= 0x20000000u && a < 0x20000010u) {
         const uint16_t r = keycus_next();                                  /* the random stream advances on every read, as in MAME */
         *out = g_rr_game->keycus_off >= 0 && (int)((a & 0xF) >> 1) == g_rr_game->keycus_off ? g_rr_game->keycus_val : r;
@@ -73,6 +106,10 @@ static bool io_read(vaddr_t a, int size, uint32_t *out)
 
 static bool io_write(vaddr_t a, int size, uint32_t v)
 {
+    if (link_on) {
+        if (a >= 0x20020000u && a < 0x20020010u) { sci_wr(a, size, v); return true; }
+        if (a >= 0x20010000u && a < 0x20010000u + RR_SCI_SIZE && lan139_eof_writes()) return sci_buf_wr(a, size, v);
+    }
     if (a >= 0x40000000u && a < 0x40000020u) {
         /* byte-wide registers; a word/long write covers several */
         for (int i = 0; i < size; i++) {
@@ -150,7 +187,7 @@ void rr_hw_vblank(void)
 }
 
 /* syscon line 2 = the C139 SCI (cabinet link): level 6, autovector 0x26BBE */
-void rr_hw_sci_irq(void) { g_hw.irq_state |= 1u << 2; }
+void rr_hw_sci_irq(void) { if (!link_on || (g_hw.irq_enabled & 4u)) g_hw.irq_state |= 1u << 2; }   /* our link: only while the game has it enabled */
 
 /* the highest-priority pending, enabled IRQ as a 68K level (0 = none) */
 int rr_hw_irq_level(void)
@@ -182,14 +219,42 @@ static void eeprom_block_set(uint32_t blk, int byte, uint8_t v)
     for (int i = 0; i < 30; i++) sum += b[i];
     b[30] = (uint8_t)((uint16_t)~sum >> 8); b[31] = (uint8_t)~sum;
 }
-void rr_hw_set_freeplay(bool on)
+/* a game's own settings block with the 8-bit checksum (Ace Driver: an ~(byte sum) of bytes 0..30 in byte 31); false = not valid */
+static bool eeprom_block_set8(uint32_t blk, int byte, uint8_t v)
 {
-    if (g_rr_game->freeplay_set) { g_rr_game->freeplay_set(on); return; }
-    eeprom_block_set(0x280, 3, on ? 1 : 0);
-    eeprom_block_set(0x2A0, 3, on ? 1 : 0);
-    g_rr.wram[0x1043] = on ? 1 : 0;
+    uint8_t *b = g_rr.eeprom + blk;
+    const bool plain = g_rr_game->link_ee_sum8 == 2;   /* Cyber Commando: a plain sum of bytes 0..16 in byte 17 */
+    const int n = plain ? 17 : 31;
+    unsigned sum = 0;
+    for (int i = 0; i < n; i++) sum += b[i];
+    if ((uint8_t)(plain ? sum : ~sum) != b[n]) return false;   /* not a valid copy (yet): leave it for the game to write */
+    const int sh = g_rr_game->link_ee_shift;          /* Victory Lap: the number shares its byte (bits 7..5) with other settings */
+    b[byte] = sh ? (uint8_t)((b[byte] & ~(7u << sh)) | ((v & 7u) << sh)) : v;
+    sum = 0;
+    for (int i = 0; i < n; i++) sum += b[i];
+    b[n] = (uint8_t)(plain ? sum : ~sum);
+    return true;
 }
-bool rr_hw_freeplay(void) { return g_rr_game->freeplay_get ? g_rr_game->freeplay_get() : g_rr.wram[0x1043] != 0; }
+void rr_hw_link_on(int cabinet, bool seed_id)
+{
+    link_on = true;
+    lan139_init(g_rr.sci);
+    if (!seed_id) return;
+    if (g_rr_game->link_cab_addr) {                     /* our fork: the game's own place for it (rr_game_t link_*: Ace Driver) */
+        bool blank = true;                              /* a blank EEPROM (the very first run): the game's own first-start blocks first, */
+        for (int i = 0; i < 32; i++) if (g_rr.eeprom[g_rr_game->link_ee_block[0] + i] != 0xFF) blank = false;   /* or it starts over */
+        if (blank) for (int i = 0; i < g_rr_game->nlink_ee_init; i++) memcpy(g_rr.eeprom + g_rr_game->link_ee_init[i].at, g_rr_game->link_ee_init[i].b, 32);
+        bool ok = false;
+        for (int i = 0; i < 2; i++) if (g_rr_game->link_ee_block[i] >= 0)
+            ok |= g_rr_game->link_ee_sum8 ? eeprom_block_set8((uint32_t)g_rr_game->link_ee_block[i], g_rr_game->link_ee_byte, (uint8_t)(cabinet & 7))
+                                          : (eeprom_block_set((uint32_t)g_rr_game->link_ee_block[i], g_rr_game->link_ee_byte, (uint8_t)(cabinet & 7)), true);
+        if (!ok) { fprintf(stderr, "[LINK] cabinet %d: the game's settings in the EEPROM are not valid: its cabinet number is not set (set it in the test menu)\n", cabinet + 1); return; }
+    } else {
+        eeprom_block_set(0x2C0, 0, (uint8_t)(cabinet & 7));
+        eeprom_block_set(0x2E0, 0, (uint8_t)(cabinet & 7));
+    }
+    fprintf(stderr, "[LINK] first run of cabinet %d: the game's own LINK ID set to %d (change it in the test menu, GAME OPTIONS)\n", cabinet + 1, (cabinet & 7) + 1);
+}
 /* GitHub #35: is the game on one of its wheel-position selection screens (rr_game_t.select_addr / select_vals)? */
 bool rr_hw_select_screen(void)
 {
@@ -200,29 +265,25 @@ bool rr_hw_select_screen(void)
     return false;
 }
 
-/* THE EEPROM FILE (engine/ss22_board.c's scheme): the test menu's settings, the coin options and the records live in the
- * EEPROM, which used to come from rv1eeprm.9e at every start and was never written back -- a change in the test menu was
- * gone on the next start. A windowed session keeps it in a file: loaded at start when it holds exactly one image,
- * rewritten (temp file + rename) whenever the game has changed it. Headless runs never touch it. */
 static char    nv_path[512];
 static uint8_t nv_saved[RR_EEPROM_SIZE];
 static bool    nv_on;
-
-void rr_hw_eeprom_persist(const char *path)
+bool rr_hw_eeprom_persist(const char *path)
 {
+    bool loaded = false;
     snprintf(nv_path, sizeof nv_path, "%s", path);
     FILE *f = fopen(nv_path, "rb");
     if (f) {
         uint8_t buf[RR_EEPROM_SIZE + 1];
         size_t n = fread(buf, 1, sizeof buf, f);
         fclose(f);
-        if (n == RR_EEPROM_SIZE) { memcpy(g_rr.eeprom, buf, RR_EEPROM_SIZE); fprintf(stderr, "[HW] EEPROM loaded from %s\n", nv_path); }
+        if (n == RR_EEPROM_SIZE) { memcpy(g_rr.eeprom, buf, RR_EEPROM_SIZE); loaded = true; fprintf(stderr, "[HW] EEPROM loaded from %s\n", nv_path); }
         else fprintf(stderr, "[HW] %s is not an EEPROM image (%zu bytes) -- ignored\n", nv_path, n);
     }
     memcpy(nv_saved, g_rr.eeprom, RR_EEPROM_SIZE);
     nv_on = true;
+    return loaded;
 }
-
 void rr_hw_eeprom_save(void)
 {
     if (!nv_on || !memcmp(nv_saved, g_rr.eeprom, RR_EEPROM_SIZE)) return;
@@ -238,6 +299,14 @@ void rr_hw_eeprom_save(void)
 #endif
     if (rename(tmp, nv_path) == 0) memcpy(nv_saved, g_rr.eeprom, RR_EEPROM_SIZE);
 }
+void rr_hw_set_freeplay(bool on)
+{
+    if (g_rr_game->freeplay_set) { g_rr_game->freeplay_set(on); return; }
+    eeprom_block_set(0x280, 3, on ? 1 : 0);
+    eeprom_block_set(0x2A0, 3, on ? 1 : 0);
+    g_rr.wram[0x1043] = on ? 1 : 0;
+}
+bool rr_hw_freeplay(void) { return g_rr_game->freeplay_get ? g_rr_game->freeplay_get() : g_rr.wram[0x1043] != 0; }
 
 /* STEERING MOTOR is group 3 (EEPROM 0x2C0, WRAM 0x10001060) byte 0x11: 0 = ON, 1 = OFF. OFF, the game
  * neither encodes its steering torque nor sends it (0x029D9C, 0x00470E: `tst.b $10001071`) and keeps the

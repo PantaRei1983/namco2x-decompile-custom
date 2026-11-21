@@ -24,6 +24,13 @@ set(NAMCO22_ENGINE_SS22_SRC
     ${NAMCO22_ENGINE_DIR}/ss22_gl.c
     ${NAMCO22_ENGINE_DIR}/frame_rule.c
 )
+# LINK PLAY (docs/LINK_NOTES.md): the C139 link chip, the network between cabinets, the host's options and start-up gathering. Part of
+# the Super 22 host below; Rave Racer (raverace/) links it too.
+set(NAMCO22_ENGINE_LINK_SRC
+    ${NAMCO22_ENGINE_DIR}/lan139.c
+    ${NAMCO22_ENGINE_DIR}/link_net.c
+    ${NAMCO22_ENGINE_DIR}/link_host.c
+)
 # THE HOST of the Super 22 games whose 68K is a lifted program (Tokyo Wars, Dirt Dash): the window, the controls, the board (memory map
 # and devices), the master DSP and sound-MCU hosts, the video RAM -> engine, the trace environment and the scheduler/command line
 # (ss22_run.c). A game is one table (src/<game>_game.c, engine/ss22_game.h). Needs the menu group below
@@ -43,6 +50,7 @@ set(NAMCO22_ENGINE_SS22_HOST_SRC
     ${NAMCO22_ENGINE_DIR}/ss22_video.c
     ${NAMCO22_ENGINE_DIR}/ss22_env.c
     ${NAMCO22_ENGINE_DIR}/ss22_run.c
+    ${NAMCO22_ENGINE_LINK_SRC}
 )
 # THE MENU AND THE DISPLAY CHOICES (Nuklear): a settings file, the display modes (widescreen, window mode/size, resolution,
 # aspect, scaling) and the menu bar every game's Escape menu is. Its own list because eng_ui.c defines Nuklear's

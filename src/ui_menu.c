@@ -95,6 +95,12 @@ int ui_controls_save(void) {
     fprintf(f, "window_mode=%d\n", win_mode);
     fprintf(f, "resolution=%dx%d\n", want_w, want_h);
     fprintf(f, "frame_rate=%d\n", g_ui_fps);
+    { extern int g_eng_tex_filter_setting;
+      static const char *const nm[5] = { "off", "bilinear", "sharp", "trilinear", "sharp-trilinear" };
+      extern int g_eng_tex_aniso_setting;
+      fprintf(f, "texture_filter=%s\n", nm[g_eng_tex_filter_setting < 0 || g_eng_tex_filter_setting > 4 ? 0 : g_eng_tex_filter_setting]);
+      if (g_eng_tex_aniso_setting) fprintf(f, "texture_aniso=%d\n", g_eng_tex_aniso_setting); else fprintf(f, "texture_aniso=off\n"); }
+    { extern int g_sprite_smooth; fprintf(f, "effects_filter=%s\n", g_sprite_smooth ? "on" : "off"); }
     { extern void input_joy_cfg_save(FILE *); input_joy_cfg_save(f); }
     fclose(f);
     return 1;
@@ -110,6 +116,13 @@ static void load_setting(char *line, char *eq) {
     if (!strcmp(line, "aspect")) { int a = atoi(eq + 1); if (a >= 0 && a < naspect()) cur_aspect = a;
                                    else if (a == naspect()) widescreen = 1;   /* the old list's last entry */
                                    display_cfg = 1; return; }
+    if (!strcmp(line, "texture_filter")) { extern int g_eng_tex_filter_setting; const char *v = eq + 1;   /* off | bilinear | sharp | trilinear | sharp-trilinear: the 3D polygons only (engine/tex_bake.h) */
+                                           g_eng_tex_filter_setting = (!strncmp(v, "sharp-trilinear", 15) || atoi(v) == 4) ? 4 : (!strncmp(v, "trilinear", 9) || atoi(v) == 3) ? 3
+                                                                    : (!strncmp(v, "sharp", 5) || atoi(v) == 2) ? 2 : (!strncmp(v, "bilinear", 8) || atoi(v) == 1) ? 1 : 0; return; }
+    if (!strcmp(line, "texture_aniso")) { extern int g_eng_tex_aniso_setting; int n = atoi(eq + 1);        /* off | 2 | 4 | 8 | 16: with the trilinear modes */
+                                          g_eng_tex_aniso_setting = n >= 16 ? 16 : n >= 8 ? 8 : n >= 4 ? 4 : n >= 2 ? 2 : 0; return; }
+    if (!strcmp(line, "effects_filter")) { extern int g_sprite_smooth; const char *v = eq + 1;   /* off | on: the dust / mud / spray sprites (engine/sprite_hw.h) */
+                                           g_sprite_smooth = !strncmp(v, "on", 2) || atoi(v) == 1; return; }
     if (!strcmp(line, "frame_rate")) { g_ui_fps = eng_vsync_rate_valid(atoi(eq + 1)); return; }
     if (!strcmp(line, "fullscreen")) { int on = atoi(eq + 1) != 0; if (on && win_mode == 0) win_mode = 1; else if (!on) win_mode = 0; display_cfg = 1; return; }   /* the other games' key (--set fullscreen=1) */
     if (!strcmp(line, "window_mode")) { int m = atoi(eq + 1); if (m >= 0 && m <= 2) win_mode = m; display_cfg = 1; return; }
@@ -495,8 +508,12 @@ void ui_draw(SDL_Window *win, bool *quit) {
 
         /* ---- Display ---- */
         nk_layout_row_push(ctx, 90);
-        if (nk_menu_begin_label(ctx, "Display", NK_TEXT_LEFT, nk_vec2(330, 590))) {
+        /* a Nuklear menu has no scrollbar of its own: the rows live in a group of the menu's height (fitted to the window, at most 720), which does */
+        const float disp_h = (float)wh - 40.0f < 720.0f ? (float)wh - 40.0f : 720.0f;
+        if (nk_menu_begin_label(ctx, "Display", NK_TEXT_LEFT, nk_vec2(350, disp_h))) {
             bool changed = false;
+            nk_layout_row_dynamic(ctx, disp_h - 26.0f, 1);
+            if (nk_group_begin(ctx, "dispscroll", NK_WINDOW_BORDER)) {
             nk_layout_row_dynamic(ctx, 24, 1);
             /* The one most people are looking for, first and on its own. */
             { nk_bool w = widescreen;
@@ -580,6 +597,35 @@ void ui_draw(SDL_Window *win, bool *quit) {
             nk_layout_row_push(ctx, 30);
             if (nk_button_label(ctx, ">")) { g_ui_fps = eng_vsync_rate_step(g_ui_fps, +1); changed = true; }
             nk_layout_row_end(ctx);
+            /* 3D texture filter: off is the board's own NEAREST; the others smooth the 3D polygons only (the HUD, text and sprites stay sharp);
+             * the trilinear modes add mipmaps, and the anisotropic filter rides on them */
+            { extern int g_eng_tex_filter_setting, g_eng_tex_aniso_setting;
+              static const char *const tfl[5] = { "Off", "Bilinear", "Sharp", "Trilinear", "Sharp tri." };
+              static const int lv[5] = { 0, 2, 4, 8, 16 };
+              nk_layout_row_dynamic(ctx, 18, 1);
+              nk_label(ctx, "3D texture filter (3D only; Off = arcade)", NK_TEXT_LEFT);
+              nk_layout_row_dynamic(ctx, 22, 3);
+              for (int i = 0; i < 3; i++)
+                  if (nk_option_label(ctx, tfl[i], g_eng_tex_filter_setting == i) && g_eng_tex_filter_setting != i) { g_eng_tex_filter_setting = i; changed = true; }
+              nk_layout_row_dynamic(ctx, 22, 2);
+              for (int i = 3; i < 5; i++)
+                  if (nk_option_label(ctx, tfl[i], g_eng_tex_filter_setting == i) && g_eng_tex_filter_setting != i) { g_eng_tex_filter_setting = i; changed = true; }
+              nk_layout_row_dynamic(ctx, 18, 1);
+              nk_label(ctx, "Anisotropic filter (with trilinear)", NK_TEXT_LEFT);
+              if (g_eng_tex_filter_setting < 3) nk_widget_disable_begin(ctx);
+              nk_layout_row_dynamic(ctx, 22, 5);
+              for (int i = 0; i < 5; i++) {
+                  char b[8]; if (lv[i]) snprintf(b, sizeof b, "%dx", lv[i]); else snprintf(b, sizeof b, "Off");
+                  if (nk_option_label(ctx, b, g_eng_tex_aniso_setting == lv[i]) && g_eng_tex_aniso_setting != lv[i]) { g_eng_tex_aniso_setting = lv[i]; changed = true; }
+              }
+              if (g_eng_tex_filter_setting < 3) nk_widget_disable_end(ctx); }
+            { extern int g_sprite_smooth;                       /* the effect sprites only: dust, mud, spray -- never the gauges, banners, digits or titles */
+              nk_layout_row_dynamic(ctx, 24, 1);
+              nk_bool fx = g_sprite_smooth != 0, fx0 = fx;
+              nk_checkbox_label(ctx, fx ? "Effects: dust, mud, spray smooth" : "Effects: dust, mud, spray arcade", &fx);
+              if (fx != fx0) { g_sprite_smooth = fx ? 1 : 0; changed = true; } }
+            nk_group_end(ctx);
+            }
             if (changed) ui_controls_save();          /* display choices stick without a Save button */
             nk_menu_end(ctx);
         }

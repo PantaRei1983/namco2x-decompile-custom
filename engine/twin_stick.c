@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "twin_stick.h"
+#include "eng_party.h"
 
 enum { S_NONE, S_KEY, S_PBTN, S_PAXIS, S_JBTN, S_JHAT, S_JAXIS };
 typedef struct {
@@ -42,6 +43,7 @@ static void dev_add(int index)
 {
     const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(index);
     if (id < 0 || dev_find(id) >= 0) return;
+    if (!eng_party_allows(index)) return;                     /* --pad K (a Party window): this copy's own controller only (engine/eng_party.h) */
     for (int d = 0; d < MAXD; d++) if (!dv[d].js) {
         if (!(dv[d].js = SDL_JoystickOpen(index))) return;
         dv[d].gc = SDL_IsGameController(index) ? SDL_GameControllerOpen(index) : NULL;

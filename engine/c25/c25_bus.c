@@ -81,10 +81,9 @@ static void dsp_w(c71_t *d, uint32_t off, uint16_t data)
     mark(d, off & 0x7FFF);
 }
 
-/* MAME pdp_handle_commands, memory effects only */
-static void pdp_run(c71_t *d)
+/* MAME pdp_handle_commands, memory effects only, from polygon RAM word offs */
+void c71_pdp_commands(c71_t *d, uint32_t offs)
 {
-    uint32_t offs = poly_r(d, 0x7FFF) & 0x7FFF;
     for (int guard = 0; guard < 200000; guard++) {
         offs &= 0x7FFF;
         uint32_t start = offs;
@@ -134,6 +133,12 @@ static void pdp_run(c71_t *d)
         }
     }
     snprintf(d->error, sizeof d->error, "PDP runaway");
+}
+static void pdp_run(c71_t *d) { c71_pdp_commands(d, poly_r(d, 0x7FFF) & 0x7FFF); }   /* (Super 22: the block the port-2 read starts at 0x7FFF) */
+int32_t c71_pointram_read(c71_t *d, uint32_t a)    /* MAME pointram_read: inside the window its word, sign-extended; past it -1 */
+{
+    if (a >= d->ptram_base && a < d->ptram_base + C71_PTRAM_WORDS) return (int32_t)(d->ptram[a - d->ptram_base] << 8) >> 8;
+    return -1;
 }
 
 /* -------------------------------------------------------- data space ---- */

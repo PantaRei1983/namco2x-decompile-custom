@@ -11,8 +11,7 @@
  *   Left/Right    change the value (on the tab strip: switch page)
  *   Enter/Space   select / toggle / step the value
  *   Tab, PgUp/PgDn, pad LB/RB   switch page from anywhere
- *   Esc                         exit the game (Esc opened the menu: Esc twice quits)
- *   Backspace (pad B / Start)   close
+ *   Esc, Backspace (pad B / Start)   close (our fork: Esc never quits the game; File > Exit does)
  *
  * Every change goes through the host's setters (rr_host.c), which apply it and
  * save it to rr_controls.cfg at once.
@@ -39,12 +38,15 @@
 #include "../../third_party/nuklear.h"          /* the tree's one copy, shared with Prop Cycle */
 #include "../../third_party/nuklear_sdl_gl2.h"  /* Prop Cycle's backend: the window is OpenGL */
 #include "../../engine/eng_nk_style.h"
+#include "../../engine/eng_nk_click.h"
 
 #include "rr_ui.h"
 #include "rr_game.h"
 #include "rr_input.h"
 #include "rr_hw.h"
 #include "rr_sound.h"
+#include "link_host.h"
+#include "link_lights_nk.h"
 #include "rr_net.h"
 
 static struct nk_context *ctx;
@@ -65,18 +67,37 @@ static int dlg_mode = 1;               /* 0 = Local LAN, 1 = Internet game (the 
 static bool was_session;               /* GO edge detector: close the menu when a race is armed */
 static float ui_scale = 1.0f;          /* drawable pixels per window unit (HiDPI) */
 
-enum { T_FILE, T_DISPLAY, T_AUDIO, T_CONTROLS, T_RECORD, T_ONLINE, T_DEBUG, T_N };
-static const char *tab_name[T_N] = { "File", "Display", "Audio", "Controls", "Record", "Online", "Debug" };
+enum { T_FILE, T_DISPLAY, T_AUDIO, T_CONTROLS, T_RECORD, T_NETWORK, T_ONLINE, T_DEBUG, T_N };
+static const char *tab_name[T_N] = { "File", "Display", "Audio", "Controls", "Record", "Network", "Online", "Debug" };   /* Network: our link (engine/link_host.c, link.cfg); Online: the author's online play (rr_net.c) */
 /* the Debug page only for a game whose table lists developer screens (rr_game.h rr_debug_t) */
-static bool tab_shown(int t) { return t != T_DEBUG || (g_rr_game->debug && g_rr_game->ndebug > 0); }
+static bool tab_shown(int t)
+{
+    if (t == T_ONLINE) return !link_host_arcade_mode();    /* arcade mode (link.cfg): the Arcade LAN only, no online play in the menu */
+    return t != T_DEBUG || (g_rr_game->debug && g_rr_game->ndebug > 0 && !link_host_arcade_mode());   /* (developer screens: arcade mode off only) */
+}
 static int tab = T_DISPLAY;
 static int row = 0;                    /* -1 = the tab strip */
 static bool kb_moved;                  /* keep the selected row in view after a key */
 
 /* ---- the rows ------------------------------------------------------------- */
-enum { D_WIDE, D_DRAW, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_N };
+enum { D_WIDE, D_DRAW, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TIMING, D_TEXF, D_ANISO, D_FX, D_N };   /* D_FX last: only a game with fx_tex shows it */
 enum { C_FREEPLAY, C_FFB, C_FFB_DIR, C_FFB_KEEP, C_FFB_LOG, C_STICK, C_CAR, C_FIXED = C_CAR };   /* the Controls page's rows before the bindings */
-#define C_N (C_FIXED + (g_rr_game->ncars > 0))                 /* + Car, for a game that lists its cars (rr_game_t.cars) */
+#define C_RAW (C_FIXED + (g_rr_game->ncars > 0))               /* + Car, for a game that lists its cars (rr_game_t.cars) */
+/* the rows this game shows: no FFB rows and no Stick steering for twin sticks (Cyber Commando: no wheel); "FFB log" never (a developer's) */
+static int c_vis[C_CAR + 1], c_nvis = -1;
+static int c_count(void)
+{
+    if (c_nvis >= 0) return c_nvis;
+    c_nvis = 0;
+    for (int r = 0; r < C_RAW; r++) {
+        if (r == C_FFB_LOG) continue;
+        if (g_rr_game->twin_stick && (r == C_FFB || r == C_FFB_DIR || r == C_FFB_KEEP || r == C_STICK)) continue;
+        c_vis[c_nvis++] = r;
+    }
+    return c_nvis;
+}
+#define C_N c_count()
+static int c_raw(int r) { const int n = c_count(); return r < n ? c_vis[r] : r - n + C_RAW; }   /* a shown row -> its C_ number (the bindings after) */
 enum { O_SERVER, O_NAME, O_HOST, O_FIND, O_CONNECT, O_STATUS, O_LOBBY0 };   /* then, not connected: one row per LAN game found; connected: the players, Ready, Start */
 static int online_rows(void) { return O_LOBBY0 + (rr_net_connected() ? rr_net_roster_count() + 2 : rr_net_found_count()); }
 static int online_self_ready(void)
@@ -96,10 +117,11 @@ static int nrows(int t)
 {
     switch (t) {
     case T_FILE: return 4;
-    case T_DISPLAY: return D_N;
-    case T_AUDIO: return 1;
+    case T_DISPLAY: return g_rr_game->n_fx_tex ? D_N : D_FX;
+    case T_AUDIO: return 2;                 /* Volume, then the volume boxes (our fork: a row for the keys) */
     case T_CONTROLS: return C_N + n_acts() + n_ts();
     case T_RECORD: return 1;
+    case T_NETWORK: return link_page_rows();
     case T_ONLINE: return online_rows();
     case T_DEBUG: return g_rr_game->ndebug;
     }
@@ -111,11 +133,13 @@ static bool has_value(int t, int r)
     if (t == T_DISPLAY || t == T_AUDIO) return true;
     if (t == T_CONTROLS) return r < C_N || r >= C_N + n_acts();
     if (t == T_RECORD) return true;
+    if (t == T_NETWORK) return link_page_has_value(r);
     if (t == T_ONLINE) return r == O_SERVER || r == O_NAME || (rr_net_connected() && r == O_LOBBY0 + rr_net_roster_count());   /* server / name / ready */
     return false;
 }
 static bool row_enabled(int t, int r)
 {
+    if (t == T_DISPLAY && r == D_ANISO) return g_cfg_texfilter >= 3;     /* anisotropy rides on the trilinear modes' mips */
     if (t == T_DISPLAY && r == D_SIZE) return g_cfg_winmode == 0;
     if (t == T_DISPLAY && r == D_HUD) return g_cfg_wide;
     return true;
@@ -147,12 +171,26 @@ static void row_text(int t, int r, char *label, size_t ln, char *value, size_t v
         case D_ASPECT:  snprintf(label, ln, "Aspect ratio");   /* widescreen on: the wide picture's shape; off: how the 4:3 picture is shown */
                         snprintf(value, vn, "%s", g_cfg_wide ? (g_cfg_wide_169 ? "16:9" : "Fill the window") : asp[g_cfg_aspect]); break;
         case D_SCALING: snprintf(label, ln, "Scaling"); snprintf(value, vn, "%s", sc[g_cfg_scaling]); break;
+        case D_TEXF:    snprintf(label, ln, "3D texture filter");
+                        { static const char *const nm[5] = { "Off (arcade)", "Bilinear (3D only)", "Sharp bilinear (3D only)", "Trilinear (3D only)", "Sharp trilinear (3D only)" };
+                          snprintf(value, vn, "%s", nm[g_cfg_texfilter < 0 || g_cfg_texfilter > 4 ? 0 : g_cfg_texfilter]); }
+                        break;
+        case D_FX:      { extern int g_cfg_fxfilter; snprintf(label, ln, "Effects (explosions)");
+                          snprintf(value, vn, "%s", g_cfg_fxfilter ? "Smooth (2D effects only)" : "Off (arcade)"); } break;
+        case D_ANISO:   snprintf(label, ln, "Anisotropic filter");
+                        if (g_cfg_texaniso) snprintf(value, vn, "%dx", g_cfg_texaniso); else snprintf(value, vn, "Off");
+                        break;
         case D_FPS:     snprintf(label, ln, "Frame rate"); snprintf(value, vn, "%s", eng_vsync_rate_name(g_cfg_fps)); break;
+        case D_TIMING:  snprintf(label, ln, "Frame timing"); link_timing_text(value, vn); break;   /* (link.cfg timing=) */
         case D_HUD:     { extern int g_eng_hud_edges_on; snprintf(label, ln, "Widescreen HUD"); snprintf(value, vn, "%s", g_eng_hud_edges_on ? "at the screen edges" : "original (4:3 centre)"); break; }
         }
         break;
-    case T_AUDIO: snprintf(label, ln, "Volume"); snprintf(value, vn, "%d%%", g_cfg_volume); break;
+    case T_AUDIO:
+        if (r == 1) snprintf(label, ln, "Volume boxes");
+        else { snprintf(label, ln, "Volume"); snprintf(value, vn, "%d%%", g_cfg_volume); }
+        break;
     case T_CONTROLS:
+        r = c_raw(r);                                               /* (from here on: the C_ numbers, the bindings after C_RAW) */
         if (r == C_FREEPLAY) { snprintf(label, ln, "Free play"); snprintf(value, vn, "%s", rr_hw_freeplay() ? "ON" : "OFF (coins)"); }
         else if (r == C_FFB) {
             snprintf(label, ln, "Force feedback");
@@ -167,13 +205,13 @@ static void row_text(int t, int r, char *label, size_t ln, char *value, size_t v
             const int c = g_rr_game->car_get ? g_rr_game->car_get() : 0;
             snprintf(label, ln, "Car"); snprintf(value, vn, "%d %s", c + 1, c >= 0 && c < g_rr_game->ncars ? g_rr_game->cars[c] : "?");
         }
-        else if (r >= C_N + n_acts()) {
-            const int c = r - C_N - n_acts();
+        else if (r >= C_RAW + n_acts()) {
+            const int c = r - C_RAW - n_acts();
             if (c == ts_count()) { snprintf(label, ln, "Stick deadzone"); snprintf(value, vn, "%d%%", ts_deadzone()); }
             else { snprintf(label, ln, "%s", ts_label(c)); ts_value_text(c, value, vn); }
         }
         else {
-            const int a = act_of(r - C_N);
+            const int a = act_of(r - C_RAW);
             if (g_rr_game->act_label && g_rr_game->act_label[a]) snprintf(label, ln, "%s", g_rr_game->act_label[a]);   /* the game's own names */
             else {
             snprintf(label, ln, "%s", rr_input_action_name(a));
@@ -185,6 +223,7 @@ static void row_text(int t, int r, char *label, size_t ln, char *value, size_t v
         }
         break;
     case T_RECORD: snprintf(label, ln, "Record input"); snprintf(value, vn, "%s", rr_input_recording() ? "ON  (recording...)" : "OFF"); break;
+    case T_NETWORK: link_page_text(r, label, ln, value, vn); break;
     case T_DEBUG: snprintf(label, ln, "%s", g_rr_game->debug[r].name); snprintf(value, vn, "Launch"); break;
     case T_ONLINE: {
         const int rc = rr_net_roster_count();
@@ -280,17 +319,24 @@ static void row_change(int t, int r, int dir)
             break; }
         case D_ASPECT:  if (g_cfg_wide) rr_host_set_wide_169(!g_cfg_wide_169); else rr_host_set_aspect(cyc(g_cfg_aspect, d, 4)); break;
         case D_SCALING: rr_host_set_scaling(cyc(g_cfg_scaling, d, 3)); break;
+        case D_TEXF:    rr_host_set_texfilter(cyc(g_cfg_texfilter, d, 5)); break;
+        case D_FX:      { extern int g_cfg_fxfilter; rr_host_set_fxfilter(!g_cfg_fxfilter); break; }
+        case D_ANISO:   { static const int lv[5] = { 0, 2, 4, 8, 16 }; int i = 0; for (int k = 0; k < 5; k++) if (lv[k] == g_cfg_texaniso) i = k;
+                          rr_host_set_texaniso(lv[cyc(i, d, 5)]); break; }
         case D_HUD:     { extern int g_eng_hud_edges_on; rr_host_set_hud_edges(!g_eng_hud_edges_on); break; }
         case D_FPS:     { extern void rr_host_set_fps(int); rr_host_set_fps(eng_vsync_rate_step(g_cfg_fps, d)); break; }
+        case D_TIMING:  link_timing_change(); break;
         }
         break;
     case T_AUDIO: {
+        if (r == 1) { const int b = eng_vol_box_key(dir, g_cfg_volume); if (b >= 0) rr_host_set_volume(b); break; }   /* Left / Right pick a box, Enter sets it */
         int v = g_cfg_volume + (dir ? dir * 5 : 10);
         if (v > 100) v = dir ? 100 : 0;                     /* Enter wraps 100 -> mute */
         if (v < 0) v = 0;
         rr_host_set_volume(v);
         break; }
     case T_CONTROLS:
+        r = c_raw(r);
         if (r == C_FREEPLAY) rr_host_set_freeplay(!rr_hw_freeplay());
         else if (r == C_FFB) rr_host_set_ffb_strength(dir ? g_cfg_ffb_strength + 10 * dir : (g_cfg_ffb_strength + 10) % 110);   /* Enter cycles */
         else if (r == C_FFB_DIR) rr_host_set_ffb_invert(!g_cfg_ffb_invert);
@@ -301,16 +347,18 @@ static void row_change(int t, int r, int dir)
             const int n = g_rr_game->ncars, c = g_rr_game->car_get ? g_rr_game->car_get() : 0;
             rr_host_set_car(((dir ? c + dir : c + 1) % n + n) % n);                                       /* left/right step, Enter cycles */
         }
-        else if (r >= C_N + n_acts()) {
-            const int c = r - C_N - n_acts();
+        else if (r >= C_RAW + n_acts()) {
+            const int c = r - C_RAW - n_acts();
             if (c == ts_count()) { int v = ts_deadzone() + (dir ? dir : 1) * 5; if (!dir && v > 50) v = 0; ts_set_deadzone(v); }   /* Enter cycles */
             else ts_change(c, dir);                  /* Enter binds (rr_ui_event hands it the next input), Left clears, Right defaults */
         }
-        else if (dir == 0) { rebinding = act_of(r - C_N); rr_input_capture_begin(rebinding); }
+        else if (dir == 0) { rebinding = act_of(r - C_RAW); rr_input_capture_begin(rebinding); }
         break;
     case T_RECORD: rr_host_toggle_record(); break;
+    case T_NETWORK: link_page_change(r, dir); break;
     case T_DEBUG: if (dir == 0) { rr_debug_launch(r); close_menu(); } break;
     case T_ONLINE: {
+        if (link_host_on()) break;                   /* our link play (Network page) has the link chip this run */
         const int rc = rr_net_roster_count();
         if (r == O_SERVER || r == O_NAME) {
             if (dir == 0) {                          /* Enter: modal text entry (SDL_TEXTINPUT in rr_ui_event) */
@@ -421,7 +469,7 @@ static void chat_overlay(int ww, int wh)
 }
 bool rr_ui_quit_requested(void) { return quit_req; }
 void rr_ui_set_open(bool on) { if (!on) { close_menu(); return; } open_ = true; rebinding = -1; if (row >= nrows(tab)) row = 0; }
-void rr_ui_input_begin(void) { if (ctx) nk_input_begin(ctx); }
+void rr_ui_input_begin(void) { if (ctx) { nk_input_begin(ctx); nkc_begin(); } }
 void rr_ui_input_end(void)   { if (ctx) nk_input_end(ctx); }
 
 /* one navigation step from the keyboard, a pad or a hat */
@@ -474,7 +522,7 @@ bool rr_ui_event(SDL_Event *e)
             default: break;
             }
         } else if (e->type == SDL_MOUSEMOTION || e->type == SDL_MOUSEBUTTONDOWN || e->type == SDL_MOUSEBUTTONUP || e->type == SDL_MOUSEWHEEL) {
-            nk_sdl_handle_event(e);                    /* typing never blocks the mouse: Send / Close / Ready / the X stay clickable */
+            nkc_event(e);                              /* typing never blocks the mouse: Send / Close / Ready / the X stay clickable */
         }
         return true;
     }
@@ -483,6 +531,10 @@ bool rr_ui_event(SDL_Event *e)
         return true;
     }
     if (g_rr_game->twin_stick && ts_capturing() >= 0) { ts_capture_event(e); return true; }
+    if (link_page_editing()) {                          /* an address being typed on the Network page takes the keys */
+        if (e->type == SDL_KEYDOWN) link_page_type(e->key.keysym.scancode);
+        return true;
+    }
     int k = -1;
     if (e->type == SDL_KEYDOWN) {
         const bool rep = e->key.repeat;                  /* held arrows repeat; the rest do not */
@@ -492,8 +544,7 @@ bool rr_ui_event(SDL_Event *e)
         case SDL_SCANCODE_LEFT: k = K_LEFT; break;
         case SDL_SCANCODE_RIGHT: k = K_RIGHT; break;
         case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_SPACE: if (!rep) k = K_OK; break;
-        case SDL_SCANCODE_ESCAPE: if (!rep) k = K_EXIT; break;     /* Esc twice = exit; Backspace / pad B = back to the game */
-        case SDL_SCANCODE_BACKSPACE: if (!rep) k = K_BACK; break;
+        case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_BACKSPACE: if (!rep) k = K_BACK; break;   /* Esc closes the menu (our fork: never quits -- File > Exit does) */
         case SDL_SCANCODE_TAB: if (!rep) k = (e->key.keysym.mod & KMOD_SHIFT) ? K_TABPREV : K_TABNEXT; break;
         case SDL_SCANCODE_PAGEUP: if (!rep) k = K_TABPREV; break;
         case SDL_SCANCODE_PAGEDOWN: if (!rep) k = K_TABNEXT; break;
@@ -511,13 +562,21 @@ bool rr_ui_event(SDL_Event *e)
         case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: k = K_TABNEXT; break;
         default: break;
         }
-    } else if (e->type == SDL_JOYHATMOTION) {           /* raw sticks: the hat navigates */
+    } else if (e->type == SDL_JOYHATMOTION && !SDL_GameControllerFromInstanceID(e->jhat.which)) {   /* raw sticks: the hat navigates
+                                                         * (a game controller's D-pad is also its joystick's hat: one press, one step) */
         if (e->jhat.value & SDL_HAT_UP) k = K_UP; else if (e->jhat.value & SDL_HAT_DOWN) k = K_DOWN;
         else if (e->jhat.value & SDL_HAT_LEFT) k = K_LEFT; else if (e->jhat.value & SDL_HAT_RIGHT) k = K_RIGHT;
     }
+    else if (e->type == SDL_CONTROLLERAXISMOTION && (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX || e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY)) {
+        /* the LEFT STICK navigates as the d-pad does, one step per push (as s23/src/eng/eng_ui.c) */
+        static int held[2]; const int ax = e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY, v = e->caxis.value;
+        const int dir = v > 20000 ? 1 : v < -20000 ? -1 : 0;
+        if (dir && dir != held[ax]) k = ax ? (dir > 0 ? K_DOWN : K_UP) : (dir > 0 ? K_RIGHT : K_LEFT);
+        if (v > -12000 && v < 12000) held[ax] = 0; else if (dir) held[ax] = dir;
+    }
     if (k >= 0) { nav(k); kb_moved = true; return true; }
     if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) return true;   /* the game does not see keys while open */
-    nk_sdl_handle_event(e);                              /* mouse */
+    nkc_event(e);                                        /* mouse (a quick click held a frame: engine/eng_nk_click.h) */
     return true;
 }
 /* RR_MENU_TEST and friends drive the menu without an input device */
@@ -532,10 +591,32 @@ static void labelf(nk_flags align, const char *fmt, ...)
     nk_label(ctx, b, align);
 }
 
+static int note_count;
+static void count_line(const char *fmt, ...) { (void)fmt; note_count++; }   /* the Network page's notes, counted (the dropdown's height) */
+static void note_line(const char *fmt, ...)
+{
+    char b[160];
+    va_list ap; va_start(ap, fmt); vsnprintf(b, sizeof b, fmt, ap); va_end(ap);
+    nk_label(ctx, b, NK_TEXT_LEFT);
+}
+
 /* a one-line hint at the bottom of the window while the menu is closed (a pad has no Esc: how to reach the menu) */
 static char hint_text[96]; static int hint_left;
 void rr_ui_set_hint(const char *text, int frames) { snprintf(hint_text, sizeof hint_text, "%s", text ? text : ""); hint_left = frames; }
 bool rr_ui_hint_active(void) { return ctx && !open_ && hint_left > 0 && hint_text[0]; }
+
+void rr_ui_draw_message(const char *const *lines, int n)
+{
+    if (!ctx || n <= 0) return;
+    int ww, wh; SDL_GetWindowSize(uwin, &ww, &wh);
+    const float w = 560 < ww - 16 ? 560.0f : (float)ww - 16, h = 24.0f + (float)n * 22;
+    if (nk_begin(ctx, "linkwait", nk_rect(((float)ww - w) / 2, ((float)wh - h) / 2, w, h), NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_NO_INPUT)) {
+        nk_layout_row_dynamic(ctx, 18, 1);
+        for (int i = 0; i < n; i++) nk_label(ctx, lines[i], NK_TEXT_CENTERED);
+    }
+    nk_end(ctx);
+    nk_sdl_render(NK_ANTI_ALIASING_ON);
+}
 
 /* THE ONLINE PLAY WINDOW: opened by "Host / join a game...". A drop-down picks Local LAN (host one, or list the games
  * found on the network) or Internet game (type a server IP or URL). Text entry reuses the modal editor above. */
@@ -762,6 +843,9 @@ static void lobby_window(int ww, int wh)
 
 void rr_ui_draw(bool *quit)
 {
+    { static int done; if (!done && getenv("ENG_UI_DUMP")) { done = 1;   /* ENG_UI_DUMP=1 (tests: menu audits): every tab's rows as text to the log */
+        for (int t = 0; t < T_N; t++) { if (!tab_shown(t)) continue; const int n = nrows(t); fprintf(stderr, "[UIDUMP] == %s (%d rows)\n", tab_name[t], n);
+            for (int r = 0; r < n; r++) { char l[160] = "", v[200] = ""; row_text(t, r, l, sizeof l, v, sizeof v); fprintf(stderr, "[UIDUMP] %s | %s | %s\n", tab_name[t], l, v); } } } }
     if (quit_req) *quit = true;
 
     /* GO armed a race: leave the menu so the player can coin up */
@@ -778,22 +862,19 @@ void rr_ui_draw(bool *quit)
     { static bool auto_done;                                 /* once per connection: the first time the menu is open while connected, the lobby window opens and the chat box takes the keyboard */
       if (!rr_net_connected()) { if (!rr_net_switching()) auto_done = false; }
       else if (open_ && !auto_done && !sess) { auto_done = true; dlg_open = true; if (editing < 0) begin_edit(E_CHAT); } }
-    if (rr_ui_hint_active()) {
-        hint_left--;
+    if (ctx && (rr_ui_hint_active() || !open_)) {           /* the hint; the menu closed: the link lights and the chat overlay */
         int hw, hh; SDL_GetWindowSize(uwin, &hw, &hh);
-        const float w = 440 < hw - 8 ? 440.0f : (float)hw - 8;
-        if (nk_begin(ctx, "hint", nk_rect(((float)hw - w) / 2, (float)hh - 36, w, 28), NK_WINDOW_NO_SCROLLBAR)) {
-            nk_layout_row_dynamic(ctx, 18, 1);
-            nk_label(ctx, hint_text, NK_TEXT_CENTERED);
+        if (rr_ui_hint_active()) {
+            hint_left--;
+            const float w = 440 < hw - 8 ? 440.0f : (float)hw - 8;
+            if (nk_begin(ctx, "hint", nk_rect(((float)hw - w) / 2, (float)hh - 36 - link_lights_hint_lift(), w, 28), NK_WINDOW_NO_SCROLLBAR)) {
+                nk_layout_row_dynamic(ctx, 18, 1);
+                nk_label(ctx, hint_text, NK_TEXT_CENTERED);
+            }
+            nk_end(ctx);
         }
-        nk_end(ctx);
+        if (!open_) link_lights_nk(ctx, hw, hh);
         chat_overlay(hw, hh);
-        nk_sdl_render(NK_ANTI_ALIASING_ON);
-        return;
-    }
-    if (ctx && !open_) {                         /* menu closed: only the chat overlay (the quick chat box, recent lines) */
-        int cw, ch; SDL_GetWindowSize(uwin, &cw, &ch);
-        chat_overlay(cw, ch);
         nk_sdl_render(NK_ANTI_ALIASING_ON);
         return;
     }
@@ -803,7 +884,7 @@ void rr_ui_draw(bool *quit)
     /* THE MENU BAR across the top of the window, as in Prop Cycle. The chosen
      * page drops down under its title; on the keyboard the bar is the row
      * above the first row of the dropdown. */
-    static const float title_w[T_N] = { 50, 80, 70, 90, 80, 70, 64 };
+    static const float title_w[T_N] = { 50, 80, 70, 90, 80, 80, 70, 64 };
     float title_x[T_N], x = 4; int nshown = 0;
     for (int t = 0; t < T_N; t++) { title_x[t] = x; if (tab_shown(t)) { x += title_w[t] + 4; nshown++; } }
     if (nk_begin(ctx, "menubar", nk_rect(0, 0, (float)ww, 28), NK_WINDOW_NO_SCROLLBAR)) {
@@ -815,16 +896,18 @@ void rr_ui_draw(bool *quit)
             if (nk_select_label(ctx, tab_name[t], NK_TEXT_CENTERED, t == tab) && t != tab) { tab = t; row = 0; }
         }
         nk_layout_row_push(ctx, (float)ww - x - 8 > 60 ? (float)ww - x - 8 : 60);
-        nk_label(ctx, row < 0 ? "<- Left/Right ->   Down: open   Backspace: resume   Esc: exit game" : "Arrows, Enter   Backspace: resume   Esc: exit game", NK_TEXT_RIGHT);
+        nk_label(ctx, row < 0 ? "<- Left/Right ->   Down: open   Esc: close" : "Arrows, Enter, Esc", NK_TEXT_RIGHT);
         nk_menubar_end(ctx);
     }
     nk_end(ctx);
 
     /* the dropdown: sized to its page, under its title, inside the window */
-    static const float drop_w[T_N] = { 300, 440, 300, 340, 380, 420, 460 };
+    static const float drop_w[T_N] = { 300, 440, 300, 340, 380, 560, 420, 460 };
     const int n0 = nrows(tab);
     const float rh0 = tab == T_CONTROLS ? 20 : 26;
-    float dh = 48 + n0 * (rh0 + 4) + (tab == T_DISPLAY ? 88 : tab == T_FILE ? 0 : 44);
+    float nh = tab == T_NETWORK ? 176 : 44;                             /* the Network page: room for all its notes (they were cut) */
+    if (tab == T_NETWORK) { note_count = 0; link_page_notes(count_line); if (12 + 21 * note_count > nh) nh = 12 + 21 * note_count; }
+    float dh = 48 + (n0 - (tab == T_AUDIO ? 1 : 0)) * (rh0 + 4) + (tab == T_DISPLAY ? 88 : tab == T_FILE ? 0 : nh);
     if (dh > wh - 34) dh = (float)wh - 34;
     float dw = drop_w[tab] < ww - 8 ? drop_w[tab] : (float)ww - 8;
     float dx = title_x[tab];
@@ -841,11 +924,12 @@ void rr_ui_draw(bool *quit)
         const int n = nrows(tab);
         const float rh = tab == T_CONTROLS ? 20 : 26;
         for (int i = 0; i < n; i++) {
+            if (tab == T_AUDIO && i == 1) continue;          /* the volume boxes: drawn under the rows */
             char label[64], value[96];
             row_text(tab, i, label, sizeof label, value, sizeof value);
             const bool en = row_enabled(tab, i), val = has_value(tab, i);
             nk_layout_row_template_begin(ctx, rh);
-            nk_layout_row_template_push_static(ctx, tab == T_CONTROLS ? 120 : tab == T_FILE ? 0 : 120);
+            nk_layout_row_template_push_static(ctx, tab == T_CONTROLS ? 120 : tab == T_FILE ? 0 : tab == T_NETWORK ? 210 : 120);
             if (val) nk_layout_row_template_push_static(ctx, 24);
             nk_layout_row_template_push_dynamic(ctx);
             if (val) nk_layout_row_template_push_static(ctx, 24);
@@ -860,10 +944,10 @@ void rr_ui_draw(bool *quit)
             }
             if (nk_select_label(ctx, label, NK_TEXT_LEFT, i == row)) row = i;
             if (val && nk_button_symbol(ctx, NK_SYMBOL_TRIANGLE_LEFT)) { row = i; row_change(tab, i, -1); }
-            if (tab == T_AUDIO) {                        /* the volume is a slider too */
+            if (tab == T_AUDIO && i == 0) {              /* the volume is a slider too */
                 int v = g_cfg_volume;
                 if (nk_slider_int(ctx, 0, &v, 100, 1) && v != g_cfg_volume) rr_host_set_volume(v);
-            } else if (nk_button_label(ctx, value[0] ? value : label)) { row = i; row_change(tab, i, 0); }
+            } else if (eng_nk_button_sel(ctx, value[0] ? value : label, tab == T_FILE && i == row)) { row = i; row_change(tab, i, 0); }
             if (val && nk_button_symbol(ctx, NK_SYMBOL_TRIANGLE_RIGHT)) { row = i; row_change(tab, i, +1); }
             if (!en) nk_widget_disable_end(ctx);
         }
@@ -877,11 +961,7 @@ void rr_ui_draw(bool *quit)
             labelf(NK_TEXT_LEFT, "Resolution = render size; the window keeps its size.");
             labelf(NK_TEXT_LEFT, g_cfg_wide ? "Widescreen: more track at the sides." : "");
         } else if (tab == T_AUDIO) {
-            nk_layout_row_dynamic(ctx, 24, 4);
-            if (nk_button_label(ctx, "Mute")) rr_host_set_volume(0);
-            if (nk_button_label(ctx, "25%"))  rr_host_set_volume(25);
-            if (nk_button_label(ctx, "50%"))  rr_host_set_volume(50);
-            if (nk_button_label(ctx, "100%")) rr_host_set_volume(100);
+            eng_vol_boxes(ctx, row == 1, g_cfg_volume, rr_host_set_volume);
         } else if (tab == T_CONTROLS) {
             labelf(NK_TEXT_LEFT, "Select, then press key/button or move control (Esc cancels)");
             if (g_rr_game->twin_stick) {
@@ -890,12 +970,15 @@ void rr_ui_draw(bool *quit)
             }
         } else if (tab == T_RECORD) {
             labelf(NK_TEXT_LEFT, "Records the cabinet inputs per frame to recordings/;");
-            labelf(NK_TEXT_LEFT, "replay with rr --replay FILE. F9 toggles without the menu.");
+            labelf(NK_TEXT_LEFT, "replay with rr --replay FILE. F9 in the game saves a glitch capture to captures/");
+            labelf(NK_TEXT_LEFT, "(the picture + this session's recording up to that moment) -- send both to report a problem.");
+        } else if (tab == T_NETWORK) { link_page_notes(note_line);
         } else if (tab == T_DEBUG) {
             labelf(NK_TEXT_LEFT, "Developer screens left in the program (nothing in the game reaches them).");
             labelf(NK_TEXT_LEFT, "They run while the Test switch is on: F2 or File > Test mode returns to the game.");
             if (row >= 0 && row < g_rr_game->ndebug && g_rr_game->debug[row].help) labelf(NK_TEXT_LEFT, "%s", g_rr_game->debug[row].help);
         } else if (tab == T_ONLINE) {
+            if (link_host_on()) labelf(NK_TEXT_LEFT, "Arcade LAN (Network page) is on: online play is off this run. Set Link method to Modern multiplayer to use it.");
             labelf(NK_TEXT_LEFT, "Address entry needs a keyboard.");
             if (!rr_net_connected()) labelf(NK_TEXT_LEFT, "LAN: one player picks Host a LAN game, the others Find LAN games and Join. Or type a server host:port.");
         }

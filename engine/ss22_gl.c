@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <SDL2/SDL.h>
 #include "eng_gl.h"
 #include "eng.h"
@@ -92,7 +93,7 @@ static sprite_item     items[1024];
 static int             ni;
 static uint8_t         cgbuf[0x20000];
 static bool            text_off, spr_off;
-static uint8_t         prio_mask[SPR_W * SPR_H];   /* pixels a sprite drawn over the text layer covers this frame */
+static uint8_t         prio_mask[SPR_W * SPR_H];   /* how much a sprite drawn over the text layer covers each pixel this frame (its opacity, 255 = all) */
 static bool            prio_any;
 static const uint16_t *spot_src;             /* the text layer's spot RAM this frame, for the cache key */
 static bool            spot_on;
@@ -101,6 +102,51 @@ static bool            hud_on;               /* the game is showing its race HUD
 static const eng_hud_cfg *hud_cfg;           /* the game's HUD description, set by its board host (NULL = the HUD stays put) */
 
 void ss22_gl_set_hud(const eng_hud_cfg *h) { hud_cfg = h; }
+void ss22_gl_set_soft_effects(const int (*ranges)[2], int n) { sprite_set_soft_tiles(ranges, n); }
+
+/* WIDESCREEN, EDGE-ANCHORED ART (Aqua Jet's wake spray: a band of 160-px pieces laid edge to edge across the 640-px screen, swung up to ~100 px left or
+ * right as the jet leans). The board shows 4:3, so the game never drew more: in 16:9 the spray stopped in a straight line at the 4:3 edges. A piece of the
+ * game's edge_fill art that crosses a screen side (its other side on the screen: the band's end) is continued out to the picture's edge by copies of
+ * itself, each mirrored from the last (seamless at every join, and the noise of a spray shows no repeat). Everything else past the sides is drawn as it is. */
+static int edge_tiles[8][2], edge_n;
+void ss22_gl_set_edge_fill(const int (*ranges)[2], int n)
+{
+    edge_n = (!ranges || n < 0) ? 0 : (n > 8 ? 8 : n);
+    for (int i = 0; i < edge_n; i++) { edge_tiles[i][0] = ranges[i][0]; edge_tiles[i][1] = ranges[i][1]; }
+}
+static int edge_anchor(const sprite_item *it)          /* bit 0: anchored at the left side, bit 1: at the right */
+{
+    if (!edge_n || g_scene_x0 > -0.5f) return 0;
+    int in = 0;
+    for (int i = 0; i < edge_n && !in; i++) in = it->art >= edge_tiles[i][0] && it->art <= edge_tiles[i][1];
+    if (!in) return 0;
+    return (it->x0 <= 0 && it->x0 + it->w > 0 ? 1 : 0) | (it->x0 < SPR_W && it->x0 + it->w >= SPR_W ? 2 : 0);
+}
+/* the copies of one drawn quad (x0..x1, its texture u0..u1 / v0..v1) out to the picture's sides; inside glBegin(GL_QUADS) */
+static void edge_mirror_quads(int anchor, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1)
+{
+    const float w = x1 - x0;
+    if (w < 1.0f) return;
+    if (anchor & 1)
+        for (int k = 1; x1 - k * w > g_scene_x0 && k < 64; k++) {
+            const float a = x0 - k * w, b = a + w, ua = (k & 1) ? u1 : u0, ub = (k & 1) ? u0 : u1;
+            glTexCoord2f(ua, v0); glVertex2f(a, y0); glTexCoord2f(ub, v0); glVertex2f(b, y0);
+            glTexCoord2f(ub, v1); glVertex2f(b, y1); glTexCoord2f(ua, v1); glVertex2f(a, y1);
+        }
+    if (anchor & 2)
+        for (int k = 1; x0 + k * w < g_scene_x1 && k < 64; k++) {
+            const float a = x0 + k * w, b = a + w, ua = (k & 1) ? u1 : u0, ub = (k & 1) ? u0 : u1;
+            glTexCoord2f(ua, v0); glVertex2f(a, y0); glTexCoord2f(ub, v0); glVertex2f(b, y0);
+            glTexCoord2f(ub, v1); glVertex2f(b, y1); glTexCoord2f(ua, v1); glVertex2f(a, y1);
+        }
+}
+void ss22_gl_set_effects(const int (*ranges)[2], int n)
+{
+    if (!ranges || n <= 0) return;
+    sprite_set_effect_tiles(ranges, n);
+    g_sprite_smooth_fast = 1;                 /* Prop Cycle (its own renderer) keeps the plain per-tap loop */
+    g_eng_fx_known = 1;                       /* the menu shows its row */
+}
 
 /* THE GUN SHOT FLASH (Time Crisis): a light-gun cabinet whitens the whole screen for the frame after the trigger so the gun's
  * photodiode can find the beam -- the mixer's screen fade at full strength in white, switched on for ONE frame with no ramp
@@ -149,21 +195,30 @@ void ss22_prepare(const ss22_regs *r)
     if (!spr_off && g_sprite_tiles && r->spriteram &&
         sprite_load_regs(&sst, r->spriteram, r->spriteram_size, r->vics, r->vics_size, r->vics_ctl, r->pal)) {
         have_spr = true;
+        {   /* widescreen: a full-screen sprite reaches the picture's sides (the last drawn frame's width; sprite_hw.h) */
+            int lo = (int)floorf(g_scene_x0), hi = (int)ceilf(g_scene_x1) - 1;
+            if (hi - lo + 1 > SPR_WIDE_MAX) { const int e = (SPR_WIDE_MAX - SPR_W) / 2; lo = -e; hi = SPR_W - 1 + e; }
+            if (lo > 0) lo = 0;
+            if (hi < SPR_W - 1) hi = SPR_W - 1;
+            g_sprite_x_lo = lo; g_sprite_x_hi = hi;
+        }
         ni = sprite_collect(&sst, &g_fog, items, (int)(sizeof items / sizeof items[0]));
         static int sprlog = -1;                      /* ENG_SPRLOG=<n>: the sprite list of update n, one line each (finding a HUD's parts) */
         if (sprlog < 0) { const char *e = getenv("ENG_SPRLOG"); sprlog = e ? atoi(e) : 0; }
-        if (sprlog && frames == sprlog)
+        if (sprlog && (frames == sprlog || sprlog < 0))   /* -1: every update (listing a whole attract loop's sprites) */
             for (int i = 0; i < ni; i++)
-                fprintf(stderr, "[SPR] %3d z %06X layer %u  x %4d y %4d  %3d x %3d  idx %d  tile %d%s\n", i, items[i].z, items[i].z >> 21, items[i].x0, items[i].y0,
-                        items[i].w, items[i].h, items[i].idx, items[i].tile, items[i].prioverchar ? "  prio" : "");
+                fprintf(stderr, "[SPR] f%u %3d z %06X layer %u  x %4d y %4d  %3d x %3d  idx %d  tile %d art %d%s\n", frames, i, items[i].z, items[i].z >> 21, items[i].x0, items[i].y0,
+                        items[i].w, items[i].h, items[i].idx, items[i].tile, items[i].art, items[i].prioverchar ? "  prio" : "");
     }
 
-    qn = 0; qorder = 0;
+    static int held;                                  /* updates in a row that kept the last list (r->hold_frames) */
     if (r->walk) {
-        eng_list_cfg cfg = { ENG_LIST_HEAD_SS22, 0, NULL, NULL, NULL, NULL };
+        held = 0; qn = 0; qorder = 0;
+        eng_list_cfg cfg = { ENG_LIST_HEAD_SS22, 0, NULL, NULL, NULL, NULL, r->pdp_in_list };
         eng_walk_list(r->poly_word, &cfg, push_quad, NULL);
         eng_quad_sort(qbuf, qn, 0);
-    }
+    } else if (held < r->hold_frames) held++;         /* a dropped update: the last list again, not a black 3D layer */
+    else { qn = 0; qorder = 0; }
     ss22_qhist_report();
     ss22_cliplog_report();
 }
@@ -239,20 +294,128 @@ static void tex_alloc(GLuint *t)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPR_W, SPR_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
 }
 
+/* An effect sprite (Display > Effects): sprite_render_item has already sampled the 32x32 tiles bilinearly (engine/sprite_hw.c); what it made is premultiplied
+ * and drawn LINEARLY, so the stretched tiles show no blocks. Only the sprites named in the game's fx table come here. */
+/* Only the part of the item that has something in it is made, uploaded and drawn: a dust cloud's box is mostly empty, and a transparent texel adds nothing under the
+ * premultiplied blend, so the picture is the same as for the whole box (one transparent texel is kept round the content for the linear sampler). The textures take
+ * turns, so an upload never lands in one a draw of this frame may still be reading. */
+#define FX_TEX_N 4
+static GLuint spr_fx_tex[FX_TEX_N];
+static int spr_fx_next;
+static uint8_t *spr_fx_buf;
+static void draw_effect_sprite(const sprite_item *it)
+{
+    const int TW = SPR_WIDE_MAX + 2, TH = SPR_H + 2;              /* an item can be wider than 640 in widescreen */
+    if (!spr_fx_buf && !(spr_fx_buf = malloc((size_t)TW * TH * 4))) return;
+    const int w = it->w, h = it->h;
+    int bx0 = w, bx1 = -1, by0 = h, by1 = -1;                                /* the pixels with any alpha */
+    for (int y = 0; y < h; y++) {
+        const uint8_t *s = spr_buf + (size_t)y * w * 4 + 3;
+        int xa = -1, xb = -1;
+        for (int x = 0; x < w; x++) if (s[(size_t)x * 4]) { xa = x; break; }
+        if (xa < 0) continue;
+        for (int x = w - 1; x >= xa; x--) if (s[(size_t)x * 4]) { xb = x; break; }
+        if (xa < bx0) bx0 = xa;
+        if (xb > bx1) bx1 = xb;
+        if (y < by0) by0 = y;
+        by1 = y;
+    }
+    if (bx1 < 0) return;                                                     /* nothing in it: nothing to draw */
+    /* a glow sprite (sprite_item_soft) is blurred a little after the bilinear pass: the box grows by 2 texels for it */
+    int ext = sprite_item_soft(it) ? 2 : 0;
+    if (bx1 - bx0 + 1 + 2 * ext + 2 > TW || by1 - by0 + 1 + 2 * ext + 2 > TH) ext = 0;
+    bx0 -= ext; by0 -= ext; bx1 += ext; by1 += ext;
+    const int bw = bx1 - bx0 + 1, bh = by1 - by0 + 1, rw = bw + 2, rh = bh + 2;
+    for (int y = 0; y < rh; y++) {                                           /* premultiplied, a transparent texel all round */
+        uint8_t *d = spr_fx_buf + (size_t)y * rw * 4;
+        const int sy = by0 + y - 1;
+        if (sy < by0 || sy > by1) { memset(d, 0, (size_t)rw * 4); continue; }
+        d[0] = d[1] = d[2] = d[3] = 0;
+        d += 4;
+        for (int x = 0; x < bw; x++, d += 4) {
+            const int sx = bx0 + x;
+            if (sx < 0 || sx >= w || sy < 0 || sy >= h) { d[0] = d[1] = d[2] = d[3] = 0; continue; }   /* (only the blur's margin lies outside the item) */
+            const uint8_t *s = spr_buf + ((size_t)sy * w + sx) * 4;
+            const unsigned a = s[3];
+            d[0] = (uint8_t)((s[0] * a + 127) / 255); d[1] = (uint8_t)((s[1] * a + 127) / 255); d[2] = (uint8_t)((s[2] * a + 127) / 255); d[3] = (uint8_t)a;
+        }
+        d[0] = d[1] = d[2] = d[3] = 0;
+    }
+    if (ext) {                                                               /* two passes of the 1-2-1 kernel, each way, on the premultiplied texels */
+        static uint8_t *tmp;
+        if (!tmp && !(tmp = malloc((size_t)TW * TH * 4))) tmp = NULL;
+        if (tmp) for (int pass = 0; pass < 2; pass++) {
+            for (int y = 0; y < rh; y++) {                                   /* horizontal: buf -> tmp */
+                const uint8_t *s = spr_fx_buf + (size_t)y * rw * 4; uint8_t *d = tmp + (size_t)y * rw * 4;
+                for (int x = 0; x < rw; x++)
+                    for (int c = 0; c < 4; c++) {
+                        const int l = x > 0 ? s[(x - 1) * 4 + c] : 0, r = x < rw - 1 ? s[(x + 1) * 4 + c] : 0;
+                        d[x * 4 + c] = (uint8_t)((l + 2 * s[x * 4 + c] + r + 2) >> 2);
+                    }
+            }
+            for (int y = 0; y < rh; y++) {                                   /* vertical: tmp -> buf */
+                uint8_t *d = spr_fx_buf + (size_t)y * rw * 4;
+                for (int x = 0; x < rw * 4; x++) {
+                    const int u = y > 0 ? tmp[(size_t)(y - 1) * rw * 4 + x] : 0, v = y < rh - 1 ? tmp[(size_t)(y + 1) * rw * 4 + x] : 0;
+                    d[x] = (uint8_t)((u + 2 * tmp[(size_t)y * rw * 4 + x] + v + 2) >> 2);
+                }
+            }
+        }
+    }
+    GLuint *tp = &spr_fx_tex[spr_fx_next]; spr_fx_next = (spr_fx_next + 1) % FX_TEX_N;
+    if (!*tp) {
+        glGenTextures(1, tp);
+        glBindTexture(GL_TEXTURE_2D, *tp);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TW, TH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    } else glBindTexture(GL_TEXTURE_2D, *tp);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, rw, rh, GL_RGBA, GL_UNSIGNED_BYTE, spr_fx_buf);
+    const float u0 = 1.0f / TW, u1 = (float)(bw + 1) / TW, v0 = 1.0f / TH, v1 = (float)(bh + 1) / TH;
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_ALPHA_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    const int dx = (g_eng_hud_e && hud_cfg && (int)(it->z & 0x1FFFFF) <= hud_cfg->sprite_zmax) ? eng_hud_dx(it->x0 + it->w / 2.0) : 0;
+    const float qx0 = (float)(it->x0 + bx0 + dx), qx1 = qx0 + (float)bw, qy0 = (float)(it->y0 + by0), qy1 = qy0 + (float)bh;
+    glBegin(GL_QUADS);
+    glTexCoord2f(u0, v0); glVertex2f(qx0, qy0);
+    glTexCoord2f(u1, v0); glVertex2f(qx1, qy0);
+    glTexCoord2f(u1, v1); glVertex2f(qx1, qy1);
+    glTexCoord2f(u0, v1); glVertex2f(qx0, qy1);
+    { const int an = edge_anchor(it);                                    /* widescreen: edge-anchored spray, mirrored about its drawn columns (not the blur's margin) */
+      if (an) edge_mirror_quads(an, qx0 + ext, qx1 - ext, qy0, qy1, u0 + (float)ext / TW, u1 - (float)ext / TW, v0, v1); }
+    glEnd();
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
+    glEnable(GL_ALPHA_TEST);
+    glDisable(GL_TEXTURE_2D);
+}
+
 /* one sprite in its turn of the merged z order: rendered into the corner of one 640x480 texture, sub-imaged, blended */
 static void draw_sprite(const sprite_item *it)
 {
-    if (!spr_buf && !(spr_buf = malloc((size_t)SPR_W * SPR_H * 4))) return;
+    if (!spr_buf && !(spr_buf = malloc((size_t)SPR_WIDE_MAX * SPR_H * 4))) return;      /* widescreen: an item up to SPR_WIDE_MAX wide */
     sprite_render_item(&sst, &g_fog, it, spr_buf, 1);
+    if (sprite_item_smooth(it)) { draw_effect_sprite(it); return; }       /* dust / mud / spray with the option on: a linear texture, never a HUD sprite */
     if (it->prioverchar) {                    /* the text layer shows nothing under this sprite's pixels */
         for (int y = 0; y < it->h; y++)
             for (int x = 0; x < it->w; x++)
-                if (spr_buf[((size_t)y * it->w + x) * 4 + 3]) prio_mask[(size_t)(it->y0 + y) * SPR_W + it->x0 + x] = 1;
+                if (it->x0 + x >= 0 && it->x0 + x < SPR_W) {   /* (the text layer is 640 wide: a widescreen item's sides cover nothing) */   /* a TRANSLUCENT one (Air Combat 22's name-entry cursor box, alpha 0x82) covers the text only by its opacity: the letter under it shows through */
+                    const uint8_t a = spr_buf[((size_t)y * it->w + x) * 4 + 3]; uint8_t *m = &prio_mask[(size_t)(it->y0 + y) * SPR_W + it->x0 + x];
+                    if (a > *m) *m = a;
+                }
         prio_any = true;
     }
-    if (!spr_tex) tex_alloc(&spr_tex); else glBindTexture(GL_TEXTURE_2D, spr_tex);
+    if (!spr_tex) {
+        tex_alloc(&spr_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPR_WIDE_MAX, SPR_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);   /* widescreen: as wide as an item can be */
+    } else glBindTexture(GL_TEXTURE_2D, spr_tex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, it->w, it->h, GL_RGBA, GL_UNSIGNED_BYTE, spr_buf);
-    const float su = (float)it->w / SPR_W, sv = (float)it->h / SPR_H;
+    const float su = (float)it->w / SPR_WIDE_MAX, sv = (float)it->h / SPR_H;
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_ALPHA_TEST);
     glEnable(GL_BLEND);
@@ -265,6 +428,14 @@ static void draw_sprite(const sprite_item *it)
     glTexCoord2f(su, 0);  glVertex2f((float)(it->x0 + it->w + dx), (float)it->y0);
     glTexCoord2f(su, sv); glVertex2f((float)(it->x0 + it->w + dx), (float)(it->y0 + it->h));
     glTexCoord2f(0,  sv); glVertex2f((float)(it->x0 + dx),          (float)(it->y0 + it->h));
+    { const int an = edge_anchor(it);                                   /* widescreen: edge-anchored spray, continued to the sides */
+      if (an) {   /* mirrored about the columns that draw anything: a clear outer column would show as a gap at every join */
+          int cl = 0, cr = it->w - 1;
+          while (cl < cr) { int y = 0; while (y < it->h && !spr_buf[((size_t)y * it->w + cl) * 4 + 3]) y++; if (y < it->h) break; cl++; }
+          while (cr > cl) { int y = 0; while (y < it->h && !spr_buf[((size_t)y * it->w + cr) * 4 + 3]) y++; if (y < it->h) break; cr--; }
+          edge_mirror_quads(an, (float)(it->x0 + cl), (float)(it->x0 + cr + 1), (float)it->y0, (float)(it->y0 + it->h),
+                            (float)cl / SPR_WIDE_MAX, (float)(cr + 1) / SPR_WIDE_MAX, 0.0f, sv);
+      } }
     glEnd();
     glDisable(GL_BLEND);
     glEnable(GL_ALPHA_TEST);
@@ -463,7 +634,7 @@ static void draw_text(void)
             if (!masked && !(masked = malloc((size_t)SPR_W * SPR_H * 4))) masked = NULL;
             if (masked) {
                 memcpy(masked, src, (size_t)SPR_W * SPR_H * 4);
-                for (long i = 0; i < (long)SPR_W * SPR_H; i++) if (prio_mask[i]) masked[i * 4 + 3] = 0;
+                for (long i = 0; i < (long)SPR_W * SPR_H; i++) if (prio_mask[i]) masked[i * 4 + 3] = (uint8_t)(masked[i * 4 + 3] * (255 - prio_mask[i]) / 255);
                 src = masked;
             }
             /* the shade gets NO such hole while the HUD moves: it stays put, and the sprite (and the text piece its hole belongs to) has gone out to its side --
@@ -516,6 +687,32 @@ void ss22_draw(int vw, int vh)
     if (!gl_ready) { renderer_texture_init(); gl_ready = true; }
     g_tex_opaque = 1;                       /* the polygon path has no transparent pen */
     if (prio_any) { memset(prio_mask, 0, sizeof prio_mask); prio_any = false; }
+    /* POLYGONS OVER THE TEXT LAYER: a Super 22 polygon whose colour mode is 1 has priority over the text layer (MAME: prioverchar
+     * = (cmode & 7) == 1), as a sprite with its bit does -- Aqua Jet's map markers sit on the course map, which is text. The text
+     * shows nothing under such a polygon: its screen shape goes into the same mask as the sprites' (the polygon path is opaque). */
+    static int polyprio = -1; if (polyprio < 0) { const char *e = getenv("ENG_POLYPRIO"); polyprio = !(e && *e == '0'); }   /* ENG_POLYPRIO=0: as before */
+    for (int i = 0; polyprio && i < qn; i++) {
+        const geo_quad *q = &qbuf[i];
+        if ((q->cmode & 7) != 1 || q->nrv < 3) continue;
+        float xs[10], ys[10]; const int n = q->nrv > 10 ? 10 : q->nrv;
+        float ymin = 1e9f, ymax = -1e9f;
+        for (int k = 0; k < n; k++) { xs[k] = q->rv[k].sx16 / 16.0f; ys[k] = q->rv[k].sy16 / 16.0f; if (ys[k] < ymin) ymin = ys[k]; if (ys[k] > ymax) ymax = ys[k]; }
+        int y0 = (int)ymin, y1 = (int)ymax + 1; if (y0 < 0) y0 = 0; if (y1 > SPR_H) y1 = SPR_H;
+        for (int y = y0; y < y1; y++) {                /* a convex polygon: each scanline (at its centre) is one span */
+            const float yc = (float)y + 0.5f; float xl = 1e9f, xr = -1e9f;
+            for (int k = 0; k < n; k++) {
+                const int j = (k + 1) % n; const float ya = ys[k], yb = ys[j];
+                if ((ya <= yc && yb > yc) || (yb <= yc && ya > yc)) {
+                    const float x = xs[k] + (yc - ya) * (xs[j] - xs[k]) / (yb - ya);
+                    if (x < xl) xl = x;
+                    if (x > xr) xr = x;
+                }
+            }
+            int a = (int)(xl + 0.5f), b = (int)(xr + 0.5f); if (a < 0) a = 0; if (b > SPR_W) b = SPR_W;
+            for (int x = a; x < b; x++) prio_mask[(size_t)y * SPR_W + x] = 255;
+            if (a < b) prio_any = true;
+        }
+    }
 
     /* the scene's width: wider than 4:3 widens full-frame viewports (Hor+) */
     const double aspect = (double)vw / vh;
@@ -554,6 +751,25 @@ void ss22_draw(int vw, int vh)
     cfg.fade_rgb = ss22_fade_rgb;
     cfg.wide_backdrop = 1;                   /* a menu's screen-sized backdrop reaches the wide picture's edges (engine/quad_gl.c) */
     { static int tc = -1; if (tc < 0) { const char *e = getenv("ENG_TEXEL_CENTRE"); tc = e ? atoi(e) : 1; } cfg.texel_centre = tc; }
+    /* the optional 3D texture filter (Display > 3D texture filter, texture_filter in the cfg; ENG_TEX_FILTER=0|1 wins for a run): world
+     * polygons only -- the HUD pieces drawn as polygons, and the sprite and text layers, stay NEAREST */
+    { static int ef = -2, ea = -2;                                                     /* 0 off (the board's NEAREST), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear */
+      if (ef == -2) { const char *e = getenv("ENG_TEX_FILTER"); ef = e && *e ? atoi(e) : -1; if (ef > 4) ef = 4; }
+      if (ea == -2) { const char *e = getenv("ENG_TEX_ANISO"); ea = e && *e ? atoi(e) : -1; }
+      g_eng_tex_filter = ef >= 0 ? ef : (g_eng_tex_filter_setting < 0 ? 0 : g_eng_tex_filter_setting > 4 ? 4 : g_eng_tex_filter_setting);
+      g_eng_tex_aniso = g_eng_tex_filter >= 3 ? (ea >= 0 ? ea : g_eng_tex_aniso_setting) : 0;
+      tex_bake_set_layout(g_eng_tex_filter >= 3);                                        /* the mip layout (a no-op while unchanged) */
+      tex_bake_set_filtered(g_eng_tex_filter); }                                         /* bakes made for filtering (a no-op while unchanged) */
+    { static int last = -1, lasta = -1;
+      if (g_eng_tex_filter != last || g_eng_tex_aniso != lasta) { last = g_eng_tex_filter; lasta = g_eng_tex_aniso;
+          static const char *const nm[5] = { "off", "bilinear", "sharp bilinear", "trilinear", "sharp trilinear" };
+          fprintf(stderr, "[TEX] 3D texture filter: %s, anisotropy %dx\n", nm[last], lasta ? lasta : 1); } }
+    cfg.nofilter_quad = eng_hud_quad_piece;
+    if (g_eng_fx_known) {                                /* the 2D effects option (Display > Effects; ENG_FX_FILTER=0|1 wins for a run) */
+        static int ef = -2;
+        if (ef == -2) { const char *e = getenv("ENG_FX_FILTER"); ef = e && *e ? (atoi(e) != 0) : -1; }
+        g_sprite_smooth = ef >= 0 ? ef : g_eng_fx_filter_setting;
+    }
 
     /* MERGED Z ORDER, not layers: MAME queues sprites and polygons into the same radix tree keyed on a 24-bit z and
      * walks it far to near, so a sprite can sit behind a polygon (the HUD plate behind the score digits) */

@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "lift_rt.h"
 #include "lift_cpu.h"
 
@@ -49,8 +50,10 @@ static void rr_fatal(int code, const char *why)
     exit(code);
 }
 
+bool (*rr_trap_hook)(uint32_t at, uint32_t target, const char *what);   /* our fork: a host that can handle it (true: not a trap) */
 void rr_trap(uint32_t at, uint32_t target, const char *what)
 {
+    if (rr_trap_hook && rr_trap_hook(at, target, what)) return;
     snprintf(rr_last_trap, sizeof rr_last_trap, "frame %u: 0x%06X -> 0x%08X: %s", rr_frame, at, target, what);
     rd_budget_out();                                 /* a probe's mutated state trapped: abandon the probe */
     { extern int rd_quiet; if (rd_quiet) return; }   /* a fuzz probe's mutated state (src/rd), not the game */
@@ -87,8 +90,10 @@ void rr_trace_ins(uint32_t pc)
             for (char *q = (char *)e; e && *q && nwp < 16; ) { char *end; unsigned long v = strtoul(q, &end, 16);
                 if (end == q) { q++; continue; } wp[nwp++] = (uint32_t)v; q = end; } }
         for (int i = 0; i < nwp; i++) if (wp[i] == pc) {
-            fprintf(stderr, "[PCW] %06X D0=%08X D1=%08X N%dZ%dV%dC%d\n", pc, (uint32_t)RG4(0), (uint32_t)RG4(4),
-                    (int)RG1(0x44), (int)RG1(0x45), (int)RG1(0x46), (int)RG1(0x47)); break; }
+            fprintf(stderr, "[PCW] f%u %06X D0=%08X D1=%08X N%dZ%dV%dC%d A:", rr_frame, pc, (uint32_t)RG4(0), (uint32_t)RG4(4),
+                    (int)RG1(0x44), (int)RG1(0x45), (int)RG1(0x46), (int)RG1(0x47));
+            for (int r = 8; r < 16; r++) fprintf(stderr, " %08X", (uint32_t)RG4(r * 4));
+            fprintf(stderr, "\n"); break; }
     }
     { extern int rd_cov_on; extern void rd_cov_ins(uint32_t); if (rd_cov_on) rd_cov_ins(pc); }
     static int off = -1;

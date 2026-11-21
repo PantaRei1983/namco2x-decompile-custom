@@ -24,13 +24,19 @@ void rr_hw_sci_irq(void);            /* C139 link chip: a frame arrived / a tran
 int  rr_hw_irq_level(void);
 void rr_hw_set_freeplay(bool on);     /* the game's own COIN OPTIONS -> FREE PLAY */
 bool rr_hw_freeplay(void);
+/* LINK PLAY (engine/lan139.c; only with --link): the C139's registers and buffer, its IRQ (syscon line 2), the cabinet number */
+void rr_hw_link_on(int cabinet, bool seed_id);   /* seed_id: a cabinet's first run -- GAME OPTIONS -> LINK (settings group 3 byte 0,
+                                                    * EEPROM 0x2C0 -> WRAM 0x10001060) from --link; later runs keep the test menu's value */
+/* THE EEPROM (the test menu's settings, the records) kept in a file beside the game, as MAME's nvram: loaded at boot when the file holds
+ * one image (true), written back (temp file + rename) when the game has changed it. Interactive and linked runs only. */
+bool rr_hw_eeprom_persist(const char *path);
+void rr_hw_eeprom_save(void);
+void rr_hw_sci_irq(void);
 bool rr_hw_select_screen(void);          /* the game's AT/MT, course or class select is up (GitHub #35) */
 void rr_hw_drive_io(void);            /* the I/O board's answer (handle_driving_io) into shared RAM 0x30..0x3A */
 void rr_hw_keycus_force(uint32_t v);   /* trace oracle: the next keycus read returns v (MAME's random answer) */
 int  rr_env_init(void);                /* trace oracle (rr_env.c): RR_ENV=<file> replays what MAME's devices returned + where its interrupts landed */
 int  rr_env_active(void);
-void rr_hw_eeprom_persist(const char *path);   /* windowed runs: load the EEPROM from this file, save it back when it changes */
-void rr_hw_eeprom_save(void);                  /* write the file if the game changed the EEPROM (no-op otherwise) */
 void rr_hw_set_steering_motor(bool on);   /* the game's own OTHERS -> STEERING MOTOR (MAME's EEPROM has it OFF) */
 void rr_hw_set_link_cabinet(int n);       /* cabinet number: settings group 3 byte 0 (link id & 7) */
 uint8_t rr_hw_motor_byte(void);           /* the drive command the I/O board passes to the Motor/Feedback PCB */

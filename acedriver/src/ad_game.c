@@ -46,6 +46,14 @@ static const eng_rom_t ace_roms[] = {
     { "c74.bin", 0x4000, NULL, NULL },        /* the sound MCU BIOS: namcoc74.zip */
 };
 
+int ads_supp_jump(uint32_t t, uint32_t at);   /* gen_supp/ads_lifted_tab.c (tools/supplement.sh) */
+/* what the game writes on a blank EEPROM's first start, for the link to put the cabinet number in before the game boots (0x2C8C0: it
+ * looks for a valid block in 0x000..0x0E0 -- none = it starts over -- then reads the settings block 0x100, magic 0x0141; 8-bit checksums) */
+static const struct rr_ee_init ad_ee_init[2] = {
+    { 0x000, { [31] = 0xFF } },
+    { 0x100, { 0x01, 0x41, 0x10, 0x00, 0x03, 0xE0, 0x0B, 0xC0, 0x28, 0x28, 0x28, 0x28, 0x02, 0x01, 0x01, 0x00,
+               0x00, 0x00, 0x00, 0x00, 0x5B, 0x5B, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x41 } },
+};
 /* WIDESCREEN HUD: the race HUD is up while the TIME label (text row 2, cols 2-5) or the LAP TIME label (row 2, cols 28-35) is on
  * screen. Measured over text dumps every 30 frames of a coined BEGINNER race (start line to GAME OVER, 191 frames) and 6000 frames of
  * attract (2026-10-28): on every race frame, the attract demo race included, and on no title, class select, ranking or "1 TO 1" screen. */
@@ -76,5 +84,10 @@ static const rr_game_t ace = {
     .zips = ace_zips, .nzips = 2, .roms = ace_roms, .nroms = (int)(sizeof ace_roms / sizeof ace_roms[0]),
     .select_addr = 0x10001D24, .select_vals = { 1 },   /* 1 from the transmission select through the class select, 0 in attract and the race */
     .log_file = "acedriver.log",                         /* A6-0x7FC8: the mode task's resume slot (0x4C36 / 0x4C48) */                       /* the master's busy-wait poll is not measured for this game yet */
+    /* LINK PLAY (our fork): the cabinet number is A6-0x73FC = 0x10000C04 (0x2D222 copies it from the settings' 0x1000C18A); the
+     * settings are EEPROM block 0x100 (magic 0x0141, read at 0x2C900; parsed at 0x2D14A: byte 0x11 -> 0x1000C18B), 8-bit checksum */
+    .link_cab_addr = 0x10000C04, .link_ee_block = { 0x100, -1 }, .link_ee_byte = 0x11, .link_ee_sum8 = 1, .link_ee_init = ad_ee_init, .nlink_ee_init = 2,
+    .ram_code_at = 0x10010000, .ram_code_rom = 0x60000, .ram_code_size = 0x10000,   /* its program 0x60000.. copied to work RAM (the linked race runs the other cars from it) */
+    .supp_jump = ads_supp_jump,                       /* gen_supp/: the code gen/rr_lifted.c lacks (tools/supplement.sh) */
 };
 const rr_game_t *g_rr_game = &ace;

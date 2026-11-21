@@ -8,26 +8,26 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS ON)                      # gnu11: the lifted code uses computed labels / statement expressions
 add_compile_options(-fno-strict-aliasing -fwrapv)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../s23/host.cmake)   # the System 23 host (../s23), shared with ../crszone and ../gunwars
 file(GLOB TC2_LIFTED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen/tc2_lifted_*.c)
 if(NOT TC2_LIFTED)
   message(FATAL_ERROR "gen/tc2_lifted_NN.c missing: run tools/lift/lift.py and lift_split.py (see the comment above)")
 endif()
-set_source_files_properties(${TC2_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${CMAKE_CURRENT_SOURCE_DIR}/include/tc2_mips_rt.h")
+set_source_files_properties(${TC2_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${S23_HOST_DIR}/include/s23_mips_rt.h")
 # THE TWO H8 PROGRAMS, translated at build time (tools/h8/h8_translate.py) from sub.bin / io.bin (tools/make_prog.py) and MAME's coverage of
 # them (cov/h8sub_*.pcs, cov/h8io_*.pcs: addresses only)
 file(GLOB H8SUB_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8sub_*.pcs)
 file(GLOB H8IO_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8io_*.pcs)
 string(REPLACE ".pcs" "" H8SUB_PREFIX "${H8SUB_COV}")
 string(REPLACE ".pcs" "" H8IO_PREFIX "${H8IO_COV}")
-set(H8_TOOLS ${CMAKE_CURRENT_SOURCE_DIR}/tools/h8/h8_translate.py ${CMAKE_CURRENT_SOURCE_DIR}/tools/h8/h8_decode.py
-    ${CMAKE_CURRENT_SOURCE_DIR}/tools/h8/h8_ops.txt ${CMAKE_CURRENT_SOURCE_DIR}/tools/h8/h8_timing.txt)
+set(H8_TOOLS ${S23_HOST_DIR}/tools/h8/h8_translate.py ${S23_HOST_DIR}/tools/h8/h8_decode.py
+    ${S23_HOST_DIR}/tools/h8/h8_ops.txt ${S23_HOST_DIR}/tools/h8/h8_timing.txt)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/tc2_sub.c
-    COMMAND python3 tools/h8/h8_translate.py sub.bin 1 tc2sub gen/tc2_sub.c ${H8SUB_PREFIX}
+    COMMAND python3 ${S23_HOST_DIR}/tools/h8/h8_translate.py sub.bin 1 s23sub gen/tc2_sub.c ${H8SUB_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sub.bin ${H8_TOOLS} ${H8SUB_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/tc2_io.c
-    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 tools/h8/h8_translate.py io.bin 0 tc2io gen/tc2_io.c ${H8IO_PREFIX}
+    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 ${S23_HOST_DIR}/tools/h8/h8_translate.py io.bin 0 s23io gen/tc2_io.c ${H8IO_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/io.bin ${H8_TOOLS} ${H8IO_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-include(host.cmake)                             # the System 23 host, shared with ../crszone
 # THE RELEASE NUMBER, shown in the log and the window title (a player's report then names it): -DTC2_VERSION=x, or a VERSION file that
 # tools/release.sh writes into the exported tree (here, or one level up in the combined release). A dev build has none.
 set(TC2_VERSION "" CACHE STRING "release number shown in the log and the title")
@@ -44,11 +44,11 @@ if(TC2_VERSION)
   add_compile_definitions(TC2_VERSION="${TC2_VERSION}")
   message(STATUS "release ${TC2_VERSION}")
 endif()
-set(TC2_SRC ${TC2_HOST_SRC} src/tc2_game.c gen/tc2_sub.c gen/tc2_io.c ${TC2_LIFTED})
+set(TC2_SRC ${S23_HOST_SRC} src/tc2_game.c gen/tc2_sub.c gen/tc2_io.c ${TC2_LIFTED} ${S23_HOST_TAIL})
 # PORTABLE (default ON): pin glibc symbol versions so a binary built here runs on older systems -- the Steam Deck included
 option(PORTABLE "Bind glibc symbols to baseline versions (runs on glibc >= 2.34)" ON)
 if(PORTABLE AND NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-  add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/include/glibc_compat.h)
+  add_compile_options(-include ${S23_HOST_DIR}/include/glibc_compat.h)
 endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -59,21 +59,21 @@ find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 if(WIN32)
   # Windows (MinGW-w64, ./build-windows.sh): no console, everything static (one .exe), OpenGL from opengl32 (the GL 3 functions are
-  # loaded at run time, src/tc2_gl.c), Winsock for the recoil output (src/tc2_out.c)
-  add_compile_options(-include ${CMAKE_CURRENT_SOURCE_DIR}/include/win_compat.h)
+  # loaded at run time, src/s23_gl.c), Winsock for the recoil output (src/s23_out.c)
+  add_compile_options(-include ${S23_HOST_DIR}/include/win_compat.h)
   set(TC2_TARGETS tc2)
   set(TC2_SYS_LIBS opengl32 ws2_32)
-  set(TC2_LINK_OPTS -mwindows -static -static-libgcc)
+  set(TC2_LINK_OPTS -mwindows -static -static-libgcc -Wl,--stack,268435456)   # 256 MB main stack (as Gunmen Wars: the lifted code nests a C frame per MIPS call, the GL driver runs on top)
 else()
   set(OpenGL_GL_PREFERENCE GLVND)
   find_package(OpenGL REQUIRED)
-  set(TC2_TARGETS tc2 tc2_trace)
+  set(TC2_TARGETS tc2 s23_trace)
   set(TC2_SYS_LIBS OpenGL::GL m)
   set(TC2_LINK_OPTS "")
 endif()
 foreach(t ${TC2_TARGETS})
   add_executable(${t} ${TC2_SRC})
-  target_include_directories(${t} PRIVATE gen ${TC2_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
+  target_include_directories(${t} PRIVATE include gen ${S23_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
   if(WIN32)
     target_link_libraries(${t} ${SDL2_STATIC_LDFLAGS} ZLIB::ZLIB Threads::Threads ${TC2_SYS_LIBS})
   else()
@@ -81,6 +81,6 @@ foreach(t ${TC2_TARGETS})
   endif()
   target_link_options(${t} PRIVATE ${TC2_LINK_OPTS})
 endforeach()
-if(TARGET tc2_trace)
-  target_compile_definitions(tc2_trace PRIVATE RR_TRACE)
+if(TARGET s23_trace)
+  target_compile_definitions(s23_trace PRIVATE RR_TRACE)
 endif()

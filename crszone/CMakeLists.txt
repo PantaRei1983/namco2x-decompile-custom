@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(crszone C)
-# Crisis Zone (Namco System 23 Evolution 2) on the SHARED System 23 host (../tc2/host.cmake): this directory adds only the game's table
+# Crisis Zone (Namco System 23 Evolution 2) on the SHARED System 23 host (../s23/host.cmake): this directory adds only the game's table
 # (src/csz_game.c), its lifted main program (gen/crszone_lifted_NN.c) and its two translated H8 programs.
 # gen/crszone_lifted_NN.c: ghidra/run_all.sh, then (see PLAN.md)
 #   LIFT_IDLE_LOOPS=tools/idle_loops.txt python3 ../tc2/tools/lift/lift.py decompiled/pcode.txt gen crszone prog.bin
@@ -12,30 +12,30 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS ON)
 add_compile_options(-fno-strict-aliasing -fwrapv)
-add_compile_definitions(TC2_ADDR_MASK=0x1FFFFFFFu)   # Evolution 2 decodes 29 address lines (../tc2/include/lift_rt.h)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../tc2/host.cmake)
+add_compile_definitions(S23_ADDR_MASK=0x1FFFFFFFu)   # Evolution 2 decodes 29 address lines (../s23/include/lift_rt.h)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../s23/host.cmake)
 file(GLOB CSZ_LIFTED CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen/crszone_lifted_*.c)
 if(NOT CSZ_LIFTED)
   message(FATAL_ERROR "gen/crszone_lifted_NN.c missing: run the lift (see the comment above)")
 endif()
-set_source_files_properties(${CSZ_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${TC2_HOST_DIR}/include/tc2_mips_rt.h")
+set_source_files_properties(${CSZ_LIFTED} PROPERTIES COMPILE_OPTIONS "-O1;-w;-include;${S23_HOST_DIR}/include/s23_mips_rt.h")
 # THE TWO H8 PROGRAMS, translated at build time with tc2's translator from sub.bin / io.bin (tools/make_prog.py) and MAME's coverage of them
 file(GLOB H8SUB_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8sub_*.pcs)
 file(GLOB H8IO_COV CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/cov/h8io_*.pcs)
 string(REPLACE ".pcs" "" H8SUB_PREFIX "${H8SUB_COV}")
 string(REPLACE ".pcs" "" H8IO_PREFIX "${H8IO_COV}")
-set(H8T ${TC2_HOST_DIR}/tools/h8)
+set(H8T ${S23_HOST_DIR}/tools/h8)
 set(H8_TOOLS ${H8T}/h8_translate.py ${H8T}/h8_decode.py ${H8T}/h8_ops.txt ${H8T}/h8_timing.txt)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/csz_sub.c
-    COMMAND python3 ${H8T}/h8_translate.py sub.bin 1 tc2sub gen/csz_sub.c ${H8SUB_PREFIX}
+    COMMAND python3 ${H8T}/h8_translate.py sub.bin 1 s23sub gen/csz_sub.c ${H8SUB_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/sub.bin ${H8_TOOLS} ${H8SUB_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/csz_io.c
-    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 ${H8T}/h8_translate.py io.bin 0 tc2io gen/csz_io.c ${H8IO_PREFIX}
+    COMMAND ${CMAKE_COMMAND} -E env H8_ROMSIZE=0x4000 python3 ${H8T}/h8_translate.py io.bin 0 s23io gen/csz_io.c ${H8IO_PREFIX}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/io.bin ${H8_TOOLS} ${H8IO_COV} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-set(CSZ_SRC ${TC2_HOST_SRC} src/csz_game.c gen/csz_sub.c gen/csz_io.c ${CSZ_LIFTED})
+set(CSZ_SRC ${S23_HOST_SRC} src/csz_game.c gen/csz_sub.c gen/csz_io.c ${CSZ_LIFTED} ${S23_HOST_TAIL})
 option(PORTABLE "Bind glibc symbols to baseline versions (runs on glibc >= 2.34)" ON)
 if(PORTABLE AND NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-  add_compile_options(-include ${TC2_HOST_DIR}/include/glibc_compat.h)
+  add_compile_options(-include ${S23_HOST_DIR}/include/glibc_compat.h)
 endif()
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED sdl2)
@@ -46,10 +46,10 @@ find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 if(WIN32)
   # Windows (MinGW-w64, ./build-windows.sh): Time Crisis 2's block -- no console, one static .exe, opengl32, Winsock for the recoil output
-  add_compile_options(-include ${TC2_HOST_DIR}/include/win_compat.h)
+  add_compile_options(-include ${S23_HOST_DIR}/include/win_compat.h)
   set(CSZ_TARGETS crszone)
   set(CSZ_SYS_LIBS opengl32 ws2_32)
-  set(CSZ_LINK_OPTS -mwindows -static -static-libgcc)
+  set(CSZ_LINK_OPTS -mwindows -static -static-libgcc -Wl,--stack,268435456)   # 256 MB main stack (as Gunmen Wars: the lifted code nests a C frame per MIPS call, the GL driver runs on top)
 else()
   set(OpenGL_GL_PREFERENCE GLVND)
   find_package(OpenGL REQUIRED)
@@ -60,7 +60,7 @@ endif()
 foreach(t ${CSZ_TARGETS})
   add_executable(${t} ${CSZ_SRC})
   # include/ first: its tc2_lifted.h names THIS game's lifted program
-  target_include_directories(${t} PRIVATE include gen ${TC2_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
+  target_include_directories(${t} PRIVATE include gen ${S23_HOST_INCLUDE} ${SDL2_INCLUDE_DIRS})
   if(WIN32)
     target_link_libraries(${t} ${SDL2_STATIC_LDFLAGS} ZLIB::ZLIB Threads::Threads ${CSZ_SYS_LIBS})
   else()

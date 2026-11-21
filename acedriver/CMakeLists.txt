@@ -17,9 +17,12 @@ option(PORTABLE "Bind glibc symbols to baseline versions (runs on glibc >= 2.34)
 if(PORTABLE AND NOT WIN32 AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
   add_compile_options(-include ${RR}/include/glibc_compat.h)
 endif()
-include_directories(${RR}/include gen)
+include_directories(${RR}/include gen gen_supp)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../engine/engine.cmake)
 set_source_files_properties(gen/rr_lifted.c PROPERTIES COMPILE_OPTIONS "-O1;-w")
+# our fork: THE SUPPLEMENT (tools/supplement.sh) -- code gen/rr_lifted.c lacks (the linked race's other cars, run from the RAM copy)
+file(GLOB AD_SUPP CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/gen_supp/ads_lifted_*.c)
+set_source_files_properties(${AD_SUPP} PROPERTIES COMPILE_OPTIONS "-O1;-w")
 # The master DSP program -- the C71 BIOS + the block the 68K uploads (count word at ROM 0x3BE24, uploaded by 0x3BC9A) --
 # TRANSLATED to C by the shared ../tools/gen/c25_translate.py from the ROM files and tools/gen/c25.cov (addresses + block,
 # no ROM data: regenerate with ad_oracle RR_C25=oracle C71_COV=... over the scenarios, then --attribute). Test mode uploads
@@ -72,7 +75,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/gen/snd_driver.c
 set_source_files_properties(gen/snd_driver.c PROPERTIES COMPILE_OPTIONS "-O1;-w")
 
 # everything but the sound program and the dev-only oracles
-set(AD_CORE ${RR}/src/rr_romzip.c ${NAMCO22_ENGINE_DIR}/romzip.c ${RR}/src/rr_main.c ${NAMCO22_ENGINE_LIFT_SRC}
+set(AD_CORE ${RR}/src/rr_romzip.c ${NAMCO22_ENGINE_DIR}/romzip.c ${RR}/src/rr_main.c ${NAMCO22_ENGINE_LINK_SRC} ${NAMCO22_ENGINE_LIFT_SRC} ${AD_SUPP}
     ${RR}/src/rr_mem.c ${RR}/src/rr_hw.c ${RR}/src/rr_env.c src/ad_game.c ${RR}/src/rr_link.c ${RR}/src/rr_net.c ${NAMCO22_ENGINE_NET_SRC} ${RR}/src/rr_dsp.c
     ${NAMCO22_ENGINE_C25_SRC} gen/rr_c25.c ${RR}/src/rr_scene.c ${RR}/src/rr_gl.c ${NAMCO22_ENGINE_GL_SRC}
     ${RR}/src/rr_host.c ${RR}/src/rr_ui.c ${RR}/src/rr_input.c ${NAMCO22_ENGINE_DIR}/twin_stick.c ${NAMCO22_ENGINE_FFB_SRC} ${RR}/src/rr_audio.c ${NAMCO22_ENGINE_SND_SRC}

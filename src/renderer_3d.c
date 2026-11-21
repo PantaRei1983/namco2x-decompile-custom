@@ -1330,6 +1330,43 @@ static void geohw_draw_text(void)
 static GLuint spr_item_tex;
 static uint8_t *spr_item_buf;
 
+/* An EFFECT sprite with the smoothing option on (Display > Effects filter): its pixels were sampled bilinearly by sprite_render_item (engine/sprite_hw.c);
+ * here it goes to a LINEAR texture, premultiplied and padded by a transparent texel, and is blended premultiplied. */
+static GLuint spr_fx_tex;
+static uint8_t *spr_fx_buf;
+static void geohw_draw_effect_sprite(const sprite_item *it)
+{
+    const int TW = SPR_W + 2, TH = SPR_H + 2;
+    if (!spr_fx_buf && !(spr_fx_buf = malloc((size_t)TW * TH * 4))) return;
+    sprite_pad_premul(spr_item_buf, it->w, it->h, spr_fx_buf);
+    if (!spr_fx_tex) {
+        glGenTextures(1, &spr_fx_tex);
+        glBindTexture(GL_TEXTURE_2D, spr_fx_tex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, TW, TH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    } else glBindTexture(GL_TEXTURE_2D, spr_fx_tex);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, it->w + 2, it->h + 2, GL_RGBA, GL_UNSIGNED_BYTE, spr_fx_buf);
+    const float u0 = 1.0f / TW, u1 = (float)(it->w + 1) / TW, v0 = 1.0f / TH, v1 = (float)(it->h + 1) / TH;
+    glEnable(GL_TEXTURE_2D);
+    glDisable(GL_ALPHA_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+    glTexCoord2f(u0, v0); glVertex2f(it->x0,          it->y0);
+    glTexCoord2f(u1, v0); glVertex2f(it->x0 + it->w,  it->y0);
+    glTexCoord2f(u1, v1); glVertex2f(it->x0 + it->w,  it->y0 + it->h);
+    glTexCoord2f(u0, v1); glVertex2f(it->x0,          it->y0 + it->h);
+    glEnd();
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_BLEND);
+    glEnable(GL_ALPHA_TEST);
+    glDisable(GL_TEXTURE_2D);
+}
+
 static void geohw_draw_sprite_item(const sprite_state *st, const sprite_item *it)
 {
     if (!spr_item_buf) {
@@ -1338,6 +1375,7 @@ static void geohw_draw_sprite_item(const sprite_state *st, const sprite_item *it
     }
     sprite_render_item(st, &g_fog, it, spr_item_buf, 1);
     spr_px += it->w * it->h;
+    if (sprite_item_smooth(it)) { geohw_draw_effect_sprite(it); return; }   /* the dust / mud / spray option: a linear texture */
 
     if (!spr_item_tex) {
         glGenTextures(1, &spr_item_tex);
@@ -1996,6 +2034,21 @@ static void geohw_flush(void)
       } }
 
     int qi = 0, si = 0;
+    /* the optional 3D texture filter (Display > 3D texture filter, texture_filter in the cfg; ENG_TEX_FILTER=0..4, ENG_TEX_ANISO win for a run) */
+    { static int ef = -2, ea = -2; extern int g_eng_tex_filter, g_eng_tex_filter_setting, g_eng_tex_aniso, g_eng_tex_aniso_setting;
+      extern void tex_bake_set_filtered(int), tex_bake_set_layout(int); /* engine/tex_bake.h (not included: this file has its own texture_pen_lookup) */
+      if (ef == -2) { const char *e = getenv("ENG_TEX_FILTER"); ef = e && *e ? atoi(e) : -1; if (ef > 4) ef = 4; }
+      if (ea == -2) { const char *e = getenv("ENG_TEX_ANISO"); ea = e && *e ? atoi(e) : -1; }
+      g_eng_tex_filter = ef >= 0 ? ef : (g_eng_tex_filter_setting < 0 ? 0 : g_eng_tex_filter_setting > 4 ? 4 : g_eng_tex_filter_setting);   /* 0 off, 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear */
+      g_eng_tex_aniso = g_eng_tex_filter >= 3 ? (ea >= 0 ? ea : g_eng_tex_aniso_setting) : 0;
+      tex_bake_set_layout(g_eng_tex_filter >= 3);                                        /* the mip layout (a no-op while unchanged) */
+      tex_bake_set_filtered(g_eng_tex_filter); }                                         /* bakes made for filtering (a no-op while unchanged) */
+    { /* the effect sprites' smoothing (Display > Effects filter, effects_filter in the cfg; ENG_FX_FILTER=0|1 wins for a run): dust, mud and spray only,
+       * these Prop Cycle sprite tiles -- the gauges, banners, digits and titles stay as the board draws them */
+      static const int fx_tiles[][2] = { { 975, 1182 } };
+      static int ef = -2;
+      if (ef == -2) { const char *e = getenv("ENG_FX_FILTER"); ef = e && *e ? (atoi(e) != 0) : -1; sprite_set_effect_tiles(fx_tiles, 1); }
+      if (ef >= 0) g_sprite_smooth = ef; }
     eng_draw_begin();
     while (qi < geohw_nbuf || si < ni) {
         uint32_t qz = (qi < geohw_nbuf)
@@ -2185,6 +2238,9 @@ static int pc_fog_quad(const geo_quad *q, eng_fog *f)
 /* One quad through the engine's rasteriser (engine/quad_gl.c), with Prop
  * Cycle's board settings: Super 22 fog applied AFTER shading, the mixer's
  * poly fade, and the SEAMTEST coverage probe. */
+/* a polygon that is screen-space HUD, not the world: it stays NEAREST under the 3D texture filter */
+static int pc_nofilter_quad(const geo_quad *q) { return q->direct; }
+
 static void geohw_draw_one(const geo_quad *q)
 {
     if (g_seamtest) {
@@ -2207,6 +2263,7 @@ static void geohw_draw_one(const geo_quad *q)
     cfg.flat_white = g_seamtest;
     cfg.fog_quad = pc_fog_quad;
     cfg.fade_rgb = geohw_fade_rgb;
+    cfg.nofilter_quad = pc_nofilter_quad;
     { static int tc = -1; if (tc < 0) { const char *e = getenv("PROPCYCL_TEXEL_CENTRE"); tc = e ? atoi(e) : 1; }
       cfg.texel_centre = tc; }
     eng_draw_quad(q, &cfg);

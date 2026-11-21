@@ -61,6 +61,12 @@ static const struct rr_bind_default cc_binds[] = {
     { RR_GAS, "Up", "dpup" }, { RR_BRAKE, "Down", "dpdown" },
     { RR_STEER_LEFT, "Left", "dpleft" }, { RR_STEER_RIGHT, "Right", "dpright" } };
 
+/* THE EXPLOSIONS: System 22 has no sprite layer, so Cyber Commando builds each frame of a blast as a mesh of textured polygons (objects
+ * 1278..1299, palette 0x06), all cut from one sheet of texture bank 5: u 0..511, v 1024..1535 (found by logging every quad of the attract's
+ * hits, RR_QUADLOG; nothing else is drawn from that region). Stretched ~7x at close range they are big blocks of texels; Display > Effects
+ * samples them bilinearly. */
+static const uint16_t cc_fx_tex[][5] = { { 5, 0, 511, 1024, 1535 } };
+
 static const rr_game_t cc = {
     .name = "cybrcomm", .title = "Cyber Commando", .cfg_file = "cc_controls.cfg", .nv_file = "cc_eeprom.nv", .entry = L_4000,
     .prg = { "cy1prguu.6d", "cy1prgum.8d", "cy1prglm.2d", "cy1prgll.4d" },      /* ROM_LOAD32_BYTE offsets 0, 1, 2, 3 */
@@ -75,6 +81,7 @@ static const rr_game_t cc = {
     .eeprom = "cy1eeprm.9e",                          /* the set's default EEPROM image */
     .keycus_off = 1, .keycus_val = 0x0185,            /* namcos22_keycus_r: NAMCOS22_CYBER_COMMANDO, offset 1 */
     .wide_screen_quads = 1,                           /* widescreen: the hit flash covers the whole picture (rr_gl.c) */
+    .fx_tex = cc_fx_tex, .n_fx_tex = 1,               /* Display > Effects: the explosions (rr_gl.c fx_quad) */
     .twin_stick = 1, .act_label = cc_labels, .bind_defaults = cc_binds, .nbind_defaults = (int)(sizeof cc_binds / sizeof cc_binds[0]),          /* handle_cybrcomm_io: four 8-bit stick ADCs x 0x10 at shared RAM 0x32..0x38 */
     .steer_add = 0, .gas_add = 0, .brake_add = 0,
     .inputs_idle = 0xFFFF,                            /* INPUT_PORTS_START(cybrcomm): every bit active-low, nothing pressed */
@@ -82,5 +89,8 @@ static const rr_game_t cc = {
     .spin_pc = 0, .spin_op = 0,                       /* the master's busy-wait poll is not measured for this game yet */
     .zips = cc_zips, .nzips = 2, .roms = cc_roms, .nroms = (int)(sizeof cc_roms / sizeof cc_roms[0]),
     .log_file = "cybrcomm.log",
+    /* our fork: the cabinet link. CPU NO. (GAME OPTIONS, 0 or 1: two cabinets) is A6+0x2A10 = 0x1000AA10, a copy of EEPROM block 0
+     * byte 0x0A (bytes 2..17 of the block become the words at 0x1000AA00; byte 0x11 = the plain sum of bytes 0..0x10) */
+    .link_cab_addr = 0x1000AA10, .link_ee_block = { 0x000, -1 }, .link_ee_byte = 0x0A, .link_ee_sum8 = 2, .link_max_cabinets = 2,
 };
 const rr_game_t *g_rr_game = &cc;

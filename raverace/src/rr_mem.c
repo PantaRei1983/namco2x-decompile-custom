@@ -82,9 +82,11 @@ void rd_dict_byte(uint8_t v);
 #ifdef RR_TRACE
 void (*rr_read_probe)(vaddr_t, int);                  /* the trace oracle (engine/lift_env.c): sees every read */
 #endif
+uint32_t rr_idle_addr, rr_idle_reads;          /* our fork (RR_IDLE=<addr>, rr_main.c): reads of a game's vblank flag (timing tests) */
 uint32_t rr_read(vaddr_t a, int size)
 {
     uint32_t v = 0;
+    if (a == rr_idle_addr && rr_idle_addr) rr_idle_reads++;
 #ifdef RR_TRACE
     if (rr_read_probe) rr_read_probe(a, size);
 #endif

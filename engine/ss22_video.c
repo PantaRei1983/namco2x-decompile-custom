@@ -13,14 +13,27 @@
 #include "frame_rule.h"
 
 static bool from_capture;                 /* --render-dump: no CPU or DSP is running, the capture says what is on screen */
-void ss22_video_pdp_begin(void)      { eng_pdp_begin(g_ss22_in_vblank); }
-void ss22_video_render_refresh(void) { eng_render_refresh(); }
+static int pdplog = -1;                   /* SS22_PDPLOG=1: when the master begins (PDP) and refreshes, and which updates draw (finding dropped 3D frames) */
+static bool pdp_log(void) { if (pdplog < 0) pdplog = getenv("SS22_PDPLOG") != NULL; return pdplog; }
+extern uint32_t rr_frame; unsigned ss22_run_slice(void);
+/* A begin just after the vblank still counts as one inside it when the game says so (ss22_game.pdp_late_slices): the list is current
+ * for the update that follows, as on the board, where a master that starts a little late still draws its frame. */
+void ss22_video_pdp_begin(void)
+{
+    const bool vb = g_ss22_in_vblank || ss22_run_slice() < (unsigned)g_ss22_game->pdp_late_slices;
+    if (pdp_log()) fprintf(stderr, "[PDP] f%u s%u begin%s\n", rr_frame, ss22_run_slice(), g_ss22_in_vblank ? " (vblank)" : vb ? " (late, counted)" : "");
+    eng_pdp_begin(vb);
+}
+void ss22_video_render_refresh(void) { if (pdp_log()) fprintf(stderr, "[PDP] f%u refresh%s\n", rr_frame, g_ss22_in_vblank ? " (vblank)" : ""); eng_render_refresh(); }
 
 static uint32_t poly_word(int i) { return g_ss22.poly[i & 0x7FFF]; }
 
 bool ss22_video_init(const char *dir)
 {
     const ss22_video_cfg *c = &g_ss22_game->video;
+    ss22_gl_set_effects(c->fx, c->n_fx);     /* the 2D effects option: which sprite tiles it may smooth */
+    ss22_gl_set_soft_effects(c->soft, c->n_soft);
+    ss22_gl_set_edge_fill(c->edge_fill, c->n_edge_fill);
     ss22_gl_set_hud(&c->hud);                /* widescreen: the compositor learns this game's HUD (Prop Cycle, which links it too, never does) */
     if (!eng_load_texture_roms(dir, c->cg, c->ccrl, c->ccrh)) return false;
 
@@ -42,8 +55,10 @@ bool ss22_video_init(const char *dir)
     }
     g_sprite_tiles = tiles; g_sprite_tiles_size = tiles ? region : 0;
     g_sprite_vics_count_in_list = c->vics_count_in_list;
+    g_sprite_vics_linked = c->vics_linked && !getenv("VICS_UNLINKED");   /* (TEST VICS_UNLINKED=1: draw both sets as MAME does) */
 
     g_eng_pointrom = g_ss22_pointrom; g_eng_pointrom_n = g_ss22_pointrom_words;
+    { int32_t ss22_dsp_pointram_read(uint32_t a); g_eng_pointram = ss22_dsp_pointram_read; }   /* MAME point_read: past the ROM, point RAM 0xF80000 (else -1) */
     return g_eng_pointrom != NULL;
 }
 
@@ -51,8 +66,11 @@ void ss22_video_prepare(void)
 {
     ss22_regs r;
     memset(&r, 0, sizeof r);
+    r.hold_frames = g_ss22_game->pdp_hold_frames;
     r.walk = eng_frame_walks(from_capture || ss22_dsp_slave_active());
+    if (pdp_log()) fprintf(stderr, "[PDP] f%u update: %s\n", rr_frame, r.walk ? "drawn" : "NO 3D");
     r.poly_word = poly_word;
+    if (g_ss22_game->pdp_in_list) { void ss22_dsp_pdp_commands(int offs); r.pdp_in_list = ss22_dsp_pdp_commands; }
     r.pal = g_ss22.pal;
     r.mixer = g_ss22.mixer;
     for (int i = 0; i < 8; i++) { r.czattr[i] = g_ss22.czattr[i]; r.tilemapattr[i] = g_ss22.tilemapattr[i]; }

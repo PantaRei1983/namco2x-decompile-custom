@@ -24,7 +24,12 @@ const char *eng_romzip_missing(const char *dir, const eng_rom_t *k_roms, int NRO
     char p[1024];
     for (int i = 0; i < NROMS; i++) {
         snprintf(p, sizeof p, "%s/%s", dir, k_roms[i].name);
-        const long sz = file_size(p);
+        long sz = file_size(p);
+        if (sz < 0 && k_roms[i].alt) {                  /* unpacked by hand from a set that names the chip differently (Aqua Jet's aj2ver-b.N): */
+            char q[1024];                               /* the same dump under MAME's current name */
+            snprintf(q, sizeof q, "%s/%s", dir, k_roms[i].alt);
+            if (file_size(q) == (long)k_roms[i].size && rename(q, p) == 0) sz = file_size(p);
+        }
         if (k_roms[i].optional && sz < 0) continue;     /* not in this set: the game does without it */
         if (sz != (long)k_roms[i].size) return k_roms[i].name;
     }

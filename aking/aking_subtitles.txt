@@ -1,5 +1,5 @@
-# Angler King -- English subtitles for the Japanese captions (tc2/src/tc2_subs.c).
-# HASH (the caption block's pixels, as TC2_SUBLOG prints it)  English text;  | starts a new line.
+# Angler King -- English subtitles for the Japanese captions (s23/src/s23_subs.c).
+# HASH (the caption block's pixels, as S23_SUBLOG prints it)  English text;  | starts a new line.
 
 # --- attract: how to play
 1687C209  How to Play

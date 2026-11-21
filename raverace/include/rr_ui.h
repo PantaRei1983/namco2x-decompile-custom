@@ -20,7 +20,7 @@ bool rr_ui_chat_active(void);           /* the chat overlay is showing (typing, 
 /* headless tests: drive the menu without an input device */
 enum { RR_UI_UP, RR_UI_DOWN, RR_UI_LEFT, RR_UI_RIGHT, RR_UI_OK, RR_UI_BACK, RR_UI_TABPREV, RR_UI_TABNEXT };
 void rr_ui_test_nav(int k);
-void rr_ui_test_goto(int tab, int row);  /* tab: 0 File 1 Display 2 Audio 3 Controls 4 Record 5 Online */
+void rr_ui_test_goto(int tab, int row);  /* tab: 0 File 1 Display 2 Audio 3 Controls 4 Record 5 Network 6 Online */
 
 /* rr_host.c: every display/audio/option change, applied and saved */
 void rr_host_set_winmode(int m);         /* 0 windowed, 1 desktop fullscreen, 2 exclusive */
@@ -30,10 +30,14 @@ void rr_host_set_wide(int on);
 void rr_host_set_hud_edges(int on);                /* widescreen: the HUD at the edges (default) or the original, in the 4:3 centre */
 void rr_host_set_draw(int level);           /* draw distance 0 original .. 3 maximum */
 const char *rr_host_draw_name(int level);
+void rr_host_set_fxfilter(int on);           /* the 2D effects (a game's explosion polygons, rr_game_t.fx_tex): 0 nearest, 1 smoothed (saved as effects_filter) */
+void rr_host_set_texfilter(int mode);       /* 3D polygon texture filter: 0 off, 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear (saved as texture_filter) */
+void rr_host_set_texaniso(int level);       /* anisotropic filtering with the trilinear modes: 0 off, else 2/4/8/16 (saved as texture_aniso) */
 void rr_host_set_aspect(int a);          /* 0 stretch, 1 4:3, 2 8:7, 3 16:9 */
 void rr_host_set_wide_169(int on);       /* widescreen's shape: 0 the window's, 1 16:9 (saved as wide_aspect) */
 void rr_host_set_scaling(int s);         /* 0 smooth, 1 sharp, 2 integer */
 void rr_host_set_volume(int percent);
+void rr_host_screenshot(const char *dir);   /* the next drawn frame to DIR (--shots in a window) */
 void rr_host_set_freeplay(bool on);
 void rr_host_set_car(int i);                /* the game's car option (rr_game_t.cars), saved as `car` */
 void rr_host_set_ffb_strength(int pct);    /* 0-100, 0 = off; also the game's STEERING MOTOR option */
@@ -45,6 +49,7 @@ bool rr_host_ffb_wheel(void);              /* a force-feedback wheel is bound to
 void rr_host_set_net_server(const char *s);  /* the Online page's server address, saved + resolved */
 void rr_host_set_net_name(const char *s);    /* the lobby name, saved */
 void rr_host_toggle_record(void);
+void rr_ui_draw_message(const char *const *lines, int n);     /* a centred box of lines (the link's waiting screen) */
 void rr_ui_set_hint(const char *text, int frames);   /* a hint line at the bottom of the window while the menu is closed */
 bool rr_ui_hint_active(void);
 bool rr_host_test_on(void);                 /* the test (service) switch: a toggle, like MAME's */

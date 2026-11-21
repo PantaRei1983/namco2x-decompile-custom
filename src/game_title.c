@@ -284,7 +284,7 @@ uint16_t state_attract_run(void)
    *   case 8  → 0x032466  case 9  → 0x0324A2  (logo cycle 2)
    *   case 10 → 0x03385E  case 11 → 0x0338FA  (stage overview)
    *   case 12 → 0x031DFC  case 13 → 0x031E4C  (terrain flyover)
-   *   case 14 → 0x03157A  case 15 → 0x03164C  (cinematic dispatch)
+   *   case 14 → 0x03157A  case 15 → 0x03164C  (the story introduction, game_story.c)
    *   case 16 → 0x00D508  case 17 → 0x00D594  (attract_flyover_tick)
    *   case 18 → 0x00D8FE  case 19 → 0x00D97A  (2nd flyover cluster)
    *   case 20 → 0x00CE1E  case 21 → 0x00CED2  (replay-style flythrough)
@@ -332,16 +332,12 @@ uint16_t state_attract_run(void)
     case 11: attract_overview_run(); break;   /* Stage overview run */
     case 12: attract_terrain_flyover_init(); break;  /* Terrain flyover init */
     case 13: attract_terrain_flyover_run(); break;   /* Terrain flyover run */
-    /* NOTE (found wiring case 19): `attract_cinematic_tick()` below is
-     * actually the port of ROM 0xD97A -- its own header comment names
-     * "The M68K switch at 0x00DA0A", which is inside 0xD97A's body, not
-     * anywhere near 0x03157A/0x03164C. Cases 14/15 calling it were
-     * already wired this way before this session; whatever really lives
-     * at 0x03157A/0x03164C has not been separately ported. Not fixed
-     * here (needs its own disassembly pass) -- flagging so it is not
-     * mistaken for case 19's own wiring below, which IS correct. */
-    case 14: attract_cinematic_tick(); break; /* 0x03157A: cinematic dispatch */
-    case 15: attract_cinematic_tick(); break; /* 0x03164C: stage cutscene */
+    /* NOTE: `attract_cinematic_tick()` is the port of ROM 0xD97A (case 19's scene). Cases 14/15 used to call it too;
+     * they are the story introduction, ROM 0x03157A / 0x03164C, now ported in src/game_story.c. */
+    /* 14/15: the STORY INTRODUCTION (src/game_story.c). They called attract_cinematic_tick (ROM 0xD97A, case 19's scene),
+     * which ended at once -- the attract skipped the whole story. */
+    case 14: { extern void attract_story_init(void); attract_story_init(); } break;   /* 0x03157A */
+    case 15: { extern void attract_story_run(void);  attract_story_run();  } break;   /* 0x03164C */
     /* Cases 16-23: the ROM sequence table (0x3510C) and its dispatch
      * pointer table (0x351E4) both actually hold 24+ entries, not 16 --
      * measured directly from ROM, not guessed (this switch's own case
@@ -2290,7 +2286,9 @@ void attract_logo_run(void)
     }
     W[0x17372] = (short)((iVar2 >> 1) / 0x8000) + -0x10;
   }
-  attract_logo_tiles_draw();
+  /* ROM 0x032518..0x032530 / 0x0325DA: the picture's frame, 0 / 1 / 2 as the counter passes 0x78 and 0x80, pushed as a
+   * word -- the call had lost it, so the tiles came from whatever was in the argument (the story's sacred altar was noise). */
+  attract_logo_tiles_draw(W[0x17374] < 0x78 ? 0 : ((int32_t)W[0x17374] - 0x78 - 8 < 0 ? 1 : 2));
   if (W[0x17374] < 0x87) {
     uVar4 = 0x392;
   }

@@ -41,6 +41,7 @@ bool rr_host_open(int scale);
 bool rr_host_frame(void);
 bool rr_host_paused(void);
 void rr_host_close(void);
+void rr_host_message(const char *const *lines, int n);
 int rr_host_joytest(void);
 static int windowed;
 /* THE RENDERER. 1 = the shared engine's OpenGL pipeline (../engine, src/rr_gl.c):
@@ -55,7 +56,12 @@ static bool gl_ok;                             /* a GL context and the video ROM
 /* --perf: per-frame emulation time (68K + DSP + render, host sleep excluded) and
  * render time, reported as percentiles at exit. Quote these, never one run's fps. */
 #include <time.h>
+#include <signal.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "tex_bake.h"
+#include "link_host.h"
+#include "rr_ui.h"
 #include "win_gpu.h"          /* Windows: run on the discrete GPU of a two-GPU laptop (Optimus / PowerXpress) */
 static FILE *perflog;                         /* RR_PERFLOG=<file>: one line per frame -- see the perf block */
 static double perflog_texels;
@@ -120,6 +126,9 @@ static void dump_state(void)
     snprintf(p, sizeof p, "%s/mixer_f%u.bin", dump_dir, frame);     /* mixer 0x90020000 */
     f = fopen(p, "wb");
     if (f) { fwrite(g_rr.mixer, 1, RR_MIXER_SIZE, f); fclose(f); }
+    snprintf(p, sizeof p, "%s/eeprom_f%u.bin", dump_dir, frame);    /* our fork: the EEPROM 0x58000000 (finding a game's settings blocks) */
+    f = fopen(p, "wb");
+    if (f) { fwrite(g_rr.eeprom, 1, RR_EEPROM_SIZE, f); fclose(f); }
     snprintf(p, sizeof p, "%s/shared_f%u.bin", dump_dir, frame);    /* 68K byte order */
     f = fopen(p, "wb");
     if (f) { fwrite(g_rr.shared, 1, RR_SHARED_SIZE, f); fclose(f); }
@@ -274,10 +283,19 @@ void rr_tick(void)
         rr_dsp_run(DSP_STEPS_PER_FRAME / SLICES);
     rr_sound_slice();                              /* the sound program's share of this slice */
     rr_audio_slice();                              /* and the mixer's samples */
+    link_host_slice();                             /* and the link chip */
     serial_acc += 100;                             /* 100 Hz serial pulse */
     if (serial_acc >= 60 * SLICES) { serial_acc -= 60 * SLICES; rr_dsp_serial(); }
     if (++slice % SLICES) return;
     frame++;
+    link_host_frame(frame, !windowed);
+    { extern uint32_t rr_idle_addr, rr_idle_reads; static int on = -1;   /* RR_IDLE=<addr>: the vblank-flag reads of each frame (how much spare time) */
+      if (on < 0) { const char *e = getenv("RR_IDLE"); on = e != NULL; if (e) rr_idle_addr = (uint32_t)strtoul(e, NULL, 0); }
+      if (on) { fprintf(stderr, "[IDLE] f%u %u\n", frame, rr_idle_reads); rr_idle_reads = 0; } }
+    { static int np = -1; static uint32_t pa, pf;            /* RR_PEEK=<addr>:<frame> (test): a 16-bit word and the wall clock at that frame
+                                                             * (Ace Driver's race timer is 0x10001952: linked cabinets in step or not) */
+      if (np < 0) { const char *e = getenv("RR_PEEK"); np = e && sscanf(e, "%x:%u", &pa, &pf) == 2; }
+      if (np && frame == pf) fprintf(stderr, "[PEEK] f%u %08X = %u at %.2f ms\n", frame, pa, rr_read(pa, 2), now_ms()); }
     sweep_tick();
     double tv0 = perf_on ? now_ms() : 0;
     if (g_rr_gl && gl_ok) {                        /* screen update at the end of the frame */
@@ -318,6 +336,22 @@ void rr_tick(void)
               pa[np] = a; ps[np] = s; pv[np] = v; np++; e = q + n; if (*e == ',') e++; else break; } }
       for (int i = 0; i < np; i++) if (frame >= pf[i] && frame <= pt[i]) rr_write(pa[i], ps[i], pv[i]); }
     for (int i = 0; i < n_steer; i++) if (frame >= (uint32_t)test_steer[i].at) g_hw.steer = (uint16_t)test_steer[i].value;
+    { static FILE *sf; static int init; static long nf = -1; static char ln[256];   /* RR_INSCRIPT=<file>: headless inputs per frame, lines
+      * "<frame> steer=V gas=V brake=V test=0|1 in=MASK:BITS ...", each applied at its frame and kept (test-menu and select-screen checks) */
+      if (!init) { init = 1; const char *e = getenv("RR_INSCRIPT"); if (e) sf = fopen(e, "r"); }
+      while (sf) {
+          if (nf < 0) { if (!fgets(ln, sizeof ln, sf)) { fclose(sf); sf = NULL; break; } if (ln[0] == '#' || sscanf(ln, "%ld", &nf) != 1) { nf = -1; continue; } }
+          if ((uint32_t)nf > frame) break;
+          for (char *t = strtok(ln, " \t\n"); t; t = strtok(NULL, " \t\n")) {
+              unsigned v, m;
+              if (sscanf(t, "steer=%i", &v) == 1) g_hw.steer = (uint16_t)v;
+              else if (sscanf(t, "gas=%i", &v) == 1) g_hw.gas = (uint16_t)v;
+              else if (sscanf(t, "brake=%i", &v) == 1) g_hw.brake = (uint16_t)v;
+              else if (sscanf(t, "test=%u", &v) == 1) { if (v) g_hw.inputs &= (uint16_t)~0x0400; else g_hw.inputs |= 0x0400; }
+              else if (sscanf(t, "in=%x:%x", &m, &v) == 2) g_hw.inputs = (uint16_t)((g_hw.inputs & ~m) | (v & m));
+          }
+          nf = -1;
+      } }
     for (int i = 0; i < n_adc; i++) if (frame >= (uint32_t)test_adc[i].at) g_hw.adc[test_adc[i].idx & 3] = (uint8_t)test_adc[i].value;
     { static long pf = -2; if (pf == -2) { const char *e = getenv("RR_TEST_PLAY"); pf = e ? atol(e) : -1; }   /* RR_TEST_PLAY=F (twin-stick games, headless
       * tests): from frame F the gun pulses and both sticks turn left / centre / right in turn, so a match runs (with --coin);
@@ -337,6 +371,9 @@ void rr_tick(void)
              * others): without it the server dropped a player whose menu was open for 5 s */
             if (rr_host_paused()) rr_net_poll_paused();
         } while (rr_host_paused());
+        for (int c = 0; c < n_test_coins; c++)         /* the scripted --coin / --gas in a window too (the window's own inputs replace them above) */
+            if (frame >= (uint32_t)test_coins[c] && frame < (uint32_t)test_coins[c] + 6) g_hw.inputs &= (uint16_t)~0x1000;
+        if (test_gas >= 0 && frame >= (uint32_t)test_gas) g_hw.gas = (uint16_t)g_rr_game->gas_max;
     }
     if (!windowed) {                               /* RR_PACE=1: a headless run at the real 59.9 Hz (network tests: jitter in ms means frames) */
         static int pace = -1; static uint32_t t0;
@@ -348,10 +385,11 @@ void rr_tick(void)
             if ((int32_t)(due - t) > 0) SDL_Delay(due - t);
         }
     }
-    rr_net_apply_inputs();                         /* online: the automatic gas that starts every machine together */
+    if (!link_host_on()) rr_net_apply_inputs();    /* online (the author's Online menu): the automatic gas that starts every machine together */
     rr_input_frame(frame);                         /* replay overrides, recorder logs */
     if (perf_on) t_frame_start = now_ms();
-    if (shot_dir && shot_every && frame % shot_every == 0) {
+    if (windowed && shot_dir && shot_every && frame % shot_every == 0) rr_host_screenshot(shot_dir);
+    else if (shot_dir && shot_every && frame % shot_every == 0) {
         char p[1024]; snprintf(p, sizeof p, "%s/f%05u.ppm", shot_dir, frame);
         if (g_rr_gl && gl_ok && !windowed) { rr_gl_draw(gl_w, gl_h); rr_gl_write_ppm(p, gl_w, gl_h); }
 #ifdef RR_ORACLE
@@ -361,12 +399,14 @@ void rr_tick(void)
     vblank_slices = 2;
     rr_dsp_vblank();
     if (!rr_env_active()) rr_hw_vblank();      /* (a trace oracle refreshes at MAME's own vblank interrupt: rr_env.c) */
-    rr_net_poll();                       /* online play: peer FRAMEs into the link queue before the poll injects one */
-    rr_link_poll();                      /* a received link packet's SCI IRQ lands at this frame edge */
+    if (!link_host_on()) {               /* the author's Online play (our link, link.cfg / --link, has the chip instead: engine/lan139.c) */
+        rr_net_poll();                   /* online play: peer FRAMEs into the link queue before the poll injects one */
+        rr_link_poll();                  /* a received link packet's SCI IRQ lands at this frame edge */
+    }
     if (!rr_env_active()) {                  /* a trace oracle lands the interrupts itself */
         rr_deliver_irqs(rr_hw_irq_level);
         /* online: the other pending rivals' packets, each through the game's own SCI handler (offline nothing is pending) */
-        for (int k = 0; k < 7; k++) {
+        for (int k = 0; k < 7 && !link_host_on(); k++) {
             if (g_hw.irq_state & ~(1u << 2)) break;      /* only while the SCI is all that is pending: never re-run another, unacknowledged handler */
             if (!rr_link_inject_next()) break;
             rr_deliver_irqs(rr_hw_irq_level);
@@ -403,13 +443,112 @@ void rr_tick(void)
 }
 
 #ifdef _WIN32
-void rr_win_startup(void);          /* src/rr_win.c */
+void rr_win_startup(const char *logname);          /* src/rr_win.c */
 #endif
+
+/* LINK PLAY (engine/link_host.h): the chip's IRQ is syscon line 2; the game's own view of its link lives at A6 = 0x10008000
+ * (docs/LINK_NOTES.md): +0x11A0 its cabinet number, +0x1104 who it hears (bit per cabinet; its own bit = its frame came back
+ * within 8 frames), +0x1102 how many others it hears, +0x1108 frames since its own frame came back */
+static void link_raise(void) { rr_hw_sci_irq(); }
+static void link_deliver(void) { rr_deliver_irqs(rr_hw_irq_level); }
+static bool link_good(void) { return rr_read(0x10009104u, 2) >> (rr_read(0x100091A0u, 2) & 15) & 1; }
+static int  link_game_id(void) { return (int)(rr_read(0x100091A0u, 2) & 7); }
+static void link_report(char *buf, int n)
+{
+    snprintf(buf, (size_t)n, "game: cabinet %u, hears %02X (%u in the ring), link %s, frames since own came back %u",
+             rr_read(0x100091A0u, 2) + 1, rr_read(0x10009104u, 2), rr_read(0x10009102u, 2), link_good() ? "GOOD" : "down", rr_read(0x10009108u, 2));
+}
+/* another game on this board (rr_game_t link_*: Ace Driver): its own cabinet number; its link status is not decoded yet, so the
+ * safety net goes by the network alone (good = NULL) */
+static int  link_game_id_own(void) { return (int)(rr_read(g_rr_game->link_cab_addr, 2) & 7); }
+static void link_report_own(char *buf, int n) { snprintf(buf, (size_t)n, "game: cabinet %u", rr_read(g_rr_game->link_cab_addr, 2) + 1); }
+static void link_before_restart(void) { rr_hw_eeprom_save(); rr_audio_close(); rr_host_close(); }   /* the safety net's restart */
+static link_host_game link_game = { "RR", link_raise, link_deliver, link_report, link_good, link_game_id, rr_ui_set_hint, link_before_restart };
+
+/* our fork: a jump the lifted program has no instruction for. Into the game's copy of its program in work RAM (rr_game_t ram_code_*):
+ * the same code in the program, when the copy still holds the program's bytes there. Then the SUPPLEMENT (rr_game_t supp_jump), the
+ * code the shipped lifted program lacks. */
+void rr_jump(uint32_t t, uint32_t at);
+extern bool (*rr_trap_hook)(uint32_t at, uint32_t target, const char *what);
+static bool unknown_jump(uint32_t at, uint32_t t, const char *what)
+{
+    const rr_game_t *g = g_rr_game;
+    if (strncmp(what, "jump", 4)) return false;
+    if (g->ram_code_size && t >= g->ram_code_at && t - g->ram_code_at + 16 <= g->ram_code_size) {
+        const uint32_t r = g->ram_code_rom + (t - g->ram_code_at);
+        bool same = true;
+        for (uint32_t i = 0; i < 16; i += 2) if (rr_read(t + i, 2) != rr_read(r + i, 2)) same = false;   /* changed since the copy: not ours */
+        if (same) { if (g->supp_jump && g->supp_jump(r, at)) return true; rr_jump(r, at); return true; }
+    }
+    return g->supp_jump && g->supp_jump(t, at);
+}
+
+/* THE LAST WORD (our fork, engine/lift_cpu.c rr_fatal_hook): the lifted program reached code it does not have and must stop -- or the
+ * program itself crashed (a signal). Keep what is needed to find it -- this session's recording (it replays the crash) and the log, as
+ * captures/crash_<date>_<time>.rec / .log, since the next start overwrites both -- save the EEPROM, and in a window say so instead of
+ * just vanishing. */
+const uint32_t *g_rr_last_pc;                  /* a game built with LIFT_LAST_PC points this at g_lift_pc (Victory Lap): the crash message names it */
+static char fatal_log[64], fatal_title[64];
+static int fatal_windowed;
+static void copy_into(const char *src, const char *dst)
+{
+    FILE *in = fopen(src, "rb"); if (!in) return;
+    FILE *out = fopen(dst, "wb"); if (!out) { fclose(in); return; }
+    char b[65536]; size_t n;
+    while ((n = fread(b, 1, sizeof b, in)) > 0) fwrite(b, 1, n, out);
+    fclose(in); fclose(out);
+}
+static void on_fatal(const char *why)
+{
+    fflush(stderr);
+    rr_hw_eeprom_save();
+    char stamp[32]; const time_t t = time(NULL); strftime(stamp, sizeof stamp, "%Y%m%d_%H%M%S", localtime(&t));
+    char r[80], l[80], kept[200] = "";
+    snprintf(r, sizeof r, "captures/crash_%s.rec", stamp); snprintf(l, sizeof l, "captures/crash_%s.log", stamp);
+    mkdir("captures", 0777);
+    if (rr_input_record_copy(r)) {
+        fprintf(stderr, "[RR] keeping the crash: %s\n", r); fflush(stderr);
+        snprintf(kept, sizeof kept, "%s and %s", r, l);
+    }
+    if (fatal_log[0]) copy_into(fatal_log, l);
+    if (!fatal_windowed) return;
+    char msg[1024];
+    snprintf(msg, sizeof msg, "%s stopped.\n\n%s\n\nPlease report it with %s -- they replay this session up to the crash.",
+             fatal_title, why, kept[0] ? kept : (fatal_log[0] ? fatal_log : "the log file beside the program"));
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, fatal_title, msg, NULL);
+}
+static void on_signal(int sig)
+{
+    char why[160];
+    if (g_rr_last_pc) snprintf(why, sizeof why, "The program crashed (signal %d) at frame %u, near instruction 0x%06X.", sig, rr_frame, *g_rr_last_pc);
+    else snprintf(why, sizeof why, "The program crashed (signal %d) at frame %u.", sig, rr_frame);
+    fprintf(stderr, "[RR] %s\n", why);
+    signal(sig, SIG_DFL);
+    if (rr_fatal_hook) { void (*h)(const char *) = rr_fatal_hook; rr_fatal_hook = NULL; h(why); }
+    _exit(6);
+}
+
 int main(int argc, char **argv)
 {
     eng_args_strip(&argc, argv);    /* --set KEY=VALUE: a setting for this run (engine/eng_args.h, GitHub #85) */
+    int frames_given = 0;
+    rr_trap_hook = unknown_jump;
+    const int cab = link_host_prescan(argc, argv);    /* a linked copy: its own log (raveracer_cabN.log, acedriver_cabN.log) */
+    char logname[64], title[64];
+    {   /* the game's own names (rr_game_t title / log_file; Rave Racer's when it has none) */
+        const char *lf = g_rr_game->log_file ? g_rr_game->log_file : "raveracer.log", *dot = strrchr(lf, '.');
+        const int ln = dot ? (int)(dot - lf) : (int)strlen(lf);
+        const char *t = g_rr_game->title ? g_rr_game->title : "Rave Racer";
+        if (cab > 0) { snprintf(logname, sizeof logname, "%.*s_cab%d.log", ln, lf, cab); snprintf(title, sizeof title, "%s - Cabinet %d", t, cab); }
+        else { snprintf(logname, sizeof logname, "%s", lf); snprintf(title, sizeof title, "%s", t); }
+    }
+    if (g_rr_game->link_cab_addr) {                   /* not Rave Racer: its own cabinet number, its own name on the network */
+        link_game.tag = !strcmp(g_rr_game->name, "acedrive") ? "AD" : g_rr_game->name;
+        link_game.report = link_report_own; link_game.good = NULL; link_game.game_id = link_game_id_own;
+        link_game.max_cabinets = g_rr_game->link_max_cabinets;
+    }
 #ifdef _WIN32
-    rr_win_startup();               /* the program's folder, raveracer.log, DPI */
+    rr_win_startup(logname);        /* the program's folder, the log, DPI */
 #endif
     const char *rom_dir = "extracted";
 #ifdef RR_ORACLE
@@ -419,7 +558,7 @@ int main(int argc, char **argv)
 #endif
     if (argc == 1) windowed = -1;               /* started with no arguments (a double-click): play */
     for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--frames") && i + 1 < argc) max_frames = (uint32_t)atoi(argv[++i]);
+        if (!strcmp(argv[i], "--frames") && i + 1 < argc) { max_frames = (uint32_t)atoi(argv[++i]); frames_given = 1; }
         else if (!strcmp(argv[i], "--dump") && i + 1 < argc) dump_dir = argv[++i];
         else if (!strcmp(argv[i], "--ppf") && i + 1 < argc) polls_per_frame = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--shots") && i + 2 < argc) { shot_dir = argv[++i]; shot_every = (uint32_t)atoi(argv[++i]); }
@@ -453,6 +592,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--steer") && i + 1 < argc && n_steer < 8) {
             int f, v; if (sscanf(argv[++i], "%d:%i", &f, &v) == 2) { test_steer[n_steer].at = f; test_steer[n_steer].value = v; n_steer++; }
         }
+        else if (link_host_arg(argc, argv, &i)) {}
         else rom_dir = argv[i];
     }
 #ifdef RR_ORACLE
@@ -476,17 +616,23 @@ int main(int argc, char **argv)
         }
     static char last_rec[64];                     /* a played session always keeps its latest recording (and the one before): a bug a player
                                                    * meets can be replayed exactly -- <nv prefix>_last.rec, e.g. rr_last.rec (GitHub #62) */
-    if (windowed && !rec_path && !rep_path) {
+    const bool rec_on = windowed && !rec_path && !rep_path && link_host_record_sessions();   /* our fork: link.cfg record=off turns it off */
+    if (windowed && !rec_path && !rep_path && !rec_on) fprintf(stderr, "[RR] session recording off (link.cfg record=off)\n");
+    if (rec_on) {
         const char *u = strchr(g_rr_game->nv_file, '_'); const int k = u ? (int)(u - g_rr_game->nv_file) : 2;
-        char prev[64]; snprintf(last_rec, sizeof last_rec, "%.*s_last.rec", k, g_rr_game->nv_file); snprintf(prev, sizeof prev, "%.*s_prev.rec", k, g_rr_game->nv_file);
+        char pre[24]; if (cab > 0) snprintf(pre, sizeof pre, "%.*s_cab%d", k, g_rr_game->nv_file, cab); else snprintf(pre, sizeof pre, "%.*s", k, g_rr_game->nv_file);
+        char prev[64]; snprintf(last_rec, sizeof last_rec, "%s_last.rec", pre); snprintf(prev, sizeof prev, "%s_prev.rec", pre);   /* our fork: a linked copy its own (rr_cab2_last.rec) */
         remove(prev); rename(last_rec, prev); rec_path = last_rec;
     }
     if (rep_path && !rr_input_replay_open(rep_path)) return 2;
     if (rec_path && !rr_input_record_start(rec_path)) return 2;
+    snprintf(fatal_log, sizeof fatal_log, "%s", logname); snprintf(fatal_title, sizeof fatal_title, "%s", title); fatal_windowed = windowed != 0;
+    rr_fatal_hook = on_fatal;                         /* our fork: keep a crash's recording + log, and say so (on_fatal) */
+    signal(SIGSEGV, on_signal); signal(SIGILL, on_signal); signal(SIGFPE, on_signal); signal(SIGABRT, on_signal);
     g_rr_gl = use_gl < 0 ? (windowed != 0) : use_gl;
     if (windowed) {
         if (!rr_host_open(windowed > 0 ? windowed : 0)) return 2;
-        max_frames = 0xFFFFFFFFu;
+        if (!frames_given) max_frames = 0xFFFFFFFFu;    /* a window plays until it is closed, unless --frames says */
     } else if (g_rr_gl) {
         const char *e = getenv("RR_RENDER_SIZE"); int w, h;
         if (e && sscanf(e, "%dx%d", &w, &h) == 2 && w >= 64 && h >= 48) { gl_w = w; gl_h = h; }
@@ -544,7 +690,20 @@ int main(int argc, char **argv)
 #ifdef RR_TRACE
     rr_env_init();                         /* RR_ENV: the trace oracle's environment (dev builds) */
 #endif
-    if (windowed && !rep_path) rr_hw_eeprom_persist(g_rr_game->nv_file);   /* a player's session keeps its settings and records; headless runs and replays never do */
+    /* the test menu's settings and the records survive a restart (a window or a linked copy; headless test runs and replays start from
+     * the set's defaults / the recording's own EEPROM, and never save) */
+    char nvname[64];
+    if (cab > 0) { const char *dot = strrchr(g_rr_game->nv_file, '.');   /* (never shared between games: rr_eeprom_cab1.nv, ad_eeprom_cab1.nv) */
+                   snprintf(nvname, sizeof nvname, "%.*s_cab%d.nv", dot ? (int)(dot - g_rr_game->nv_file) : (int)strlen(g_rr_game->nv_file), g_rr_game->nv_file, cab); }
+    else snprintf(nvname, sizeof nvname, "%s", g_rr_game->nv_file);
+    const bool nv_loaded = windowed && !rep_path ? rr_hw_eeprom_persist(nvname) : false;
+    if (cab > 0) {
+        if (!link_host_open(&link_game)) {
+            if (windowed) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, g_rr_game->title, "The link could not start.\n\nUsually another copy of the game is still running as the same cabinet (it may be hidden, e.g. the automatic check): close it, or restart the PC, and try again.\n\nDetails are in the log file beside the program.", NULL);
+            return 2;
+        }
+        rr_hw_link_on(link_host_id(), link_host_take_id_reset() || !nv_loaded);   /* the ID: first run, or a new number on the Network page */
+    }
     if (freeplay >= 0) rr_hw_set_freeplay(freeplay);
     else if (windowed && g_cfg_freeplay >= 0) {        /* the saved menu choice, windowed runs only */
         rr_hw_set_freeplay(g_cfg_freeplay);
@@ -591,6 +750,8 @@ int main(int argc, char **argv)
     fprintf(stderr, "[RR] reset: SP=%08X PC=%08X\n", (uint32_t)RG4(REG_SP), rr_read(4, 4));
     rr_call_push(0xFFFFFFFEu);                  /* bottom of the shadow stack */
     { extern void rd_init(void); rd_init(); }   /* readable-C replacements (src/rd) */
+    if (g_link_mute) rr_audio_set_volume(0);
+    link_host_gather(title, windowed ? SDL_GL_GetCurrentWindow() : NULL, windowed ? rr_ui_set_hint : NULL, windowed ? rr_host_message : NULL);   /* the cabinets start together, as boards switched on together */
     g_rr_game->entry();                         /* entry_reset (this game's reset PC): never returns */
     fprintf(stderr, "[RR] entry_reset returned?!\n");
     return 1;

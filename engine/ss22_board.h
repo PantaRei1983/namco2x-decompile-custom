@@ -72,6 +72,8 @@ typedef struct {
     bool (*load_program)(const char *rom_dir);        /* the 68K's image into g_ss22.rom (the chips' layout is the game's) */
     bool (*load_eeprom)(const char *rom_dir);         /* the EEPROM's starting contents (the set's defaults, or blank) */
     bool (*extra_read)(uint32_t a, int size, uint32_t *v);   /* optional: a device on the map only this game has, asked first for every read in 0x430000..0x43FFFF (a light gun) */
+    void (*rom_write)(uint32_t a, int size, uint32_t v);     /* optional: a write into the program ROM's space (Alpine Surfer's ROM bank register at 0x300000); NULL = an error, as before */
+    bool keycus_all;                                  /* our fork: EVERY unit answers keycus_value (MAME: Air Combat 22 has no keycus -- all reads 0) */
 } ss22_board_cfg;
 
 /* THE LIGHT GUN (MAME gun_r): 16-bit reads on the HIGH half of each long at 0x430000 (X), 0x430004 and 0x430008 (Y, twice); both axes read 0 when
@@ -85,6 +87,7 @@ bool ss22_load_program(const char *rom_dir);
 bool ss22_hw_init(const char *rom_dir);
 void ss22_hw_vblank(void);                          /* the frame's vblank: raise syscon line 0 if the game enabled it */
 void ss22_hw_scanline(void);                        /* the scanline IRQ (line 1) */
+void ss22_hw_sci_irq(void);                         /* the link chip's IRQ (line 2), engine/lan139.c */
 int  ss22_hw_irq_level(void);                       /* the highest pending, enabled IRQ as a 68K level (0 = none) */
 void ss22_hw_keycus_force(uint32_t v);              /* trace oracle: the next keycus read answers with MAME's value */
 
@@ -102,7 +105,7 @@ extern void (*g_ss22_snd_set_run)(bool run);
 
 /* Interactive runs keep the machine's EEPROM (options, records) in a file beside the game, as MAME's nvram does: loaded at boot when it holds
  * exactly one image, rewritten (temp file + rename) whenever the game changed it. Headless runs never touch it. */
-void ss22_eeprom_persist(const char *path);
+bool ss22_eeprom_persist(const char *path);           /* true = a saved image was loaded (not the set's defaults) */
 void ss22_eeprom_save(void);
 
 /* <tag>_MBOXLOG=<file>: every 68K write into the sound mailbox (shared RAM 0..0x1FF): "frame offset size value" -- the 68K -> sound-MCU

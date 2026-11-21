@@ -20,12 +20,19 @@
 #include "eng_crosshair.h"
 #include "audio_out.h"
 #include "eng_display.h"
+#include "link_host.h"
 #include "eng_ui.h"
 #include "eng_pad.h"
 #include "eng_pace.h"
 #include "eng_vsync.h"
 #include "tex_bake.h"
 #include "ss22_host.h"
+#include "link_host.h"
+
+/* the Esc menu's Network page (engine/link_host.c: the rows, link.cfg); an address row is typed key by key through the menu's key capture */
+static void net_key(SDL_Scancode sc, void *u) { if (link_page_type(sc)) eng_ui_capture_key(net_key, u); }
+static void net_change(int row, int dir) { link_page_change(row, dir); if (link_page_editing() && !eng_ui_capturing()) eng_ui_capture_key(net_key, NULL); }
+static const eng_ui_page network_page = { "Network", 560, 210, 24, link_page_rows, link_page_has_value, NULL, link_page_text, net_change, link_page_notes, 190 };
 #include "eng_ffb.h"
 #include "gl_warn.h"
 
@@ -33,7 +40,10 @@
 static const ss22_host_game *game;
 static SDL_Window *win;
 static SDL_GLContext glc;
-static bool paused, shot_pending, headless_open, restart_req;
+static bool paused, shot_pending, capture_pending, headless_open, restart_req;
+/* F9's recording copy and the frame number, from engine/ss22_run.c (NULL: a host without them -- Cyber Sled: the picture only) */
+bool (*g_ss22_capture_rec)(const char *dst);
+const uint32_t *g_ss22_capture_frame;
 static eng_vsync vs;                               /* the frame pacer (engine/eng_vsync.h) */
 
 static uint64_t now_ns(void)                     /* split the scaling: counter * 1e9 overflows 64 bits (and this works on Windows too) */
@@ -82,7 +92,8 @@ bool ss22_host_open(const ss22_host_game *g, int scale, bool fs)      /* scale <
     SDL_SetWindowMinimumSize(win, 320, 240);
     game->input_init();                            /* after the cfg: the key bindings */
     eng_ui_add_page(game->input_page());
-    if (game->extra_page) eng_ui_add_page(game->extra_page());
+    if (!game->no_link) eng_ui_add_page(&network_page);   /* link play: this cabinet's number and the cabinets' addresses (link.cfg) */
+    if (game->extra_page) { const eng_ui_page *xp = game->extra_page(); if (xp) eng_ui_add_page(xp); }   /* (NULL: not this run) */
     if (!eng_ui_init(win, game->title)) fprintf(stderr, "[HOST] menu: Nuklear init failed\n");
     else if (eng_pad_present()) eng_ui_set_hint(ENG_PAD_MENU_HINT, 60 * 8);         /* a pad has no Esc: say how to reach the menu */
     tex_bake_window_defaults();                    /* a per-frame budget for cold texture bakes (engine/tex_bake.c; ENG_TEX_BUDGET) */
@@ -146,6 +157,24 @@ static void present(void)
         snprintf(p, sizeof p, "screenshots/%s_%04d%02d%02d_%02d%02d%02d_%d.ppm", game->shot_prefix, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
                  tm.tm_hour, tm.tm_min, tm.tm_sec, n++);
         if (eng_gl_write_ppm(p, vw, vh)) fprintf(stderr, "[HOST] saved %s\n", p);
+    }
+    static uint32_t own_frame; own_frame++;            /* a host without the lifted runtime (Cyber Sled) counts its own frames */
+    const uint32_t rr_frame = g_ss22_capture_frame ? *g_ss22_capture_frame : own_frame;
+    { static long at = -2;                           /* tests: SS22_CAPTURE_AT=<frame> presses F9 then */
+      if (at == -2) { const char *e = getenv("SS22_CAPTURE_AT"); at = e ? atol(e) : -1; }
+      if (at >= 0 && rr_frame == (uint32_t)at) { capture_pending = true; at = -1; } }
+    if (capture_pending) {                           /* F9, A GLITCH CAPTURE: the picture and this session's recording up to now (replayed with
+                                                      * --replay it reaches this frame exactly) -- captures/capture_<frame>.ppm / .rec */
+        capture_pending = false;
+        char p[96], r[96]; static char h[128];
+        mkdir("captures", 0755);
+        snprintf(p, sizeof p, "captures/capture_%06u.ppm", rr_frame);
+        snprintf(r, sizeof r, "captures/capture_%06u.rec", rr_frame);
+        const bool pic = eng_gl_write_ppm(p, vw, vh), rec = g_ss22_capture_rec && g_ss22_capture_rec(r);
+        if (rec) snprintf(h, sizeof h, "GLITCH CAPTURED (F9): captures/capture_%06u", rr_frame);
+        else snprintf(h, sizeof h, "PICTURE SAVED (F9), NO RECORDING: session recording is off (launcher Settings)");
+        eng_ui_set_hint(h, 60 * 4);
+        fprintf(stderr, "[HOST] capture at frame %u: %s%s%s\n", rr_frame, pic ? p : "(no picture)", rec ? " + " : "", rec ? r : " (no recording)");
     }
     const SDL_Rect r = eng_disp_picture_rect(rw, rh);
     pic_r = r; gun_r = r;
@@ -211,6 +240,9 @@ static void present(void)
               if (eng_gl_write_ppm(p, dw, dh)) fprintf(stderr, "[HOST] saved %s (%dx%d)\n", p, dw, dh);
           }
       } }
+    { static int slow = -1, every = 1, n;           /* <tag>_SLOWDRAW=<ms>[:<every>]: TEST, a slow graphics chip (every n-th frame takes ms longer) */
+      if (slow < 0) { slow = 0; const char *e = genv("SLOWDRAW"); if (e) sscanf(e, "%d:%d", &slow, &every); if (every < 1) every = 1; }
+      if (slow && ++n % every == 0) SDL_Delay((Uint32)slow); }
     if (pace_log) eng_pace_before_swap(pace_log);
     eng_vsync_capture(&vs, win);                     /* the picture, kept for a frame-rate lock above 60 */
     SDL_GL_SwapWindow(win);
@@ -229,8 +261,12 @@ static bool pump(void)
         if (e.type == SDL_KEYDOWN && !e.key.repeat) {
             const SDL_Scancode sc = e.key.keysym.scancode;
             if (sc == SDL_SCANCODE_ESCAPE) { eng_ui_set_open(true); game->input_neutral(); }
-            if (sc == SDL_SCANCODE_P) { paused = !paused; if (paused) game->input_neutral(); fprintf(stderr, "[HOST] %s\n", paused ? "paused" : "running"); }   /* neutral: no force (wheel motor, a kick) is held through the pause */
+            if (sc == SDL_SCANCODE_P) {
+                if (link_host_on()) fprintf(stderr, "[HOST] no pause while linked: the other cabinets would drop this one\n");
+                else { paused = !paused; if (paused) game->input_neutral(); fprintf(stderr, "[HOST] %s\n", paused ? "paused" : "running"); }   /* neutral: no force (wheel motor, a kick) is held through the pause */
+            }
             if (sc == SDL_SCANCODE_F12) shot_pending = true;
+            if (sc == SDL_SCANCODE_F9) capture_pending = true;                  /* a glitch capture (above) */
             if (sc == SDL_SCANCODE_F8 && game->aim) { eng_disp_cycle_gun_border(); fprintf(stderr, "[HOST] light-gun border %d%%\n", g_eng_disp.gun_border); }
             if (sc == SDL_SCANCODE_F11 || (sc == SDL_SCANCODE_RETURN && (e.key.keysym.mod & KMOD_ALT))) eng_disp_toggle_fullscreen();
         }
@@ -272,6 +308,27 @@ bool ss22_host_frame(void)
             ke.type = SDL_KEYDOWN; ke.key.state = SDL_PRESSED; ke.key.keysym.scancode = SDL_GetScancodeFromName(genv("MENU_PRESS"));
             SDL_PushEvent(&ke);
         } } }
+    { static int cf = -2, cx, cy, n;                                     /* <tag>_MENU_CLICK=<frame>:<x>:<y>: a QUICK click (press and release in one
+                                                                          * frame, a touchpad tap) at window x,y -- tests engine/eng_nk_click.h */
+      if (cf == -2) { cf = -1; const char *e = genv("MENU_CLICK"); if (e) sscanf(e, "%d:%d:%d", &cf, &cx, &cy); }
+      if (cf >= 0 && ++n == cf) {
+          SDL_Event me; memset(&me, 0, sizeof me);
+          me.type = SDL_MOUSEMOTION; me.motion.windowID = SDL_GetWindowID(win); me.motion.x = cx; me.motion.y = cy; SDL_PushEvent(&me);
+          memset(&me, 0, sizeof me);
+          me.type = SDL_MOUSEBUTTONDOWN; me.button.windowID = SDL_GetWindowID(win); me.button.button = SDL_BUTTON_LEFT; me.button.state = SDL_PRESSED;
+          me.button.clicks = 1; me.button.x = cx; me.button.y = cy; SDL_PushEvent(&me);
+          me.type = SDL_MOUSEBUTTONUP; me.button.state = SDL_RELEASED; SDL_PushEvent(&me);
+          fprintf(stderr, "[HOST] test: quick click at %d,%d\n", cx, cy);
+      } }
+    { static int wf = -2, n; static float wy, wx;                       /* <tag>_WHEEL_TEST=<frame>:<y>:<x>: TEST, a touchpad scroll (y, x a frame)
+                                                                         * from that frame on, as SDL sends it -- the trackball's scrolling */
+      if (wf == -2) { wf = -1; const char *e = genv("WHEEL_TEST"); if (e) sscanf(e, "%d:%f:%f", &wf, &wy, &wx); }
+      if (wf >= 0 && ++n >= wf) {
+          SDL_Event we; memset(&we, 0, sizeof we);
+          we.type = SDL_MOUSEWHEEL; we.wheel.windowID = SDL_GetWindowID(win); we.wheel.preciseY = wy; we.wheel.preciseX = wx;
+          we.wheel.y = (Sint32)wy; we.wheel.x = (Sint32)wx; we.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+          SDL_PushEvent(&we);
+      } }
     static eng_pace pl;
     static int ftm = -1; if (ftm < 0) ftm = getenv("ENG_FTIME") != NULL;
     struct timespec a0, a1, a2, a3; if (ftm) clock_gettime(CLOCK_MONOTONIC, &a0);
@@ -280,6 +337,8 @@ bool ss22_host_frame(void)
     else { const int want = (!g_eng_disp.winmode || eng_ui_is_open()) ? SDL_ENABLE : SDL_DISABLE;   /* fullscreen hides the pointer for the game, the menu needs it */
            if (SDL_ShowCursor(SDL_QUERY) != want) SDL_ShowCursor(want); }
     if (!paused && !eng_ui_is_open()) game->input_update();
+    else if (link_host_on()) game->input_neutral();  /* linked, the menu open: the game plays on, hands off */
+    if (link_host_catch_up()) return true;           /* linked and behind the set: this frame is not drawn and not waited for (engine/link_host.c) */
     if (ftm) clock_gettime(CLOCK_MONOTONIC, &a1);
     eng_vsync_want(&vs, g_eng_disp.fps);            /* Display > Frame rate */
     if (eng_vsync_show(&vs)) present_with(&pl);     /* a lock below 60 shows only some frames */
@@ -292,7 +351,8 @@ bool ss22_host_frame(void)
         if (ev + pr + pc > 40.0) fprintf(stderr, "[FTIME-HOST] events %.1f  present %.1f  pace %.1f ms\n", ev, pr, pc);
     }
     eng_pace_after(&pl, game->tag);
-    while (paused || eng_ui_is_open()) {             /* the game stops (P, or the menu); the window keeps answering */
+    while (!link_host_on() && (paused || eng_ui_is_open())) {   /* the game stops (P, or the menu); the window keeps answering. Not a
+                                                     * linked one: a stopped cabinet goes silent and the others drop it until they restart */
         eng_pace_reset(&pl);
         if (game->paused_tick) game->paused_tick();
         if (!pump()) return false;
@@ -303,6 +363,19 @@ bool ss22_host_frame(void)
         if (!paused && !eng_ui_is_open()) eng_vsync_resync(&vs);
     }
     return true;
+}
+
+void ss22_host_message(const char *const *lines, int n)
+{
+    if (!win) return;
+    int dw, dh; SDL_GL_GetDrawableSize(win, &dw, &dh);
+    glViewport(0, 0, dw, dh);
+    glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+    eng_ui_draw_message(lines, n);
+    { static int shot; const char *e = genv("WAITSHOT");       /* <tag>_WAITSHOT=<file.ppm>: TEST, the waiting screen as drawn (a screen
+                                                                   * capture cannot see an exclusive full screen) */
+      if (e && !shot && ++shot) { glReadBuffer(GL_BACK); if (eng_gl_write_ppm(e, dw, dh)) fprintf(stderr, "[HOST] saved %s (%dx%d)\n", e, dw, dh); } }
+    SDL_GL_SwapWindow(win);
 }
 
 void ss22_host_close(void)

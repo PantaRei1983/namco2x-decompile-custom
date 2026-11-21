@@ -35,6 +35,7 @@
 #include <string.h>
 #include <SDL2/SDL.h>
 #include "eng_gl.h"                                 /* <GL/gl.h>, with <windows.h> first on Windows */
+#include "eng_timing.h"                             /* N22_TIMING=classic: 0.4.0's pacer (see there) */
 
 #define ENG_FRAME_NS 16693000ull                    /* 1 / 59.906 Hz, 25.6 MHz / 814 / 525 */
 
@@ -53,6 +54,7 @@ typedef struct {
     unsigned char sample[16][4]; int check;          /* ENG_VSYNC_CHECK: 16 pixels of the original; -1 unset */
     unsigned log_frames, log_pics, log_checked, log_bad; uint64_t log_t0; int log_on;
     bool forced;                                     /* ENG_FPS set: the menu's choice is ignored */
+    bool classic, vs_checked;                        /* classic timing (eng_timing.h): always 60, the vsync block check once */
 } eng_vsync;
 
 static inline uint64_t eng_vsync_ns(void)          /* SDL's counter (works on Windows too); split so counter * 1e9 cannot overflow */
@@ -64,6 +66,7 @@ static inline uint64_t eng_vsync_ns(void)          /* SDL's counter (works on Wi
 static inline const char *eng_vsync_mode(const eng_vsync *v)
 {
     static char b[64];
+    if (v->classic) return v->vsync ? "vsync (classic timing)" : "timer-paced at 59.906 Hz (classic timing)";
     if (v->lock) { snprintf(b, sizeof b, "%s %d pictures/s%s (game 59.906 Hz)", v->choice == 0 ? "Auto: the display's" : "locked at", v->lock, v->vsync ? ", vsync" : ""); return b; }
     return v->vsync ? "vsync" : "timer-paced at 59.906 Hz";
 }
@@ -94,7 +97,7 @@ static inline void eng_vsync_resync(eng_vsync *v) { v->next_ns = v->pnext = eng_
 
 static inline void eng_vsync_set_lock(eng_vsync *v, int fps)
 {
-    fps = eng_vsync_rate_valid(fps);
+    fps = v->classic ? ENG_VSYNC_60 : eng_vsync_rate_valid(fps);   /* classic: one picture per game frame, whatever the menu says */
     if (fps == v->choice) return;
     v->choice = fps;
     int lock; bool want_vsync;
@@ -122,6 +125,13 @@ static inline void eng_vsync_init(eng_vsync *v, SDL_Window *win, const char *for
     if (getenv("ENG_DISPLAY_HZ")) v->hz = atoi(getenv("ENG_DISPLAY_HZ"));   /* tests: what Auto would do on another display */
     v->auto_vsync = v->hz >= 59 && v->hz <= 61;
     if (force) v->auto_vsync = atoi(force) != 0;
+    if (!force && getenv("N22_ONE_PC") && v->auto_vsync) {   /* several copies on this PC (the launcher's Test and Party ways): the timer.
+        * Vsync favours the window in front: 4 linked Victory Lap windows (Iris Xe, 2026-11-16) missed 40-78 pictures per 1200 frames
+        * in each background window and 3-20 in the front one; timer-paced, 11-14 in every window (the compositor shows them anyway) */
+        v->auto_vsync = false;
+        fprintf(stderr, "[HOST] several copies on this PC (N22_ONE_PC): timer-paced, not vsync\n");
+    }
+    v->classic = eng_timing_classic();
     v->vsync = v->auto_vsync;
     if (v->vsync && SDL_GL_SetSwapInterval(1) != 0) v->vsync = v->auto_vsync = false;
     if (!v->vsync) SDL_GL_SetSwapInterval(0);
@@ -237,11 +247,12 @@ static inline void eng_vsync_after_frame(eng_vsync *v, SDL_Window *win)
 {
     if (!v->lock) {                                  /* AUTO */
         if (v->shown) v->log_pics++;
-        if (v->vsync) {
+        if (v->vsync && !v->vs_checked) {
             if (v->vs_frames++ == 10) v->vs_t0 = eng_vsync_ns();
             if (v->vs_frames == 60) {
                 const uint64_t per = (eng_vsync_ns() - v->vs_t0) / 50;
                 v->vs_frames = 10; v->vs_t0 = eng_vsync_ns();
+                if (v->classic) v->vs_checked = true;            /* classic: the first second decides, as 0.4.0 did */
                 if (per < 12000000ull) {
                     v->vsync = v->auto_vsync = false; SDL_GL_SetSwapInterval(0); v->next_ns = eng_vsync_ns();
                     fprintf(stderr, "[HOST] vsync does not block here (%.1f ms a frame): timer-paced at 59.906 Hz\n", (double)per / 1e6);

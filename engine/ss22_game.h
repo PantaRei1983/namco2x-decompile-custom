@@ -54,6 +54,17 @@ typedef struct {
     bool        vics_count_in_list;          /* the VICS bank's sprite count is stored in its list (Dirt Dash; MAME's per-game workaround) */
     bool        spot_in_dumps;               /* MAME's captures do not record the spot enable: treat the spot as ON in them (Dirt Dash; Tokyo Wars' table is not a spot) */
     eng_hud_cfg  hud;                        /* WIDESCREEN: which frames show the race HUD and what of the picture is HUD (engine/hud_edges.h) */
+    bool        vics_linked;                 /* our fork: VICS set 1 is set 2's HEADER, not sprites (Air Combat 22, its code 0x3AD02): entry 0's
+                                              * first halfword 6 = draw set 2, 7 = draw nothing; its third halfword = set 2's count - 1. The
+                                              * registers' counts are constants. MAME draws both sets as sprites: stale ones stuck on screen */
+    const int  (*fx)[2];                     /* the sprite tiles (first tile of a sprite, inclusive ranges) that are dust, mud or spray: the Display menu's "Effects" option
+                                              * smooths those and nothing else (engine/sprite_hw.h). NULL = the game has none named, the option is not offered */
+    int          n_fx;
+    const int  (*soft)[2];                   /* optional: glow sprites (a subset of fx) that are drawn 1:1 and get a light blur when the option is on (Dirt Dash's headlights) */
+    int          n_soft;
+    const int  (*edge_fill)[2];              /* optional, WIDESCREEN: sprite art (inclusive ranges) the game lays edge to edge across the 640-px screen, anchored to its
+                                              * sides (Aqua Jet's wake spray): a piece at a side is continued, mirrored, out to the picture's edge (engine/ss22_gl.c) */
+    int          n_edge_fill;
 } ss22_video_cfg;
 
 typedef struct { const char *name; uint16_t bit; } ss22_press_name;      /* --press NAME@F[+LEN] */
@@ -92,12 +103,31 @@ typedef struct ss22_game {
     bool (*start)(const char *name, long n, uint16_t *pressed, unsigned *wheel, unsigned *pedal1, unsigned *pedal2);
     const char *start_names;                 /* what --stage takes, for the help and the error: "city, jungle, ..." */
     unsigned    pedal_full[2];               /* what --pedal F holds the first pedal at */
+    /* LINK PLAY (--link N, engine/lan139.c): the EEPROM byte whose bits 0-1 are the game's own cabinet ID (its test menu's setting; -1 = not
+     * known yet) -- --link N seeds it only on a cabinet's first run, after that the test menu's value is kept -- and the game's own view
+     * of the link for the log (who it hears, the ring size, link good) -- NULL = none */
+    int         link_id_byte;
+    int       (*link_game_id)(void);         /* the ID the game is using now (0-based), so the cabinets can spot two with the same one */
+    void      (*link_report)(char *buf, int n);
+    bool      (*link_good)(void);            /* the game thinks the link is working (counted every frame for the log) */
     void (*frame)(long n);                   /* once a frame at the frame boundary, in every mode (the game's test switches); NULL = none */
+    void (*paused_tick)(void);               /* while the game is stopped (P / the menu): online keepalive (ss22_host_game.paused_tick); NULL = none */
     const struct eng_ui_page *(*menu_page)(void);   /* the game's own page in the Esc menu (Time Crisis: Stages); NULL = none */
     /* THE CABINET LINK (engine/ss22_link.h, --link): set this cabinet's id in the game's own operator setting (its EEPROM); NULL = the game
      * has no link support here. link_debug: the game's own link state, printed with <TAG>_LINKDBG=1 every 60 frames (NULL = none). */
     void (*link_cabinet)(int id);
     void (*link_debug)(uint32_t frame);
+    /* a master PDP begin in the first N slices (of 16) of a frame still marks the next update's list current, as one in the vblank does
+     * (engine/ss22_video.c); 0 = MAME's rule exactly. Cyber Cycles sets its master going only after its link work, which in a 4-cabinet
+     * race ends after the vblank: under MAME's rule every such frame lost its 3D (black). */
+    int  pdp_late_slices;
+    /* an update that still loses its list draws the last one again, up to N in a row (0 = a black 3D layer, MAME): a link that
+     * delivers in bursts (4 copies on one PC) can push the begin later still, and one held frame is not seen where black is */
+    int  pdp_hold_frames;
+    int  link_rx_per_frame;                  /* link play: received frames handed to the game per video frame (engine/lan139.h); 0 = no limit */
+    int  pdp_in_list;                        /* 1: a display-list record with code 0xFFF8 is a PDP command block (MAME simulate_slavedsp,
+                                              * NAMCOS22_ALPINE_RACER_2: the title's spinning ice logo is written into point RAM on the fly) */
+    void (*link_id_written)(void);          /* our fork: after link play wrote link_id_byte -- a game whose settings carry a checksum puts it right (Armadillo Racing); NULL = none */
 } ss22_game;
 
 /* Run the game's start script NAME (ss22_game.start) from now: its frame n counts from this call. The Esc menu's way to --stage. */
@@ -136,6 +166,8 @@ void ss22_snd_mix_set(int row, int pct);
 void ss22_snd_mix_load(void);            /* after the settings file is loaded */
 void ss22_snd_inputs(uint16_t pressed, unsigned wheel, unsigned pedal1, unsigned pedal2);   /* pressed: INPUTS bits; A-D 10-bit */
 void ss22_snd_trackball(int dx, int dy);  /* the trackball moved (counts, MAME's OPT.0 / OPT.1 port units): added to the two counters */
+extern void (*g_ss22_adc_hook)(uint16_t *adc4);
+extern uint16_t (*g_ss22_inputs_hook)(uint16_t inputs);   /* a game's own device on the INPUTS word (NULL = none) */
 uint16_t ss22_snd_outputs(void);         /* the MCU's output latches (lamps, motors) */
 void ss22_snd_debug(char *buf, int n);
 

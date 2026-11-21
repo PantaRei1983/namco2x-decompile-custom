@@ -18,6 +18,7 @@
 #undef IN                                 /* windows.h defines IN empty; this file has its own IN(base, len) */
 #endif
 #include "ss22_board.h"
+#include "lan139.h"
 #include "ss22_game.h"
 #include "ss22_link.h"
 
@@ -116,12 +117,10 @@ static void dev_write(uint32_t off, int size, uint32_t v, int w, wr_fn h)
 /* ---- device handlers (namcos22.cpp / namcos22_v.cpp) ---- */
 static uint32_t keycus_h(uint32_t unit) { return ss22_hw_keycus_r(unit); }
 
-static uint32_t sci_h(uint32_t unit)                                              /* namcos22_sci_r; with --link our C139 (engine/c139.c) */
-{
-    if (g_ss22_link_on) return ss22_link_reg_read(unit & 7);
-    return unit == 0 ? 0x0004 : 0;
-}
-static void sci_wh(uint32_t unit, uint32_t d, uint32_t m) { (void)m; ss22_link_reg_write(unit & 7, (uint16_t)d); }
+/* the SCI: the author's link (--netlink / the Online layer, engine/ss22_link.c + c139.c) when that is on, else ours (link.cfg / --link,
+ * engine/lan139.c), which with no link answers as MAME's stub does (namcos22_sci_r: 0x0004 at register 0, writes ignored) */
+static uint32_t sci_h(uint32_t unit) { return g_ss22_link_on ? ss22_link_reg_read(unit & 7) : lan139_reg_r(unit); }
+static void     sci_wh(uint32_t unit, uint32_t d, uint32_t m) { if (g_ss22_link_on) ss22_link_reg_write(unit & 7, (uint16_t)d); else lan139_reg_w(unit, (uint16_t)d, (uint16_t)m); }
 
 static uint32_t portbit_h(uint32_t unit) { return ss22_hw_portbit_r(unit); }
 static void     portbit_wh(uint32_t unit, uint32_t d, uint32_t m) { (void)d; (void)m; ss22_hw_portbit_w(unit); }
@@ -316,14 +315,14 @@ void rr_write(uint32_t a, int size, uint32_t v)
 #ifdef RR_TRACE
     watch(a, size, v);
 #endif
-    if (a < SS22_ROM_SIZE) { g_ss22.n_romwrite++; complain("ROM write", a, size); return; }
+    if (a < SS22_ROM_SIZE) { if (cfg && cfg->rom_write) { cfg->rom_write(a, size, v); return; } g_ss22.n_romwrite++; complain("ROM write", a, size); return; }
     if (a >= 0xE00000u) {
         if (a - 0xE00000u == g_ss22_wram_watch_off && g_ss22_wram_watch) g_ss22_wram_watch(v, size);
         if (a - 0xE00000u + (uint32_t)size <= SS22_WRAM_SIZE) { be_wr(g_ss22.wram, a - 0xE00000u, size, v); return; }
     } else switch (a >> 16) {
     case 0x40: if (IN(0x400000u, 0x20)) return; break;                              /* keycus_w: ignored */
     case 0x41: if (IN(0x410000u, SS22_SCI_SIZE)) { be_wr(g_ss22.sci, a - 0x410000u, size, v); return; } break;
-    case 0x42: if (IN(0x420000u, 0x10)) { if (g_ss22_link_on) dev_write(a - 0x420000u, size, v, 2, sci_wh); return; } break;   /* namcos22_sci_w: nothing (MAME) */
+    case 0x42: if (IN(0x420000u, 0x10)) { dev_write(a - 0x420000u, size, v, 2, sci_wh); return; } break;   /* the SCI (sci_wh; no link: nothing) */
     case 0x43: if (IN(0x430000u, 4)) return; break;                                 /* cpuleds */
     case 0x45: if (IN(0x450008u, 4)) { dev_write(a - 0x450008u, size, v, 2, portbit_wh); return; } break;
     case 0x46: if (IN(0x460000u, 0x4000)) { eeprom_write(a - 0x460000u, size, v); return; } break;
@@ -368,7 +367,7 @@ void ss22_hw_keycus_force(uint32_t v) { keycus_forced = 1; keycus_forced_v = (ui
 
 static uint32_t ss22_hw_keycus_r(uint32_t unit)
 {
-    if (unit == cfg->keycus_unit) return cfg->keycus_value;
+    if (unit == cfg->keycus_unit || cfg->keycus_all) return cfg->keycus_value;
     if (keycus_forced) { keycus_forced = 0; return g_hw.keycus_rng = keycus_forced_v; }
     unsigned v;
     if (keycus_replay && fscanf(keycus_replay, "%x", &v) == 1) return g_hw.keycus_rng = (uint16_t)v;
@@ -426,6 +425,7 @@ bool ss22_hw_init(const char *rom_dir)
     g_hw.lcg = 0x2545F491u;
     g_hw.dsw = 0xFFFFFFFFu;
     g_hw.portbits[0] = g_hw.portbits[1] = 0xFFFF;
+    lan139_init(g_ss22.sci);
     cfg->load_eeprom(rom_dir);
     snprintf(v, sizeof v, "%s_KEYCUS_FILE", cfg->tag);
     const char *kf = getenv(v);                          /* replay MAME's random keycus reads */
@@ -437,6 +437,12 @@ bool ss22_hw_init(const char *rom_dir)
 void ss22_hw_vblank(void)
 {
     if (g_hw.irq_enabled & 1u) g_hw.irq_state |= 1u;
+}
+
+/* the link chip's IRQ (syscon line 2, SCI): held while the chip wants it, until the game acknowledges */
+void ss22_hw_sci_irq(void)
+{
+    if (g_hw.irq_enabled & 4u) g_hw.irq_state |= 4u;
 }
 
 /* the scanline IRQ (syscon line 1, posirq) */
@@ -464,19 +470,21 @@ static char    nv_path[512];
 static uint8_t nv_saved[SS22_EEPROM_SIZE];
 static bool    nv_on;
 
-void ss22_eeprom_persist(const char *path)
+bool ss22_eeprom_persist(const char *path)
 {
+    bool loaded = false;
     snprintf(nv_path, sizeof nv_path, "%s", path);
     FILE *f = fopen(nv_path, "rb");
     if (f) {
         uint8_t buf[SS22_EEPROM_SIZE + 1];
         size_t n = fread(buf, 1, sizeof buf, f);
         fclose(f);
-        if (n == SS22_EEPROM_SIZE) { memcpy(g_ss22.eeprom, buf, SS22_EEPROM_SIZE); fprintf(stderr, "[%s] EEPROM loaded from %s\n", cfg->tag, nv_path); }
+        if (n == SS22_EEPROM_SIZE) { memcpy(g_ss22.eeprom, buf, SS22_EEPROM_SIZE); loaded = true; fprintf(stderr, "[%s] EEPROM loaded from %s\n", cfg->tag, nv_path); }
         else fprintf(stderr, "[%s] %s is not an EEPROM image (%zu bytes) -- ignored\n", cfg->tag, nv_path, n);
     }
     memcpy(nv_saved, g_ss22.eeprom, SS22_EEPROM_SIZE);
     nv_on = true;
+    return loaded;
 }
 
 void ss22_eeprom_save(void)

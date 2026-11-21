@@ -32,6 +32,7 @@ typedef struct eng_ui_page {
     void (*text)(int row, char *label, size_t ln, char *value, size_t vn);
     void (*change)(int row, int dir);                    /* dir 0 = Enter / click, -1 / +1 = Left / Right */
     void (*notes)(void (*line)(const char *fmt, ...));   /* lines under the rows; NULL = none */
+    float notes_h;                                       /* the notes' height (0 = two lines) */
 } eng_ui_page;
 
 bool eng_ui_init(SDL_Window *win, const char *title);    /* after the GL context; false = no menu (the game runs without) */
@@ -54,6 +55,7 @@ void eng_ui_input_begin(void);                           /* around the host's SD
 void eng_ui_input_end(void);
 bool eng_ui_event(SDL_Event *e);                         /* true = the menu consumed it (it is open) */
 void eng_ui_draw(bool *quit);
+void eng_ui_draw_message(const char *const *lines, int n);      /* a centred box of lines (the link's waiting screen) */
 void eng_ui_set_hint(const char *text, int frames);       /* a one-line hint at the bottom of the window for `frames` frames while the menu is closed */                            /* over the picture, into the window, before the swap */
 /* the next key press is handed to cb (SDL_SCANCODE_UNKNOWN if cancelled with Esc): a key-binding row's "press a key" */
 void eng_ui_capture_key(void (*cb)(SDL_Scancode sc, void *u), void *u);

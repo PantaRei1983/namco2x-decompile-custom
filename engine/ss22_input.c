@@ -219,6 +219,7 @@ static void torque_write(uint32_t v, int size)
 void ss22_input_close(void) { eng_ffb_close(); }
 
 /* ---- controller / raw-device discovery ---------------------------------- */
+#include "eng_party.h"
 typedef struct { SDL_GameController *gc; SDL_JoystickID id; } pad_dev;
 static pad_dev pads[MAX_DEV];
 
@@ -251,6 +252,7 @@ static void pad_scan(void)
 
     for (int j = 0, n = SDL_NumJoysticks(); j < n; j++) {
         if (!SDL_IsGameController(j)) continue;
+        if (!eng_party_allows(j)) continue;                              /* --pad K: this copy's own controller only (engine/eng_party.h) */
         const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(j);
         if (pad_find(id) >= 0) continue;
         int slot = -1;
@@ -273,6 +275,7 @@ static void raw_scan(void)
 
     for (int j = 0, n = SDL_NumJoysticks(); j < n; j++) {
         if (SDL_IsGameController(j)) continue;
+        if (!eng_party_allows(j)) continue;                              /* --pad: no raw devices */
         const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(j);
         if (raw_find(id) >= 0) continue;
         int slot = -1;
@@ -393,12 +396,40 @@ static bool button_matches(SDL_Joystick *js, int a)
     return SDL_JoystickGetButton(js, joy_button[a]) != 0;
 }
 
+/* a pad's analogue trigger bound as a button: joy_button = PAD_TRIG + 0 (LT) or + 1 (RT) (as the System 23 host, s23/src/eng/ss22_input.c) */
+#define PAD_TRIG 100
+static bool trigger_matches(SDL_GameController *gc, int a)
+{
+    if (!gc || joy_button[a] < PAD_TRIG) return false;
+    if (joy_button_guid[a][0]) {
+        char guid[40];
+        SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(gc)), guid, sizeof guid);
+        if (strcmp(guid, joy_button_guid[a])) return false;
+    }
+    return SDL_GameControllerGetAxis(gc, joy_button[a] == PAD_TRIG ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+}
+
+static bool is_pedal(int a) { return game->actions[a].axis == SS22_AX_PEDAL1 || game->actions[a].axis == SS22_AX_PEDAL2; }
+/* the trigger bound to a pedal on the Controls page (PAD_TRIG + 0 / 1), or -1: read analogue for that pedal, not as a button */
+static int pedal_trigger(int kind)
+{
+    for (int a = 0; a < game->n; a++) if (game->actions[a].axis == kind && joy_button[a] >= PAD_TRIG) return joy_button[a];
+    return -1;
+}
+
+bool ss22_input_trigger_bound(bool right)
+{
+    for (int a = 0; a < game->n; a++) if (joy_button[a] == PAD_TRIG + right) return true;
+    return false;
+}
+
 static bool raw_button_held(int a)
 {
     if (a < 0 || a >= game->n || joy_button[a] < 0) return false;
     for (int i = 0; i < MAX_DEV; i++) {
         if (button_matches(raws[i].js, a)) return true;
         if (pads[i].gc && button_matches(SDL_GameControllerGetJoystick(pads[i].gc), a)) return true;
+        if (pads[i].gc && !is_pedal(a) && trigger_matches(pads[i].gc, a)) return true;   /* a pedal's trigger stays analogue (pedal_trigger) */
     }
     return false;
 }
@@ -462,9 +493,9 @@ static void axis_label(int kind, char *v, size_t vn)
 
 static int nsw(void) { return (game->test_bit ? 1 : 0) + (game->service_bit ? 1 : 0); }
 static int nffb0(void) { return game->wheel_motor ? (game->torque.addr ? 4 : 2) : game->kick_wheel ? 1 : 0; }   /* motor: Force feedback, FFB direction[, FFB centering, FFB road effects]; kick only: Force feedback */
-static int nffb(void) { return nffb0() + (game->wheel_motor ? 2 : 0); }   /* + FFB keep-alive restart, FFB log (GitHub #73) */
+static int nffb(void) { return nffb0() + (game->wheel_motor ? 1 : 0); }   /* + FFB keep-alive restart (GitHub #73); "FFB log" (a developer's) not shown: ffb_log=1 in the cfg still works */
 static int gun_flash_on = 1;                                     /* light-gun games: draw the shot flash (gun_flash in the cfg; ss22_gl.c hides it when 0) */
-static int ngun(void) { return game->trackball ? 12 : game->light_gun ? 5 : game->kick_wheel ? 1 : 0; }   /* Gun shot flash, Gun border, Pad aim speed, Pad aim deadzone, Pad rumble on recoil -- or (kick_wheel: Pad rumble on recoil) -- or Trackball sensitivity, orientation, keys/pad steering, keys/pad smoothing, pad+keys invert x/y, mouse invert x/y, swap stick axes, stick layout, stick deadzone, stick curve */
+static int ngun(void) { return game->trackball ? 13 : game->light_gun ? 5 : game->kick_wheel ? 1 : 0; }   /* Gun shot flash, Gun border, Pad aim speed, Pad aim deadzone, Pad rumble on recoil -- or (kick_wheel: Pad rumble on recoil) -- or Trackball sensitivity, orientation, keys/pad steering, keys/pad smoothing, pad+keys invert x/y, mouse invert x/y, swap stick axes, stick layout, stick deadzone, stick curve */
 static int aim_speed = 100;                                     /* light gun: % of the default crosshair speed for the sticks / D-pad / arrow keys (aim_speed in the cfg) */
 static int aim_dz = 12;                                         /* light gun: the sticks' deadzone, % of full deflection (aim_deadzone in the cfg; 12% = the old PAD_DEADZONE) */
 static int tb_sens = 100;                                       /* trackball: % of the default counts per mouse pixel / stick deflection (tb_sens in the cfg) */
@@ -478,13 +509,15 @@ static bool tb_swap;                                            /* trackball: th
 static bool tb_twin;                                            /* trackball: twin-stick layout -- left stick Y runs, right stick X steers (tb_twin_stick) */
 static int tb_dz = 12;                                          /* trackball: the sticks' deadzone, % of full deflection (tb_stick_deadzone; 12% = PAD_DEADZONE) */
 static int tb_curve = 16;                                       /* trackball: the steering stick's response curve x10 -- 10 linear .. 30 (tb_stick_curve; 16 = the old fixed 1.6) */
+static bool tb_wheel_up;                                        /* trackball: touchpad two-finger scrolling / a mouse wheel -- false: scrolling DOWN rolls forward; true: UP (tb_wheel_up) */
 static const struct { const char *name; int frames; } tb_smooth_levels[] = { {"off (instant)", 1}, {"light", 6}, {"normal", 12}, {"heavy", 24} };
 void ss22_snd_trackball_direct(bool on);
 void ss22_snd_trackball(int dx, int dy);                         /* engine/ss22_snd.c */
 static int ntank_rows(void) { return game->tank ? game->ntank + 1 : 0; }   /* a tank game: its twin-stick rows and the Stick deadzone */
-static int tank_row0(void) { return nsw() + nffb() + ngun() + 2 + game->n; }
+static int nsteer(void) { return game->light_gun || game->trackball ? 0 : 1; }   /* "Stick steering": only a game that steers (not a gun, not the ball) */
+static int tank_row0(void) { return nsw() + nffb() + ngun() + 1 + nsteer() + game->n; }
 static int pg_n(void) { return tank_row0() + ntank_rows(); }    /* the switches, the FFB rows, the gun rows, Reset, Stick steering, the actions, the tank rows */
-static bool pg_val(int r) { return (r >= nsw() && r < nsw() + nffb() + ngun()) || r == nsw() + nffb() + ngun() + 1 || r >= tank_row0(); }
+static bool pg_val(int r) { return (r >= nsw() && r < nsw() + nffb() + ngun()) || (nsteer() && r == nsw() + nffb() + ngun() + 1) || r >= tank_row0(); }
 static void tank_save(const char *k, const char *v) { eng_cfg_set(k, v); }
 /* SS22_FAKESTICKS=F (TEST, tank games): two SDL virtual joysticks of ONE model (same GUID: two of the same arcade stick), 2 axes and 3
  * buttons each, attached at start; from frame F: both forward 120 f, left forward + right back 120 f, both back 120 f, centre 60 f,
@@ -549,7 +582,6 @@ static void pg_text(int r, char *l, size_t ln, char *v, size_t vn)
     if (r == 2 && nffb0() > 2) { snprintf(l, ln, "FFB centering"); snprintf(v, vn, "%d%%", ffb_centre); return; }
     if (r == 3 && nffb0() > 2) { snprintf(l, ln, "FFB road effects"); snprintf(v, vn, "%d%%", ffb_road); return; }
     if (game->wheel_motor && r == nffb0()) { snprintf(l, ln, "FFB keep-alive restart"); snprintf(v, vn, "%s", eng_ffb_restart() ? "ON (every second)" : "OFF (only when stopped)"); return; }
-    if (game->wheel_motor && r == nffb0() + 1) { snprintf(l, ln, "FFB log"); snprintf(v, vn, "%s", eng_ffb_log() ? "ON (once a second, to the log)" : "OFF"); return; }
     r -= nffb();
     if (r == 0 && ngun() && game->trackball) { snprintf(l, ln, "Trackball / mouse sensitivity"); snprintf(v, vn, "%d%%", tb_sens); return; }
     if (r == 1 && ngun() && game->trackball) { snprintf(l, ln, "Trackball orientation"); snprintf(v, vn, "%s", tb_direct ? "direct" : "natural (the cabinet's)"); return; }
@@ -563,6 +595,7 @@ static void pg_text(int r, char *l, size_t ln, char *v, size_t vn)
     if (r == 9 && game->trackball) { snprintf(l, ln, "Pad stick layout"); snprintf(v, vn, "%s", tb_twin ? "twin: left Y runs, right X steers" : "left stick runs and steers"); return; }
     if (r == 10 && game->trackball) { snprintf(l, ln, "Pad stick deadzone"); snprintf(v, vn, "%d%%", tb_dz); return; }
     if (r == 11 && game->trackball) { snprintf(l, ln, "Pad steering curve"); if (tb_curve == 10) snprintf(v, vn, "linear"); else snprintf(v, vn, "%d.%d (finer near centre)", tb_curve / 10, tb_curve % 10); return; }
+    if (r == 12 && game->trackball) { snprintf(l, ln, "Touchpad / wheel: forward is"); snprintf(v, vn, "%s", tb_wheel_up ? "scrolling UP" : "scrolling DOWN"); return; }
     if (r == 4 && game->light_gun) { snprintf(l, ln, "Pad rumble on recoil"); snprintf(v, vn, "%s", pad_rumble ? "ON" : "OFF"); return; }
     if (r == 0 && !game->light_gun && game->kick_wheel) { snprintf(l, ln, "Pad rumble on recoil"); snprintf(v, vn, "%s", pad_rumble ? "ON" : "OFF"); return; }
     if (r == 0 && game->light_gun) { snprintf(l, ln, "Gun shot flash"); snprintf(v, vn, "%s", gun_flash_on ? "ON (as the arcade)" : "OFF (no white flash)"); return; }
@@ -571,8 +604,8 @@ static void pg_text(int r, char *l, size_t ln, char *v, size_t vn)
     if (r == 3 && game->light_gun) { snprintf(l, ln, "Pad aim deadzone"); snprintf(v, vn, "%d%%", aim_dz); return; }
     r -= ngun();
     if (r == 0) { snprintf(l, ln, "Reset to defaults (keys, buttons, axes)"); return; }
-    if (r == 1) { snprintf(l, ln, "Stick steering"); snprintf(v, vn, "%s", steer_levels[steer_level].name); return; }
-    r -= 2;
+    if (r == 1 && nsteer()) { snprintf(l, ln, "Stick steering"); snprintf(v, vn, "%s", steer_levels[steer_level].name); return; }
+    r -= 1 + nsteer();
     const int a = r;
     snprintf(l, ln, "%s", game->actions[a].label);
     if (rebinding == a) {
@@ -583,7 +616,8 @@ static void pg_text(int r, char *l, size_t ln, char *v, size_t vn)
     snprintf(v, vn, "%s", key && *key ? key : "(none)");
     if (joy_button[a] >= 0) {
         size_t used = strlen(v);
-        snprintf(v + used, vn - used, " / button %d", joy_button[a]);
+        if (joy_button[a] >= PAD_TRIG) snprintf(v + used, vn - used, " / %s", joy_button[a] == PAD_TRIG ? "left trigger" : "right trigger");
+        else snprintf(v + used, vn - used, " / button %d", joy_button[a]);
     }
     const int kind = action_axis(a);
     if (kind >= 0 && axis_bind(kind)->axis >= 0) {
@@ -602,7 +636,7 @@ static void pg_change(int r, int dir)
         else { int v = ts_deadzone() + (dir ? dir : 1) * 5; if (!dir && v > 50) v = 0; ts_set_deadzone(v); }   /* Enter cycles */
         return;
     }
-    if (r == nsw() + nffb() + ngun() + 1) {              /* Stick steering: left/right step through the levels, a press moves on (wrapping) */
+    if (nsteer() && r == nsw() + nffb() + ngun() + 1) {  /* Stick steering: left/right step through the levels, a press moves on (wrapping) */
         const int lv = dir < 0 ? steer_level - 1 : dir > 0 ? steer_level + 1 : (steer_level + 1) % STEER_N;
         if (lv >= 0 && lv < STEER_N) steer_set(lv);
         return;
@@ -628,8 +662,6 @@ static void pg_change(int r, int dir)
         return;
     }
     if (game->wheel_motor && r == nffb0()) { eng_ffb_set_restart(!eng_ffb_restart()); eng_cfg_set_int("ffb_restart", eng_ffb_restart()); return; }
-    if (game->wheel_motor && r == nffb0() + 1) { eng_ffb_set_log(!eng_ffb_log()); eng_cfg_set_int("ffb_log", eng_ffb_log());
-        fprintf(stderr, "[FFB] log %s\n", eng_ffb_log() ? "ON" : "OFF"); return; }
     r -= nffb();
     if (r == 0 && ngun() && game->trackball) {                    /* 25..400 %: Left/Right 25% steps, Enter cycles */
         tb_sens = dir ? tb_sens + 25 * dir : (tb_sens >= 400 ? 25 : tb_sens + 25);
@@ -673,6 +705,7 @@ static void pg_change(int r, int dir)
         eng_cfg_set_int("tb_stick_curve", tb_curve);
         return;
     }
+    if (r == 12 && game->trackball) { tb_wheel_up = !tb_wheel_up; eng_cfg_set_int("tb_wheel_up", tb_wheel_up); return; }
     if (r == 2 && game->light_gun) {                               /* 25..300 %: Left/Right 25% steps, Enter cycles */
         aim_speed = dir ? aim_speed + 25 * dir : (aim_speed >= 300 ? 25 : aim_speed + 25);
         if (aim_speed < 25) aim_speed = 25;
@@ -714,7 +747,7 @@ static void pg_change(int r, int dir)
         if (game->tank) for (int c = 0; c < game->ntank; c++) ts_change(c, +1);
         return;
     }
-    r -= 2;
+    r -= 1 + nsteer();
     rebinding = r;
     axis_capture_begin(action_axis(r));
     eng_ui_capture_input(capture_input, NULL);
@@ -729,6 +762,7 @@ static void pg_notes(void (*line)(const char *fmt, ...))
     if (game->kick_wheel) line("Force feedback: the cannon's kick in the handle, on the bound wheel (and pad rumble).");
     if (game->tank) line("Two sticks (the rows at the bottom): both forward / back drive, one against the other turns. Two joysticks of one model are told apart (#2).");
     if (game->trackball) line("Trackball: the mouse (a USB trackball is a mouse) is captured while playing. Keys: arrows / WASD. Pad: left stick (or D-pad; twin-stick: left Y runs, right X steers), RT rolls forward, LT back.");
+    if (game->trackball) line("Touchpad: scroll with two fingers (down = forward, left / right = steer) -- the last row flips it.");
     for (int i = 1; i < 3; i++) if (game->notes[i]) line("%s", game->notes[i]);
 }
 
@@ -758,6 +792,7 @@ void ss22_input_init(const ss22_input_game *g)
         tb_minv_x = eng_cfg_int("tb_mouse_invert_x", old_x) != 0;
         tb_minv_y = eng_cfg_int("tb_mouse_invert_y", old_y) != 0;
         tb_swap = eng_cfg_int("tb_swap_stick", 0) != 0;
+        tb_wheel_up = eng_cfg_int("tb_wheel_up", 0) != 0;
         tb_twin = eng_cfg_int("tb_twin_stick", 0) != 0;
         tb_dz = eng_cfg_int("tb_stick_deadzone", 12);
         if (tb_dz < 0 || tb_dz > 40) tb_dz = 12;
@@ -805,10 +840,23 @@ void ss22_input_init(const ss22_input_game *g)
 }
 
 static int tb_mx, tb_my;                                         /* trackball: mouse motion since the last frame (relative mode) */
+/* a scroll step (one wheel notch; a touchpad sends fractions of one) in ball counts at 100 % sensitivity: a quick two-finger stroke is a good
+ * roll. Scrolling arrives in bursts, and the board takes at most ~TB_FULL counts a frame, so it waits here and goes in at up to that (tb_update) */
+#define TB_WHEEL 150.0
+static double tb_wf, tb_ws;                                      /* scrolling still to roll: forward (+ = away from you), sideways (+ = right) */
 void ss22_input_event(const SDL_Event *e)
 {
     if (game && game->tank) ts_event(e);
     if (e->type == SDL_MOUSEMOTION && game && game->trackball && SDL_GetRelativeMouseMode()) { tb_mx += e->motion.xrel; tb_my += e->motion.yrel; }
+    if (e->type == SDL_MOUSEWHEEL && game && game->trackball && SDL_GetRelativeMouseMode()) {   /* a touchpad's two-finger scroll / a mouse wheel */
+        double x = e->wheel.preciseX, y = e->wheel.preciseY;    /* (SDL: y > 0 = scrolling up, x > 0 = right; FLIPPED = the system's "natural" scrolling) */
+        if (e->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) { x = -x; y = -y; }
+        tb_wf += (tb_wheel_up ? y : -y) * TB_WHEEL;              /* forward, in ball counts */
+        tb_ws += x * TB_WHEEL;
+        const double cap = 152.0 * 12;                          /* a long fling: at most ~a fifth of a second of full speed waiting */
+        if (tb_wf > cap) tb_wf = cap; if (tb_wf < -cap) tb_wf = -cap;
+        if (tb_ws > cap) tb_ws = cap; if (tb_ws < -cap) tb_ws = -cap;
+    }
     if (e->type == SDL_JOYDEVICEADDED || e->type == SDL_CONTROLLERDEVICEADDED) {
         pad_scan(); raw_scan();
     } else if (e->type == SDL_JOYDEVICEREMOVED || e->type == SDL_CONTROLLERDEVICEREMOVED) {
@@ -832,11 +880,13 @@ static bool capture_input(const SDL_Event *e, void *u)
         return true;
     }
     if (e->type == SDL_JOYBUTTONUP) { bool *h = cap_held_slot(e->jbutton.which, e->jbutton.button); if (h) *h = false; return false; }
-    if (e->type == SDL_JOYBUTTONDOWN) {
-        SDL_Joystick *js = button_device(e->jbutton.which);
+    const bool trig = e->type == SDL_CONTROLLERAXISMOTION && e->caxis.value > 20000 &&
+        (e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
+    if (e->type == SDL_JOYBUTTONDOWN || trig) {
+        SDL_Joystick *js = button_device(trig ? e->caxis.which : e->jbutton.which);
         if (!js) return false;
-        { bool *h = cap_held_slot(e->jbutton.which, e->jbutton.button); if (h && *h) return false; }   /* the press that opened the row */
-        joy_button[rebinding] = e->jbutton.button;
+        if (!trig) { bool *h = cap_held_slot(e->jbutton.which, e->jbutton.button); if (h && *h) return false; }   /* the press that opened the row */
+        joy_button[rebinding] = trig ? PAD_TRIG + (e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) : e->jbutton.button;
         SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(js), joy_button_guid[rebinding],
                                  sizeof joy_button_guid[rebinding]);
         char key[64];
@@ -912,6 +962,8 @@ static bool pad_trigger_rebound(SDL_GameController *c, SDL_GameControllerAxis ax
     if (axis_bind(kind == SS22_AX_PEDAL1 ? 1 : 2)->axis >= 0) return true;          /* ... or on a raw axis */
     const SDL_GameControllerButtonBind bb = SDL_GameControllerGetBindForAxis(c, ax);
     char g[40]; SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(c)), g, sizeof g);
+    for (int a = 0; a < game->n; a++)                                              /* the trigger itself bound to an action */
+        if (joy_button[a] == PAD_TRIG + (ax == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) && (!joy_button_guid[a][0] || !strcmp(joy_button_guid[a], g))) return true;
     if (bb.bindType == SDL_CONTROLLER_BINDTYPE_BUTTON) {
         for (int a = 0; a < game->n; a++)
             if (joy_button[a] == bb.value.button && (!joy_button_guid[a][0] || !strcmp(joy_button_guid[a], g))) return true;
@@ -1065,6 +1117,14 @@ static void tb_update(const uint8_t *k)
     tb_mx = tb_my = 0;
     if (tb_minv_x) mdx = -mdx;
     if (tb_minv_y) mdy = -mdy;
+    if (!SDL_GetRelativeMouseMode()) tb_wf = tb_ws = 0;
+    {   /* the touchpad / wheel scrolling, at most a full roll a frame */
+        const double f = tb_wf > TB_FULL ? TB_FULL : tb_wf < -TB_FULL ? -TB_FULL : tb_wf;
+        const double s = tb_ws > TB_FULL ? TB_FULL : tb_ws < -TB_FULL ? -TB_FULL : tb_ws;
+        tb_wf -= f; tb_ws -= s;
+        mdy -= f * tb_sens / 100.0;                              /* (mdy: + = towards you, as the mouse's y; the scrolling is mouse movement) */
+        mdx += s * tb_sens / 100.0;
+    }
     /* keys / pad: FORWARD (+ = rolled away from you) and SIDEWAYS (+ = right), each -1..1. Digital inputs (keys, D-pad) ramp like a spinning ball
      * (Keys / pad smoothing), so a tap is a small correction; the stick is analog, its sideways axis on a curve for fine steering near the centre.
      * The sideways roll is scaled by Keys / pad steering: at full trackball speed a sideways press spun the ball as hard as running forward. */
@@ -1162,15 +1222,14 @@ void ss22_input_update(void)
             stick_wheel = (unsigned)((int)centre + (lx < 0 ? -1 : 1) * (int)(t * game->wheel_key_span));
             stick = true;
         }
-        const int rt = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
-        const int lt = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT);
-        if (rt > 2000 && !pad_trigger_rebound(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT, SS22_AX_PEDAL1)) {
-            const unsigned v = (unsigned)((double)rt * game->pedal_max[0] / 32767);
-            if (v > pedal[0]) pedal[0] = v;
-        }
-        if (lt > 2000 && !pad_trigger_rebound(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT, SS22_AX_PEDAL2)) {
-            const unsigned v = (unsigned)((double)lt * game->pedal_max[1] / 32767);
-            if (v > pedal[1]) pedal[1] = v;
+        for (int k = 0; k < 2; k++) {                      /* RT gas, LT brake -- or the trigger bound to the pedal, still analogue */
+            const int kind = k ? SS22_AX_PEDAL2 : SS22_AX_PEDAL1, bound = pedal_trigger(kind);
+            SDL_GameControllerAxis ax = k ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+            if (bound >= 0) ax = bound == PAD_TRIG ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+            else if (pad_trigger_rebound(c, ax, kind)) continue;
+            const int t = SDL_GameControllerGetAxis(c, ax);
+            const unsigned v = t > 2000 ? (unsigned)((double)t * game->pedal_max[k] / 32767) : 0;
+            if (v > pedal[k]) pedal[k] = v;
         }
         for (int a = 0; a < game->n; a++) {
             const ss22_action *ac = &game->actions[a];

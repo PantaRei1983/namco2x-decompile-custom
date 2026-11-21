@@ -3185,12 +3185,19 @@ void scene_node_render(int *param_1);
  *
  * The transpile indexed the node as `int *` into the 8-byte _W[] slots and
  * read the ROM streams through host pointers; both jump tables were lost. */
+/* THE CHAIN HAS NO NODE LIMIT IN THE ROM: anim_update, the interpolation, the draw loop and the cast walk all run to the -1 terminator.
+ * The rewrite stopped every walk at 64 nodes, and the story intermissions go past that -- after DAY 2 the second animation set is 68
+ * nodes (the camera group, the old man, the woman, the bike, then the boy), so the boy's last three nodes, his head, face and hair, were
+ * neither animated nor drawn: the "headless" cast of the intermissions. The cap is only a backstop for a chain without a terminator. */
+#ifndef ANIM_CHAIN_MAX
+#define ANIM_CHAIN_MAX 256
+#endif
 void anim_update(intptr_t a3, int t)
 {
   int16_t d5 = (int16_t)t;
   int guard = 0;
   if (a3 < 0) return;
-  while (a3 + 0x80 <= WORK_RAM_SIZE && (int32_t)W[a3] >= 0 && guard++ < 64) {
+  while (a3 + 0x80 <= WORK_RAM_SIZE && (int32_t)W[a3] >= 0 && guard++ < ANIM_CHAIN_MAX) {
     int32_t d6 = W_HI16(a3 + 8);
     uint32_t seq = (uint32_t)W[a3 + 0x7C];
     int k;
@@ -3312,7 +3319,7 @@ void scene_interpolation_evaluate(int *param_1, int param_2)
   intptr_t a2 = anim_w_off(param_1);
   int guard = 0;
   if (a2 < 0) return;
-  while (a2 + 0x80 <= WORK_RAM_SIZE && (int32_t)W[a2] >= 0 && guard++ < 64) {
+  while (a2 + 0x80 <= WORK_RAM_SIZE && (int32_t)W[a2] >= 0 && guard++ < ANIM_CHAIN_MAX) {
     int32_t d2 = W_HI16(a2 + 8);
     int k;
     for (k = 0; k < 6; k++) {
@@ -3463,12 +3470,23 @@ void sound_deferred_tick(void)
  * frame is a pushed WORD (`move.w $c(a7)`); every caller in the transpile had
  * lost it, and the node was passed as the bare offset 0xab04 and then
  * dereferenced as a host address. */
+long g_nodedump = -1;     /* PROPCYCL_NODEDUMP=<frame>: list the animation chain's nodes at that frame (main.c reads it) */
 void anim_update_and_render(intptr_t nb, int t)
 {
   int guard = 0;
   if (nb < 0) return;
   anim_update(nb, t);
-  while (nb + 0x80 <= WORK_RAM_SIZE && (int32_t)W[nb] >= 0 && guard++ < 64) {
+  { extern long g_nodedump; const long df = g_nodedump;
+    if (df >= 0 && (long)g_sys.frame_count == df) {
+      intptr_t q = nb; int i = 0;
+      while (q + 0x80 <= WORK_RAM_SIZE && i < 80) {
+        fprintf(stderr, "[NODE] %2d @%05lX model %6d par %3d len %4d flags %04X slot %3ld seq %06lX  pos %d %d %d  rot %d %d %d\n", i, (long)q,
+                (int)(int32_t)W[q], (int)W_HI16(q + 4), (int)W_LO16(q + 4), (unsigned)(W_HI16(q + 8) & 0xFFFF), (long)W[q + 0x78], (long)(uint32_t)W[q + 0x7C],
+                (int)W[q + 0x24], (int)W[q + 0x28], (int)W[q + 0x2C], (int)W[q + 0x30], (int)W[q + 0x34], (int)W[q + 0x38]);
+        if ((int32_t)W[q] < 0) break;
+        q += 0x80; i++;
+      } } }
+  while (nb + 0x80 <= WORK_RAM_SIZE && (int32_t)W[nb] >= 0 && guard++ < ANIM_CHAIN_MAX) {
     scene_node_render((int *)&_W[nb]);
     nb += 0x80;
   }

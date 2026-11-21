@@ -7,12 +7,12 @@
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 if [ ! -f extracted/cszo4verb.ic4 ]; then echo "launch.sh: put the crszone ROM files in extracted/ first" >&2; exit 1; fi
 if [ ! -f boot.bin ] || [ ! -f sub.bin ] || [ ! -f io.bin ]; then python3 tools/make_prog.py extracted || exit 1; fi
-if [ ! -x build/crszone ] || [ -n "$(find src include gen ../tc2/src ../tc2/include ../tc2/tools/h8 CMakeLists.txt ../tc2/host.cmake -newer build/crszone -print -quit 2>/dev/null)" ]; then
+if [ ! -x build/crszone ] || [ -n "$(find src include gen ../tc2/src ../tc2/include ../s23/tools/h8 CMakeLists.txt ../s23/host.cmake -newer build/crszone -print -quit 2>/dev/null)" ]; then
     mkdir -p build && (cd build && cmake .. >/dev/null && make -j"${JOBS:-6}" crszone) || exit 1
 fi
 if [ "$1" = "--headless" ]; then
     n=${2:-1800}; mkdir -p work/run/shots
-    TC2_SHOTS=work/run/shots:300 TC2_WAV=work/run/crszone.wav exec build/crszone reset $((n * 3400000))
+    S23_SHOTS=work/run/shots:300 S23_WAV=work/run/crszone.wav exec build/crszone reset $((n * 3400000))
 fi
 [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ] && [ -S /run/user/$(id -u)/wayland-0 ] && export WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u)
 exec build/crszone --window "$@"

@@ -31,11 +31,16 @@ typedef struct {
     uint32_t        vics_ctl[0x20];          /* VICS control, host-order words */
     const uint16_t *spotram;                 /* the spot RAM: 0x800 host-order words (text_hw.c) */
     bool            spot_enabled;            /* (spot enable & 1) && (chipselect & 0xC000) */
+    int             hold_frames;             /* !walk: draw the last list again for up to this many updates in a row (0 = no 3D at once) */
+    void (*pdp_in_list)(int offs);           /* a 0xFFF8 record runs a PDP command block (engine/slave_list.h); NULL = it ends the list */
 } ss22_regs;
 
 /* WIDESCREEN: the game's HUD description (engine/hud_edges.h); NULL or no marks = the HUD stays where the game put it. The pointer must
  * outlive the frames drawn. A board host calls it once; a caller that never does (Prop Cycle links this file) gets no HUD move. */
 void ss22_gl_set_hud(const eng_hud_cfg *h);
+void ss22_gl_set_edge_fill(const int (*ranges)[2], int n);       /* widescreen: edge-anchored art continued, mirrored, to the picture's sides (NULL, 0: none) */
+void ss22_gl_set_soft_effects(const int (*ranges)[2], int n);   /* glow sprites that are also softened (NULL, 0: none) */
+void ss22_gl_set_effects(const int (*ranges)[2], int n);   /* the game's dust / mud / spray sprite tiles (NULL, 0: none) */
 void ss22_gl_set_gun_flash(bool on);      /* false: hide a light-gun game's shot flash (an instant full-white screen fade, <= 2 frames) */
 
 /* Once per screen update: latch the state, walk the display list, sort, collect the sprites. The walk decides what the

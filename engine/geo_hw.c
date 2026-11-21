@@ -41,12 +41,13 @@
 #include <stdio.h>
 #include "eng.h"
 #include "geo_hw.h"
+int g_objlog_gate = 1;                             /* ENG_OBJLOG only while this is set (a host may limit it to some frames) */
 int g_objlog_on;                                   /* ENG_OBJLOG: set by slave_list.c while it logs an object; here because every game links geo_hw.c (a weak extern fails to link on Windows) */
 
 /* ---- point data ----------------------------------------------------------
  * The board's point ROM (sign-extended 24-bit at load time, which matches the
  * oracle's pt.read()) and, on System 22, point RAM past it (eng.h). */
-static inline int32_t pt_read(uint32_t addr) { return eng_point_read(addr); }
+static inline int32_t pt_read(uint32_t addr) { return eng_point_read(addr & 0x00ffffffu); }   /* MAME point_read: 24-bit addressing */
 
 /* Truncating signed division. C already truncates toward zero, which is
  * what the oracle's sdiv() reimplements because Python's // floors. */
@@ -127,6 +128,12 @@ static geo_view g_view;
 #define LIT_MAX 512
 static int32_t g_lit[LIT_MAX];
 static int     g_lit_n, g_lit_idx;
+/* VERTEX LIGHTING, as MAME's current namcos22_v.cpp (blit_quads packet 0x10, after 0.289): the packet says flat or Gouraud, the mesh
+ * width and whether the quads are triangles, and its own diffuse intensity (word 3 x the camera's power). The quad index advances
+ * once per QUAD; a Gouraud quad takes its four normals from the mesh grid (index, index + width, index + width + 1, index + 1).
+ * Ridge Racer's waving flag, the rotating sign before the second tunnel, Prop Cycle's score / time, Time Crisis' knives. */
+static int     g_lit_gouraud, g_lit_width = 2, g_lit_tri;
+static int32_t g_lit_intensity;
 
 static void register_normals(uint32_t addr)
 {
@@ -149,7 +156,7 @@ static void register_normals(uint32_t addr)
         if (dot < 0) dot = 0;
         if (g_lit_n < LIT_MAX)
             g_lit[g_lit_n++] = g_view.ambient +
-                               (int32_t)(((int64_t)g_view.power * dot) >> 30);
+                               (int32_t)(((int64_t)g_lit_intensity * dot) >> 30);
     }
 }
 
@@ -157,6 +164,7 @@ static void register_normals(uint32_t addr)
  * the screen cannot tell them apart; these can. */
 geo_stats g_geo_stats;
 unsigned  g_eng_frame;
+int g_geo_wide_fog;   /* the picture is wider than 4:3: the System 22 depth fog reaches past the frame's sides (quad_fixed, cz_value) */
 int       g_bbox_cur = -1;  /* the object code being walked (pickers, probes) */   /* the game's frame count, for diagnostics only */
 
 int g_zord_ap = 0, g_zord_os = 0;   /* last view's priority fields, for PROPCYCL_ZORD */
@@ -277,14 +285,24 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
     int briv[4];
     for (int i = 0; i < 4; i++) {
         if (g_lit_n > 0) {
-            int idx = g_lit_idx++;
-            if (g_lit_n > 4) idx >>= 2;
-            briv[i] = g_lit[((idx % g_lit_n) + g_lit_n) % g_lit_n];
+            int k = g_lit_idx;                                   /* flat: one normal per quad */
+            if (g_lit_gouraud) {
+                static const int ni_off[4] = { 0, 0, 1, 1 };     /* + width for vertices 1 and 2 */
+                int idx = g_lit_tri ? (g_lit_idx >> 1) : g_lit_idx;
+                idx = idx / (g_lit_width > 1 ? g_lit_width - 1 : 1) + idx;
+                k = idx + ni_off[i] + ((i == 1 || i == 2) ? g_lit_width : 0);
+            }
+            if (k < 0) k = 0;
+            if (k >= g_lit_n) k = g_lit_n - 1;
+            briv[i] = g_lit[k];
         } else if (packetformat & 0x40) {
             briv[i] = (int)((uv_raw[i] >> 16) & 0xff);   /* gouraud */
         } else {
             briv[i] = (int)((color >> 16) & 0xff);       /* flat */
         }
+    }
+    if (g_lit_n > 0 && g_lit_gouraud && g_lit_tri) {      /* triangles: a quad with two vertices the same */
+        if (g_lit_idx & 1) briv[0] = briv[1]; else briv[2] = briv[3];
     }
     q.cmode   = (uv_raw[0] >> 12) & 0xf;   /* oracle: same fields */
     q.texbank = (uv_raw[1] >> 12) & 0xf;
@@ -304,7 +322,25 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
     }
     {   /* cz_value = min(0x1fffff, zmax) >> 8, computed from the PRE-clamp
          * zmax (the oracle uses the raw zmax, not the zsort-clamped one). */
-        int32_t zc = zmax; if (zc > 0x1fffff) zc = 0x1fffff;
+        int32_t zc = zmax;
+        if (g_geo_wide_fog) {
+            /* WIDESCREEN: the fog level is the quad's depth along the view axis, so a quad far out to the side -- seen only in a wider
+             * picture -- has a smaller depth than one ahead at the same distance, and less fog. Ridge Racer's sunset and dawn are fog
+             * (red, then white) on the sky dome: in 16:9 the panels past the 4:3 frame stayed blue. A vertex outside the 4:3 frame
+             * counts as far as the frame's edge would see it (depth x its slant / the edge's slant): inside the frame nothing changes. */
+            const double f = (double)mant / (double)(1u << (shift > 30 ? 30 : shift < 0 ? 0 : shift));
+            int32_t zw = 0;
+            for (int i = 0; i < 4; i++) {
+                if (vz[i] <= 0 || f <= 0.0) continue;
+                const double sxo = (double)vx[i] * f / (double)vz[i];
+                const double edge = sxo < 0.0 ? (double)cx : (double)(640 - cx);
+                double z = (double)vz[i];
+                if (edge > 0.0 && fabs(sxo) > edge) z *= sqrt(f * f + sxo * sxo) / sqrt(f * f + edge * edge);
+                if (z > (double)zw) zw = z > 2.0e9 ? 2000000000 : (int32_t)z;
+            }
+            if (zw > zc) zc = zw;
+        }
+        if (zc > 0x1fffff) zc = 0x1fffff;
         q.cz_value = zc >> 8;
     }
 
@@ -479,6 +515,12 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
             }
         }
     }
+    /* THE DRAWN POLYGON is dv where there is one (the guard-band comment above): it was computed and never used, so a near-cut
+     * polygon was drawn from rv's independently clamped corners -- Aqua Jet's water under the camera burst into blue spikes.
+     * ENG_DRAWDV=0: rv, as before. */
+    { static int use_dv = -1; if (use_dv < 0) { const char *e = getenv("ENG_DRAWDV"); use_dv = !(e && *e == '0'); }
+      if (use_dv && q.ndv > 0) { memcpy(q.rv, q.dv, sizeof q.rv); q.nrv = q.ndv; }
+      else if (use_dv && q.ndv < 0) q.nrv = 0; }
     if (q.behind) g_geo_stats.part_clip++;
     g_geo_stats.emitted++;
     if (g_geo_stats.zmin_seen == 0 || zmin < g_geo_stats.zmin_seen)
@@ -489,7 +531,7 @@ static void quad_fixed(int32_t color, uint32_t addr, int32_t polyshift,
           int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30);
           for (int k = 0; k < q.nrv; k++) { const int x = q.rv[k].sx16 / 16, y = q.rv[k].sy16 / 16;
               if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-          fprintf(stderr, "[OBJ]   quad zsort %06X color %06X nrv %d  x %d..%d y %d..%d\n", (unsigned)q.zsort, (unsigned)q.color, q.nrv, x0, x1, y0, y1);
+          fprintf(stderr, "[OBJ]   quad zsort %06X color %06X cmode %X nrv %d  x %d..%d y %d..%d\n", (unsigned)q.zsort, (unsigned)q.color, (unsigned)q.cmode, q.nrv, x0, x1, y0, y1);
       } }
     cb(&q, user);
 }
@@ -505,11 +547,18 @@ static void blit_quads(uint32_t addr, uint32_t length,
         if (packetlength == 0x17) {
             quad_fixed(pt_read(addr + 2), addr + 3, 0,
                        pt_read(addr + 1), packetformat, cb, user);
+            g_lit_idx++;
         } else if (packetlength == 0x18) {
             quad_fixed(pt_read(addr + 2), addr + 4, pt_read(addr + 3),
                        pt_read(addr + 1), packetformat, cb, user);
+            g_lit_idx++;
         } else if (packetlength == 0x10) {
             g_lit_n = 0; g_lit_idx = 0;
+            const int32_t w1 = pt_read(addr + 1);
+            g_lit_gouraud = (w1 & 3) > 0;
+            g_lit_width = ((w1 >> 16) & 0xf) + 1;
+            g_lit_tri = (w1 >> 20) & 1;
+            g_lit_intensity = (int32_t)(((int64_t)(pt_read(addr + 3) & 0xffff) * g_view.power) >> 15);
             register_normals(addr + 4);
         } else if (packetlength == 0x0d) {
             register_normals(addr + 1);
@@ -525,22 +574,21 @@ static void blit_quads(uint32_t addr, uint32_t length,
 /* ---- object walk (GeoFixed.blit_polyobject_fixed) ---------------------- */
 void geo_hw_object(int32_t code, geo_quad_cb cb, void *user)
 {
-    /* Code 0x5 is a POINT-RAM object (System 22: the list starts at point RAM
-     * 0xF00000, and a negative entry other than -1 is an address with its top
-     * bits set). Only boards that supply point RAM have them. */
-    const int pointram = (code == 0x5);
-    if (pointram && !g_eng_pointram) return;
+    /* MAME blit_polyobject: the list address is the point word at `code` for every code -- code 0x5's points into point RAM (System 22
+     * 0xF00000, Super 22 0xF80000: Alpine Racer 2's spinning title, written there by a PDP block in the display list); a negative
+     * entry other than -1 (the end) is an address with its top bits set. Point addresses are 24 bits. */
+    if (code == 0x5 && !g_eng_pointram) return;
     g_lit_n = 0; g_lit_idx = 0;               /* lit_fx is per object */
-    uint32_t list_addr = pointram ? 0xf00000u : (uint32_t)pt_read(code);
+    uint32_t list_addr = (uint32_t)pt_read((uint32_t)code) & 0x00ffffffu;
     for (int guard = 0; guard < 4096; guard++) {
-        int32_t object_addr = pt_read(list_addr); list_addr += 1;
-        if (object_addr < 0) {                /* -1 terminator (non-pointram) */
-            if (object_addr == -1 || !pointram) break;
+        int32_t object_addr = pt_read(list_addr & 0x00ffffffu); list_addr += 1;
+        if (object_addr < 0) {
+            if (object_addr == -1) break;     /* 0xFFFFFF: the end of the list */
             object_addr &= 0x00ffffff;
         }
-        uint32_t chunklength = (uint32_t)pt_read(object_addr);
+        uint32_t chunklength = (uint32_t)pt_read((uint32_t)object_addr & 0x00ffffffu);
         object_addr += 1;
         if (chunklength > 0x100) { g_geo_stats.rej_chunk++; break; }
-        blit_quads((uint32_t)object_addr, chunklength, cb, user);
+        blit_quads((uint32_t)object_addr & 0x00ffffffu, chunklength, cb, user);
     }
 }

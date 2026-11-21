@@ -1,0 +1,35 @@
+LAN TEST - TRYING THE LINK ON SEVERAL REAL PCS
+==============================================
+
+What it does: every PC runs the same game as its own cabinet, they find each other on the network
+(Find others: Automatic), you play, and when the games are closed every PC sends its logs to one
+folder on the main PC. Claude (or you) then reads them all in one place.
+Each game's own link settings are put back as they were when the test ends.
+
+ONCE, ON THE MAIN PC
+1. Double-click  "1 - Main PC - share the results folder.bat"  and let Windows run it as administrator.
+   It shows the folder's network name, e.g.  \MAINPC\N22LANTEST  - note it down.
+
+EVERY TEST, ON EVERY PC (the main PC too)
+2. Double-click  "2 - Every PC - run a test.bat"  and answer:
+     Game                  the same game on every PC
+     How many cabinets     the same number on every PC
+     This PC's number      1, 2, 3 ... a different one on each PC
+                           (Time Crisis II: 1 = left / red, 2 = right / blue)
+     Results folder        the main PC's  \MAINPC\N22LANTEST  (on the main PC itself: just press Enter)
+   The answers are remembered: next time just press Enter.
+3. Start the game on all the PCs within a minute of each other. They wait for each other, then begin.
+4. Play. If something looks wrong, press F9 in the game: it saves a capture that goes with the logs.
+5. Close the game on every PC (Esc > Exit). Each PC copies its logs and says where they went.
+
+AFTERWARDS, ON THE MAIN PC
+6. "3 - Main PC - check the results.bat" lists every test: LINKED (green), linked with warnings
+   (yellow) or NOT LINKED (red). Or ask Claude to read the results folder.
+
+IF IT GOES WRONG
+ - "The network is set to PUBLIC": Windows then blocks the link. Settings > Network & internet >
+   your connection > Private network.
+ - The first time a game starts, Windows Firewall asks: tick Private networks and Allow.
+ - Cannot reach \MAINPC\N22LANTEST: open it once in File Explorer on that PC; Windows may ask for
+   the main PC's user name and password. If it still fails, the logs are kept on that PC in
+   "LAN test\results" - copy them to the main PC with a USB stick.

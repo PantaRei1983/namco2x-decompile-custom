@@ -1,0 +1,216 @@
+NAMCO 22 ARCADE LAN
+===================
+
+Namco's 1990s arcade games (System 22 and System 23), rebuilt to run on a PC, for real arcade
+cabinets: one PC in each cabinet in place of the original boards, the cabinets linked over a wired network the way the
+boards were linked by their cable. Nothing here uses the internet.
+
+The games are the work of the namco22-decompile project (spacestate1); this package adds the
+cabinet link, the launcher and the cabinet set-up. You need your own copy of the games.
+
+
+WHAT IS IN THIS FOLDER
+----------------------
+  Namco 22 Arcade LAN.exe   THE LAUNCHER: start everything from here
+  READ ME.txt               this file
+  games\                    one folder per game: its program, its roms\ and its settings
+     Ace Driver\            up to 8 linked cabinets (linked play new in this package)
+     Ace Driver Victory Lap\ up to 4 linked cabinets (new in this package)
+     Alpine Racer\          one cabinet (new in this package)
+     Alpine Racer 2\        2 linked cabinets race head to head (new in this package)
+     Alpine Surfer\         one cabinet (new in this package)
+     Air Combat 22\         one cabinet (new in this package)
+     Aqua Jet\              one cabinet (new in this package)
+     Armadillo Racing\      up to 4 linked cabinets (linked play new in this package)
+     Crisis Zone\           one cabinet (the original project's own program)
+     Cyber Commando\        2 linked cabinets battle each other (linked play new in this package)
+     Cyber Cycles\          up to 4 linked cabinets (new in this package)
+     Cyber Sled\            2 linked cabinets, left and right (linked play new in this package)
+     Dirt Dash\             one cabinet (the original project's own program)
+     Gunmen Wars\           up to 3 linked cabinets, with the NamCam photo (new in this package)
+     Prop Cycle\            one cabinet (the original project's own program)
+     Rave Racer\            up to 4 linked cabinets
+     Time Crisis\           one cabinet (the original project's own program)
+     Time Crisis II\        the twin cabinet: left and right sides linked
+     Tokyo Wars\            up to 4 linked cabinets
+  advanced\                 a .bat file for every way to play in the launcher (for shortcuts and scripts)
+
+Each game's folder keeps everything of that game: link.cfg (its network settings), its test-menu
+settings and records (*_eeprom*.nv), its log (*.log) and its last session (*_last.rec).
+
+
+1. THE GAME FILES (once)
+------------------------
+Put your MAME ROM zips in each game's roms folder. Do not unzip them; the game unpacks them
+itself the first time it starts.
+   games\Ace Driver\roms        acedrive.zip  and  namcoc74.zip
+   games\Alpine Racer\roms      alpinerjc.zip
+   games\Alpine Racer 2\roms    alpinr2a.zip  (and alpinr2b.zip, if your set keeps the shared files there)
+   games\Alpine Surfer\roms     alpines.zip
+   games\Air Combat 22\roms     airco22b.zip
+   games\Aqua Jet\roms          aquajet.zip
+   games\Armadillo Racing\roms  adillor.zip
+   games\Crisis Zone\roms       crszone.zip
+   games\Cyber Commando\roms    cybrcomm.zip  and  namcoc74.zip
+   games\Cyber Cycles\roms      cybrcycc.zip
+   games\Cyber Sled\roms        cybsled.zip  and  namcoc67.zip  and  namcoc68.zip
+   games\Dirt Dash\roms         dirtdash.zip
+   games\Gunmen Wars\roms       gunwars.zip  and  namco_asca5.zip
+   games\Prop Cycle\roms        propcycl.zip
+   games\Rave Racer\roms        raverace.zip  and  namcoc74.zip
+   games\Time Crisis\roms       timecris.zip
+   games\Time Crisis II\roms    timecrs2.zip
+   games\Tokyo Wars\roms        tokyowar.zip
+
+
+2. THE LAUNCHER
+---------------
+Double-click "Namco 22 Arcade LAN.exe". The games are on the left, the chosen game's picture and
+the ways to play it on the right.
+   Arrow keys / D-pad / stick     choose          Enter / A      start
+   Esc / B                        back            S / Y          settings
+or use the mouse. When a game starts the launcher steps aside; when the game is closed it comes
+back. In the games: Esc opens the game's own menu (display, sound, controls, Network);
+File > Exit or Alt+F4 closes the game.
+
+The ways to play:
+   Full screen                           the normal choice for a cabinet: it plays on its own, or
+                                         joins the other cabinets when Link play is On
+   Window                                the same in a window, for setting up and testing
+   Test: 2 / 4 cabinets                  linked copies in windows on this PC, to see the link
+                                         working (Ace Driver also has Test: 8). Hidden until
+                                         Settings > Test modes is set to Shown
+   Party: 2 or 4 players                 split screen on one PC, a controller for each player
+                                         (Gunmen Wars and Time Crisis II: 2 players, keyboard and
+                                         mouse + a controller, or 2 controllers)
+   (Gunmen Wars' link is set up in the game's Esc menu, Network page, as the other games)
+   Time Crisis II                        Left side or Right side, Both sides on one PC (2 monitors
+                                         and 2 guns), Test: both sides, or Party
+
+
+LINK PLAY: ONE SWITCH. Settings > Link play is Off at first, so every game starts and plays
+straight away. Turn it On on a PC that is one of a linked set: from then on each game started
+there looks for the other cabinets first (Start or S skips the wait and plays alone this time).
+The launcher sets the game's own "Link play" row to match each time it starts a game.
+
+3. LINKING THE CABINETS (once per set)
+-------------------------------------
+1. Copy this whole folder to every cabinet PC and connect the PCs to one network switch with
+   cables. No addresses to type: the cabinets find each other on the network by themselves.
+2. On EVERY PC turn on Settings > Link play in the launcher. Then start the game with "Full screen", press Esc and open the Network page. Every
+   LAN game has the same page, with the same rows in the same order:
+     Link play         On
+     This cabinet      1 on the first PC, 2 on the next, and so on: every PC its own number
+     Cabinets in set   how many are linked (the same on every PC)
+     Find others       Automatic (the default). "Address list" is there for a network where
+                       finding them does not work: then type each PC's address
+     Start-up wait     how long a cabinet waits at power-on for the others (60 s)
+     Link lights       where the small link lights go (bottom left)
+     If link is lost   Restart (start again with the others) or Carry on
+   then Restart all cabinets, and Find cabinets: it lists the PCs running the game and the
+   number each one has, and warns when two PCs have the same number.
+   (Time Crisis II: This cabinet 1 = left, red player; 2 = right, blue player.)
+3. Close the game on every PC and start them all again. The cabinets look for each other when
+   they start, like the real boards, wait up to a minute for any that are missing, then begin
+   together.
+4. The first time, Windows Firewall asks whether the game may use the network: tick "Private
+   networks" and click Allow. If it does not ask and the cabinets cannot see each other, that
+   permission is the first thing to check.
+5. To TEST the link across real PCs first, use the "LAN test" folder (see "About the LAN test.txt"):
+   every PC runs the game as its own cabinet and sends its logs to one folder on the main PC.
+
+How the link behaves (the same rule as the real boards):
+ - A cabinet started after the others are already playing (late, or after a crash) is not let
+   in: it plays on its own until the whole set is started again. "Restart all cabinets" on the
+   Network page restarts every cabinet at once, so nobody has to walk round the PCs.
+ - If a cabinet is left alone, or its game loses the link for 10 seconds, it shows
+   "LINK LOST - RESTARTING IN 5" and restarts itself (Network page > If link is lost).
+ - While linked, the Esc menu does not pause the game: a cabinet that stops is dropped.
+ - Each game keeps its own cabinet ID in its test menu (Tokyo Wars: GAME OPTIONS > ID NO.;
+   Rave Racer: GAME OPTIONS > CPU NUMBER; Cyber Commando: GAME OPTIONS > CPU NO.;
+   Armadillo Racing: GAME OPTIONS > PCB ID, red / blue / yellow / green; Cyber Sled: GAME OPTIONS
+   > POSITION, left / right). Every linked cabinet
+   needs a different one; a cabinet's first linked run sets it from its cabinet
+   number, after that the test menu's is kept (and a warning shows if two linked cabinets have the same one).
+
+
+4. SET UP AND FORGET: STARTING BY ITSELF
+---------------------------------------
+For a cabinet, the PC should start the game by itself when it is switched on, with no keyboard:
+1. In the launcher: Settings > "Start a game when Windows starts" > choose the game and the way
+   to play (for a linked cabinet: "Full screen"; for Time Crisis II: the Left
+   or Right cabinet). "Countdown before the game starts" sets the delay (10 s); a key or
+   button during the countdown opens the menu instead.
+2. "When the game closes": "Restart the game" (the default) starts it again a few seconds after
+   it closes for any reason, so the cabinet always comes back to its attract mode.
+3. Windows must sign in by itself: set the cabinet PC's account to sign in automatically
+   (Windows: run "netplwiz", untick "Users must enter a user name and password", or the
+   equivalent on your Windows version), and switch off sleep and screen-saver in the power
+   settings. These are Windows' own settings; the launcher does not change them.
+To stop it starting by itself: launcher > Settings > "Start a game when Windows starts" > Off.
+
+
+5. FITTING A PC IN A CABINET
+----------------------------
+ - VIDEO: the games draw at the PC's screen resolution. An original 15 kHz arcade monitor needs
+   a converter from the PC's VGA/HDMI output to the monitor's RGB (a 15 kHz-capable graphics
+   setup or a scan converter); or fit an LCD in the cabinet.
+ - CONTROLS: the wheels, pedals, levers, guns and buttons go through an encoder board that the
+   PC sees as a keyboard, a joystick or a game controller, e.g. an Ultimarc A-PAC (analog:
+   wheels, pedals, levers) or I-PAC (buttons). Then set the keys or axes once on each game's
+   Esc menu > Controls page, and calibrate in the game's own test menu as on the real machine.
+ - SOUND: the PC's audio output to the cabinet's amplifier.
+ - THE NETWORK: a cable from each cabinet to one switch. Wi-Fi works for a test, but it can
+   pause for a moment, and that is enough to drop the link.
+ - FULL SCREEN: always run a cabinet full screen. In a window a modest PC can freeze for a moment
+   in busy scenes, which can drop the link with three or more cabinets.
+
+
+6. SETTINGS (launcher > Settings)
+---------------------------------
+   Start a game when Windows starts   Off, or a game and way to play
+   Countdown before the game starts   5 - 60 seconds
+   When the game closes               restart the game (automatic start) / return to this menu
+   Launcher display                   full screen / window
+   Test modes                         Shown / Hidden: the Test ways to play (several linked
+                                      windows on this PC, to check the link without a second
+                                      cabinet). Hidden at first
+   Link status lights (all games)     small lights in a corner showing the link's activity
+   Session recordings (all games)     each game keeps the last session's inputs so a problem
+                                      can be replayed (a few KB each); Off keeps none
+   This PC's network address          for typing the addresses by hand
+
+The link lights: blue = this cabinet (flickers as it sends); green = that cabinet and this one
+hear each other; amber = one-way (it is heard but cannot hear this one); red = nothing from that
+cabinet; grey = not in this set.
+
+
+7. GUNMEN WARS
+--------------
+ - Ways to play: Full screen, Window, Test: 2 cabinets (Settings > Test modes), and Party: 2 players
+   (split screen: keyboard and mouse + a controller, or 2 controllers). Linked cabinets: Esc menu >
+   Network page, as every other game (Link play On, each PC its own cabinet number, Find others
+   Automatic); 2 or 3 cabinets, 4 is experimental.
+ - Network page > Network delay: LAN (cables, the default), Wi-Fi, Slow network or Internet. A slower
+   choice adds a little delay but rides out a less steady network; linked PCs all use the
+   slowest one set on any of them.
+ - THE NAMCAM: the photo taken before team select comes from the PC's webcam, or from a picture
+   named photo.jpg / photo.png / photo.bmp in the game's folder (Esc menu > Options > NamCam
+   photo: Auto, Webcam, Photo file or Off). Linked cabinets see each other's photos.
+ - Esc menu > Options: Controls (FPS: the mouse turns / Cursor), Mouse sensitivity, Crosshair
+   (FPS) hidden or shown, Boot notice (skip the 25 s notice), Widescreen outside matches (4:3
+   with black bars, the default: the attract demo's scenery only exists as far as the original
+   4:3 screen shows; matches always fill the widescreen).
+ - Esc menu > Display: Widescreen, Widescreen HUD (the scores at the screen edges), Motion
+   smoothing (for 120 Hz screens and up), Depth.
+ - F9 saves a CAPTURE (a picture and the game's state) in the captures folder: press it when
+   something looks wrong and send the files with the report. F12 takes a plain screenshot.
+
+
+IF SOMETHING GOES WRONG
+-----------------------
+Each game writes a log in its folder (tokyowar_cab1.log, raveracer.log, ...); the launcher writes
+launcher.log beside itself. Lines starting with [LINK] say which cabinets a game can hear and
+whether it thinks the link is good. The game's menu, waiting screen and title bar also say it in
+words: "Cabinet 3 can't hear this PC", "SET-UP DIFFERS ...", "DIFFERENT VERSION ..." (copy the same
+folder to every PC). Send the logs with any report.

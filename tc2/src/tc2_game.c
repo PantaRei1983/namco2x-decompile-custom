@@ -1,8 +1,8 @@
-/* tc2_game.c -- TIME CRISIS II's table for the System 23 host (include/tc2_game.h): MAME's timecrs2 set (US, TSS3 Ver. B), System 23. */
+/* tc2_game.c -- TIME CRISIS II's table for the System 23 host (include/s23_game.h): MAME's timecrs2 set (US, TSS3 Ver. B), System 23. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "tc2_game.h"
+#include "s23_game.h"
 
 static const eng_rom_t chips[] = {
     { "tss3verb.1", 0x200000, NULL, NULL, 0x6E3F232B }, { "tss3verb.2", 0x200000, NULL, NULL, 0xC7BE691F },
@@ -19,13 +19,13 @@ static const eng_rom_t chips[] = {
 };
 static const char *const zips[] = { "timecrs2.zip", "namco_tssio.zip" };   /* a split MAME set keeps the I/O board's program in its device zip */
 
-int tc2_rom_read(const char *dir, const char *name, uint8_t *dst, size_t n);   /* src/tc2_rom.c */
+int s23_rom_read(const char *dir, const char *name, uint8_t *dst, size_t n);   /* src/s23_rom.c */
 
 /* the boot image (4 MB at 0x1FC00000): tss3verb.2 and .1 byte-interleaved, .2 first */
 static int rom_boot(const char *dir, uint8_t *boot)
 {
     uint8_t *a = malloc(0x200000), *b = malloc(0x200000);
-    const int ok = a && b && tc2_rom_read(dir, "tss3verb.1", a, 0x200000) && tc2_rom_read(dir, "tss3verb.2", b, 0x200000);
+    const int ok = a && b && s23_rom_read(dir, "tss3verb.1", a, 0x200000) && s23_rom_read(dir, "tss3verb.2", b, 0x200000);
     if (ok) for (uint32_t k = 0; k < 0x200000; k++) { boot[2 * k] = b[k]; boot[2 * k + 1] = a[k]; }
     free(a); free(b);
     return ok;
@@ -33,7 +33,7 @@ static int rom_boot(const char *dir, uint8_t *boot)
 /* the sub-CPU's (H8/3002) program: tss1vera.3 is stored word-swapped (MAME ROM_LOAD16_WORD_SWAP) */
 static int rom_sub(const char *dir, uint8_t *dst, size_t n)
 {
-    if (n < 0x80000 || !tc2_rom_read(dir, "tss1vera.3", dst, 0x80000)) return 0;
+    if (n < 0x80000 || !s23_rom_read(dir, "tss1vera.3", dst, 0x80000)) return 0;
     for (uint32_t k = 0; k < 0x80000; k += 2) { const uint8_t t = dst[k]; dst[k] = dst[k + 1]; dst[k + 1] = t; }
     return 1;
 }
@@ -41,13 +41,13 @@ static int rom_sub(const char *dir, uint8_t *dst, size_t n)
 static int rom_io(const char *dir, uint8_t *dst, size_t n)
 {
     uint8_t *all = malloc(0x40000);
-    const int ok = all && n <= 0x40000 && tc2_rom_read(dir, "tssioprog.ic3", all, 0x40000);
+    const int ok = all && n <= 0x40000 && s23_rom_read(dir, "tssioprog.ic3", all, 0x40000);
     if (ok) memcpy(dst, all, n);
     free(all);
     return ok;
 }
 
-const tc2_game_t tc2_game = {
+const s23_game_t s23_game = {
     .title = "Time Crisis 2", .tag = "tc2", .window_title = "Time Crisis II", .mame_set = "timecrs2",
     .speech_voices = 0x80000000u,                 /* voice 31: every call-out (banks 0x94-0xB8, full volume on all four outputs) */
     .zip_help = "MAME's timecrs2.zip (Time Crisis II, US TSS3 Ver. B)",
@@ -58,8 +58,8 @@ const tc2_game_t tc2_game = {
     .sub_div = 10,                                /* 16.9344 MHz */
     .io_num = 64, .io_den = 735,                  /* 14.7456 MHz */
     .c352_div = 1920,                             /* 88200 Hz */
-    .ip = { [TC2_SRC_VBLANK] = TC2_IP(0), [TC2_SRC_C361] = TC2_IP(1), [TC2_SRC_SUB] = TC2_IP(1), [TC2_SRC_C435] = TC2_IP(2),
-            [TC2_SRC_C422] = TC2_IP(3), [TC2_SRC_TIMER] = TC2_IP(5) },
+    .ip = { [S23_SRC_VBLANK] = S23_IP(0), [S23_SRC_C361] = S23_IP(1), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C435] = S23_IP(2),
+            [S23_SRC_C422] = S23_IP(3), [S23_SRC_TIMER] = S23_IP(5) },
     .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 1, .gun_x0 = 91, .gun_xw = 733, .gun_y0 = 38, .gun_yh = 247,
     .data_rom = { { "tss1mtah.2j", "tss1mtal.2h" }, { "tss1mtbh.2m", "tss1mtbl.2f" } },
     .npt = 3, .pt_rom = { { "tss1pt0h.7a", "tss1pt0l.7c" }, { "tss1pt1h.5a", "tss1pt1l.5c" }, { "tss1pt2h.4a", "tss1pt2l.4c" } },

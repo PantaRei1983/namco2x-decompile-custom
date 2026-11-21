@@ -64,6 +64,10 @@ typedef struct {
     /* WIDESCREEN: the game's full-screen effects (a camera-facing quad sized to the 640 x 480 screen, e.g. Cyber Commando's hit flash)
      * reach the wide picture's edges (rr_gl.c wide_screen_quad). 0 = off (every other game). */
     int wide_screen_quads;
+    /* THE 2D EFFECTS OPTION (Display > Effects, saved as effects_filter): System 22 has no sprite layer, so a game's explosions are
+     * textured polygons. Each entry {texture bank, u0, u1, v0, v1} (inclusive) names the texture region of such an effect; a quad whose
+     * whole UV box lies inside one is sampled bilinearly when the option is on (rr_gl.c). NULL = no such effects (the row is hidden). */
+    const uint16_t (*fx_tex)[5]; int n_fx_tex;
     /* WIDESCREEN HUD: text cells {row, col, tile} that hold that tile only while the race HUD is up (any one showing = up); the HUD
      * then moves to the picture's sides (engine/hud_edges.h). NULL = Rave Racer's gear-ladder marks (rr_gl.c). */
     const uint16_t (*hud_marks)[3]; int n_hud_marks;
@@ -99,6 +103,25 @@ typedef struct {
      * where it is left; a real wheel stays absolute. select_addr 0 = never (the old behaviour). Found by diffing work-RAM dumps of
      * the select screens against attract and the race. */
     uint32_t select_addr; uint16_t select_vals[4];
+    /* LINK PLAY (our fork, engine/link_host.h): where this game keeps its own cabinet number, so the link can seed it on a cabinet's
+     * first run and compare it across the set. link_cab_addr 0 = Rave Racer's (work RAM 0x100091A0, EEPROM settings group 3 byte 0 at
+     * 0x2C0 / 0x2E0, 16-bit checksums, and its link status at A6 + 0x1102..0x1108). Otherwise: the 16-bit work-RAM word holding the
+     * cabinet number (0-based), the EEPROM blocks (32 bytes each; -1 = none) and the byte in them, their checksum (0 = a 16-bit ~sum
+     * of bytes 0..29 in 30..31, Rave Racer's; 1 = an 8-bit ~sum of bytes 0..30 in 31, Ace Driver's; 2 = an 8-bit plain sum of bytes
+     * 0..16 in 17, Cyber Commando's, whose block 0 also starts 0x94 0x01), and the blocks the game itself
+     * writes on its first start, written first when the EEPROM is still blank (the game derives its car slot from the number once, at
+     * start-up, so the number must be in the EEPROM before it boots -- and on a blank EEPROM the game would start over). */
+    uint32_t link_cab_addr;
+    int link_ee_block[2], link_ee_byte, link_ee_sum8;
+    int link_ee_shift;                                /* the number's 3 bits sit at this bit of link_ee_byte (Victory Lap: 5, bits 7..5); 0 = the whole byte */
+    const struct rr_ee_init { uint16_t at; uint8_t b[32]; } *link_ee_init; int nlink_ee_init;
+    /* CODE RUN FROM A COPY IN WORK RAM (our fork): the game copies ram_code_size bytes of its program from ram_code_rom to ram_code_at
+     * at start-up and jumps there (Ace Driver's linked race: the other cars' tasks). A jump into the copy goes to the same translated
+     * code in the program, when the bytes there are still the program's (rr_main.c). 0 = none. supp_jump: the SUPPLEMENT, code the
+     * shipped lifted program lacks (acedriver/tools/supplement.sh): runs target t and returns 1 when it has it, else 0; NULL = none. */
+    uint32_t ram_code_at, ram_code_rom, ram_code_size;
+    int (*supp_jump)(uint32_t t, uint32_t at);
+    int link_max_cabinets;                            /* our fork: the most cabinets its own numbering allows (Cyber Commando: 2); 0 = 8 */
 } rr_game_t;
 
 extern const rr_game_t *g_rr_game;

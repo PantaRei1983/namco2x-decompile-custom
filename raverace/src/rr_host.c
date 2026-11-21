@@ -40,6 +40,7 @@
 #include "rr_gl.h"
 #include "render_target.h"
 #include "eng_gl.h"
+#include "link_host.h"
 #include "gl_warn.h"
 extern int g_rr_gl;     /* rr_main.c: 1 = the engine's GL renderer, 0 = the software oracle */
 
@@ -49,6 +50,7 @@ extern int g_rr_gl;     /* rr_main.c: 1 = the engine's GL renderer, 0 = the soft
  * anything in a gamecontrollerdb.txt next to the binary), otherwise as a RAW
  * joystick mapped by axis/button number from rr_controls.cfg (wheels, pedals,
  * arcade sticks). Hot-plug either way. */
+#include "eng_party.h"
 #define MAX_DEV 16
 static struct {
     SDL_GameController *gc; SDL_Joystick *js; SDL_JoystickID id;
@@ -58,6 +60,7 @@ static struct {
 static void dev_scan(void)
 {
     for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (!eng_party_allows(i)) continue;                              /* --pad K: this copy's own controller only (engine/eng_party.h) */
         SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(i);
         int free_slot = -1; bool open = false;
         for (int d = 0; d < MAX_DEV; d++) {
@@ -98,6 +101,7 @@ static SDL_GLContext glc;
 static GLuint sw_tex;                  /* RR_RENDER=sw: the oracle's picture, uploaded */
 static int tex_w, tex_h;               /* the picture's size in render pixels */
 static bool shot_pending;              /* F12: saved from the render target, next draw */
+static bool capture_pending;           /* F9, a glitch capture: the picture + this session's recording so far, next draw */
 static void out_size(int *w, int *h)   /* the window's drawable, in pixels */
 {
     *w = 640; *h = 480;
@@ -185,6 +189,33 @@ void rr_host_set_draw(int level)
     g_rr_draw_extra = draw_extra[g_cfg_draw];
     save_opt("draw_distance", draw_cfg[g_cfg_draw]);
     fprintf(stderr, "[HOST] draw distance: %s\n", draw_label[g_cfg_draw]);
+}
+
+/* TEXTURE FILTER (3D polygons only): 0 = off, the board's NEAREST; 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear. The setting
+ * is g_eng_tex_filter (engine/tex_bake.h); the polygons that are the HUD (rr_gl.c) and the text, sprite and tilemap layers are never filtered.
+ * ENG_TEX_FILTER=0..4 and ENG_TEX_ANISO override for a run. */
+void rr_host_set_texfilter(int mode)
+{
+    static const char *const nm[5] = { "off", "bilinear", "sharp", "trilinear", "sharp-trilinear" };
+    g_cfg_texfilter = mode < 0 ? 0 : mode > 4 ? 4 : mode;
+    save_opt("texture_filter", nm[g_cfg_texfilter]);
+    fprintf(stderr, "[HOST] 3D texture filter: %s\n", nm[g_cfg_texfilter]);
+}
+/* THE 2D EFFECTS (Display > Effects): a game's explosion polygons (rr_game_t.fx_tex) drawn bilinear instead of the board's NEAREST, whatever
+ * the 3D texture filter says. ENG_FX_FILTER=0|1 overrides for a run. */
+void rr_host_set_fxfilter(int on)
+{
+    extern int g_cfg_fxfilter;
+    g_cfg_fxfilter = on ? 1 : 0;
+    save_opt("effects_filter", g_cfg_fxfilter ? "on" : "off");
+    fprintf(stderr, "[HOST] 2D effects: %s\n", g_cfg_fxfilter ? "smooth" : "off");
+}
+void rr_host_set_texaniso(int level)
+{
+    g_cfg_texaniso = level >= 16 ? 16 : level >= 8 ? 8 : level >= 4 ? 4 : level >= 2 ? 2 : 0;
+    char b[8]; snprintf(b, sizeof b, g_cfg_texaniso ? "%d" : "off", g_cfg_texaniso);
+    save_opt("texture_aniso", b);
+    fprintf(stderr, "[HOST] anisotropic filtering: %s\n", b);
 }
 
 void rr_host_set_hud_edges(int on)
@@ -349,7 +380,10 @@ bool rr_host_open(int scale)
     if (g_rr_game->twin_stick) ts_init(tw_ctl, TW_N, save_opt);    /* before the config: its ts_ lines land here */
     rr_input_load(g_rr_game->cfg_file);
     if (scale > 0) g_cfg_scale = scale;                /* --window N overrides the saved size */
-    if (getenv("RR_FULLSCREEN")) { g_cfg_fullscreen = atoi(getenv("RR_FULLSCREEN")) != 0; g_cfg_winmode = g_cfg_fullscreen; }
+    if (getenv("RR_FULLSCREEN")) {                     /* --fullscreen: full screen, the saved kind (exclusive stays exclusive) */
+        g_cfg_fullscreen = atoi(getenv("RR_FULLSCREEN")) != 0;
+        g_cfg_winmode = !g_cfg_fullscreen ? 0 : g_cfg_winmode == 2 ? 2 : 1;
+    }
     if (g_cfg_winmode < 0) g_cfg_winmode = g_cfg_fullscreen ? 1 : 0;
     g_cfg_fullscreen = g_cfg_winmode != 0;
     SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
@@ -401,6 +435,9 @@ bool rr_host_open(int scale)
     return true;
 }
 
+/* --shots DIR N in a window: the next drawn frame, into DIR (the same read-back as F12) */
+void rr_host_screenshot(const char *dir) { if (dir) shot_dir = dir; shot_pending = true; }
+
 static void screenshot(void)
 {
     mkdir(shot_dir, 0755);
@@ -448,6 +485,7 @@ static bool held(int act)
         if (dev[d].gc && g_bind[act].pad != SDL_CONTROLLER_BUTTON_INVALID && SDL_GameControllerGetButton(dev[d].gc, g_bind[act].pad)) return true;
         SDL_Joystick *js = dev[d].gc ? SDL_GameControllerGetJoystick(dev[d].gc) : dev[d].js;
         if (rr_input_button_matches(act, js, g_joy_button[act]) && SDL_JoystickGetButton(js, g_joy_button[act])) return true;
+        if (act != RR_GAS && act != RR_BRAKE && rr_input_trigger_held(act, dev[d].gc)) return true;   /* a pedal's trigger stays analogue (pad_pedal) */
     }
     return false;
 }
@@ -457,6 +495,7 @@ static bool pressed(const SDL_Event *e, int act)
         for (int i = 0; i < g_bind[act].nkeys; i++) if (e->key.keysym.scancode == g_bind[act].keys[i]) return true;
     }
     if (e->type == SDL_CONTROLLERBUTTONDOWN && g_bind[act].pad != SDL_CONTROLLER_BUTTON_INVALID && e->cbutton.button == g_bind[act].pad) return true;
+    if (rr_input_trigger_pressed(act, e)) return true;
     return e->type == SDL_JOYBUTTONDOWN && rr_input_button_matches(act, SDL_JoystickFromInstanceID(e->jbutton.which), e->jbutton.button);
 }
 
@@ -540,6 +579,15 @@ static void wheel_motor(bool hold)
         eng_ffb_force(hold ? 0 : motor_hold_off(eng_ffb_decode(rr_hw_motor_byte())), g_cfg_ffb_strength, g_joy_steer.invert != (g_cfg_ffb_invert != 0));
 }
 static bool pad_steer(int *out) { return pad_steer_ex(out, false); }
+/* a pad's trigger for the gas / brake: RT / LT, or the one bound to it on the Controls page (read analogue, not as a button) */
+static SDL_GameControllerAxis pedal_trigger(bool gas)
+{
+    const int me = g_joy_button[gas ? RR_GAS : RR_BRAKE], other = g_joy_button[gas ? RR_BRAKE : RR_GAS];
+    int t = gas;                                        /* 1 = RT, 0 = LT */
+    if (me >= RR_PAD_TRIG) t = me - RR_PAD_TRIG;
+    else if (other == RR_PAD_TRIG + t) t = !t;          /* the other pedal took this one's trigger */
+    return t ? SDL_CONTROLLER_AXIS_TRIGGERRIGHT : SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+}
 static bool pad_pedal(bool gas, int *out)         /* 0..gas_max / brake_max (the game table) */
 {
     int best = 0;
@@ -548,7 +596,7 @@ static bool pad_pedal(bool gas, int *out)         /* 0..gas_max / brake_max (the
     for (int d = 0; d < MAX_DEV; d++) {
         int v = 0;
         if (dev[d].gc) {
-            int t = SDL_GameControllerGetAxis(dev[d].gc, gas ? SDL_CONTROLLER_AXIS_TRIGGERRIGHT : SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+            int t = SDL_GameControllerGetAxis(dev[d].gc, pedal_trigger(gas));
             if (t > 1000) v = (t - 1000) * top / (32767 - 1000);
         } else if (rr_input_axis_device(ax, dev[d].js) && ax->axis >= 0 && ax->axis < SDL_JoystickNumAxes(dev[d].js)) {
             int r = SDL_JoystickGetAxis(dev[d].js, ax->axis);
@@ -670,6 +718,21 @@ static void present_picture(void)
                      tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, n++);
             if (rr_gl_write_ppm(p, vw, vh)) fprintf(stderr, "[HOST] saved %s\n", p);
         }
+        if (capture_pending) {                     /* F9, A GLITCH CAPTURE (our fork): captures/capture_<frame>.ppm / .rec -- the recording
+                                                    * replayed (--replay ... --frames <frame+1> --shots DIR <frame>) reaches this frame exactly */
+            capture_pending = false;
+            extern uint32_t rr_frame;
+            mkdir("captures", 0755);
+            char p[96], r[96], h[128];
+            snprintf(p, sizeof p, "captures/capture_%06u.ppm", rr_frame);
+            snprintf(r, sizeof r, "captures/capture_%06u.rec", rr_frame);
+            const bool pic = rr_gl_write_ppm(p, vw, vh), rec = rr_input_record_copy(r);
+            if (rec) snprintf(h, sizeof h, "GLITCH CAPTURED (F9): captures/capture_%06u", rr_frame);
+            else snprintf(h, sizeof h, "Picture saved (F9): %s -- session recording is off", p);
+            rr_ui_set_hint(h, 60 * 4);
+            fprintf(stderr, "[HOST] capture at frame %u: %s%s%s\n", rr_frame, pic ? p : "(no picture)", rec ? " + " : "", rec ? r : " (no recording)");
+            fflush(stderr);
+        }
         SDL_Rect dst = picture_rect_for(rw, rh, false);
         rt_end_rect(win, dst.x, dst.y, dst.w, dst.h, g_cfg_scaling != 0);
         return;
@@ -702,9 +765,23 @@ static void present_picture(void)
 #endif
 }
 
+/* a black window with a centred box of lines: the link's waiting screen at start-up (full screen: the title bar is not seen) */
+void rr_host_message(const char *const *lines, int n)
+{
+    if (!win) return;
+    int ow, oh; out_size(&ow, &oh);
+    glViewport(0, 0, ow, oh);
+    glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+    rr_ui_draw_message(lines, n);
+    SDL_GL_SwapWindow(win);
+}
+
 bool rr_host_frame(void)
 {
     if (!win) return true;
+    { static long at = -2; extern uint32_t rr_frame;          /* RR_CAPTURE_AT=<frame>: a glitch capture at that frame (tests F9) */
+      if (at == -2) { const char *e = getenv("RR_CAPTURE_AT"); at = e ? atol(e) : -1; }
+      if (at >= 0 && rr_frame == (uint32_t)at) { capture_pending = true; at = -1; } }
     /* RR_KEYS_TEST=<frame>:<key>[+<frame>:<key>...]: push REAL key events
      * (down, and up a few frames later) into SDL's queue, so the keyboard path
      * -- opening the menu, moving in it, closing it, and the game's own keys --
@@ -753,8 +830,11 @@ bool rr_host_frame(void)
         }
         if (pressed(&e, RR_TEST)) rr_host_set_test(!g_test_sw);
         if (pressed(&e, RR_SCREENSHOT)) screenshot();
-        if (pressed(&e, RR_RECORD)) toggle_record();
-        if (pressed(&e, RR_PAUSE)) { paused = !paused; fprintf(stderr, "[HOST] %s\n", paused ? "paused" : "running"); }
+        if (pressed(&e, RR_RECORD)) capture_pending = true;   /* our fork: F9 = a glitch capture (the menu's Record page still toggles a recording) */
+        if (pressed(&e, RR_PAUSE)) {
+            if (link_host_on()) fprintf(stderr, "[HOST] no pause while linked: the other cabinets would drop this one\n");
+            else { paused = !paused; fprintf(stderr, "[HOST] %s\n", paused ? "paused" : "running"); }
+        }
     }
     rr_ui_input_end();
     /* RR_MENU_TEST=<frame>: drive the menu from that frame the way the
@@ -762,6 +842,9 @@ bool rr_host_frame(void)
      * (menu_test_<n>.bmp): Controls page, toggle free play, Display page, step
      * the resolution, close. The menu path, testable with no input device. */
     int menu_test_step = -1;
+    { static int tab = -2; static long nfr2;                  /* RR_UI_OPEN=<tab>: the menu open on that tab from frame 60, nothing changed (menu audits) */
+      if (tab == -2) { const char *ev = getenv("RR_UI_OPEN"); tab = ev ? atoi(ev) : -1; }
+      if (tab >= 0 && ++nfr2 == 60) { rr_ui_set_open(true); rr_ui_test_goto(tab, 0); } }
     { static long at = -2; static long nfr;
       if (at == -2) { const char *ev = getenv("RR_MENU_TEST"); at = ev ? atol(ev) : -1; }
       if (at >= 0) {
@@ -822,12 +905,20 @@ bool rr_host_frame(void)
     inputs_done: ;
     }
     wheel_motor(paused || rr_ui_is_open());
+    if (link_host_catch_up()) return true;           /* linked and behind the set: this frame is not drawn and not waited for (engine/link_host.c) */
 
     /* the window may have been resized: keep the render size in step (a
      * native or widescreen size follows the window; it lands next frame) */
     apply_render_size();
+    { static int slow = -1, every = 1, n;           /* RR_SLOWDRAW=<ms>[:<every>]: TEST, a slow graphics chip (every n-th frame takes ms longer) */
+      if (slow < 0) { slow = 0; const char *e = getenv("RR_SLOWDRAW"); if (e) sscanf(e, "%d:%d", &slow, &every); if (every < 1) every = 1; }
+      if (slow && ++n % every == 0) SDL_Delay((Uint32)slow); }
+    static int phlog = -1; if (phlog < 0) phlog = getenv("RR_PHASELOG") != NULL;   /* RR_PHASELOG=1: per frame, the draw and the swap in ms (timing tests) */
+    const uint64_t ph0 = phlog ? eng_pace_ns() : 0;
     present_picture();
-    if (rr_ui_is_open() || rr_ui_hint_active() || rr_ui_chat_active()) {            /* the menu over the game (or just the hint / chat) */
+    if (phlog) glFinish();
+    const uint64_t ph1 = phlog ? eng_pace_ns() : 0;
+    if (rr_ui_is_open() || rr_ui_hint_active() || rr_ui_chat_active() || link_lights_on()) {   /* the menu over the game (or just the hint / chat, the link lights) */
         int ow, oh; out_size(&ow, &oh);
         glViewport(0, 0, ow, oh);
         glMatrixMode(GL_PROJECTION); glLoadIdentity(); glOrtho(0, 1, 0, 1, -1, 1);
@@ -889,6 +980,7 @@ bool rr_host_frame(void)
     eng_pace_before_swap(&pace_log);
     eng_vsync_want(&vs, g_cfg_fps);                  /* Display > Frame rate: a lock shows only some frames, or each one again */
     if (eng_vsync_show(&vs)) { eng_vsync_capture(&vs, win); SDL_GL_SwapWindow(win); }
+    if (phlog) { const uint64_t ph2 = eng_pace_ns(); static uint64_t phprev; fprintf(stderr, "[PHASE] draw %.2f swap %.2f quads %d gap %.2f\n", (ph1 - ph0) / 1e6, (ph2 - ph1) / 1e6, rr_gl_quads(), phprev ? (ph2 - phprev) / 1e6 : 0.0); phprev = ph2; }   /* gap: since the last swap ended */
 
     /* pacing (engine/eng_vsync.h): vsync only while it BLOCKS -- re-measured every 50 frames, not only the first 60 (a window
      * minimised later, or the driver's vsync turned off, swaps at once: GitHub #26) -- otherwise sleep to the board's 59.906 Hz */
@@ -897,7 +989,7 @@ bool rr_host_frame(void)
     return true;
 }
 
-bool rr_host_paused(void) { return paused || rr_ui_is_open(); }
+bool rr_host_paused(void) { return (paused || rr_ui_is_open()) && !link_host_on(); }   /* linked: never (a stopped cabinet is dropped) */
 
 void rr_host_close(void)
 {

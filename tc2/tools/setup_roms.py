@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """setup_roms.py [ZIP-or-FOLDER ...] -- unpack MAME's timecrs2.zip (and namco_tssio.zip, if the I/O board's program is there) into
 extracted/, every chip checked by name, size and MAME's CRC32. A source build needs this before building: the two H8 programs are
-translated from the ROM at build time. (The game itself does the same unpack on its first start: src/tc2_rom.c.)
+translated from the ROM at build time. (The game itself does the same unpack on its first start: src/s23_rom.c.)
   --check   exit 0 if extracted/ is already complete"""
 import os, sys, zipfile, zlib
 CHIPS = {"tss3verb.1": (0x200000, 0x6e3f232b), "tss3verb.2": (0x200000, 0xc7be691f), "tss1vera.3": (0x80000, 0x41e41994),

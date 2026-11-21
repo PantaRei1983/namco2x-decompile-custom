@@ -49,6 +49,7 @@ extern uint8_t *g_sprite_tiles;
 extern size_t   g_sprite_tiles_size;
 /* Dirt Dash: the VICS bank's sprite count is in its list (the byte at the list's page start, plus one), not in a control register */
 extern int      g_sprite_vics_count_in_list;
+extern int      g_sprite_vics_linked;
 
 /* Render the sprite layer into a 640x480 RGBA buffer (alpha 0 = untouched)
  * and a matching priority buffer. */
@@ -82,10 +83,29 @@ typedef struct {
     int      idx;            /* index into the frame's sprite list */
     int      prioverchar;    /* drawn over the text layer (the text shows nothing where this sprite has a pixel) */
     int      tile;           /* the sprite's first tile number (which art it is: a game can tell a HUD's parts by it) */
+    int      art;            /* the tile its first cell draws: = tile, or (a linked sprite, link type != 0xFF) tile + its link-table word --
+                              * Alpine Racer 2 draws every spray puff as tile 0 plus a table offset. The Effects option matches this */
 } sprite_item;
 
 int  sprite_collect(const sprite_state *st, const fog_state *fog,
                     sprite_item *out, int max_items);
+
+/* Optional bilinear smoothing of the EFFECT sprites (dust, mud, spray) -- never the gauges, banners, digits or titles. A game registers the tile
+ * ranges (inclusive) of its effect art; g_sprite_smooth (the menu's choice, 0/1) switches it on. sprite_render_item then samples those tiles
+ * bilinearly; a renderer draws such an item (sprite_item_smooth) from a LINEAR texture made by sprite_pad_premul, blended GL_ONE / GL_ONE_MINUS_SRC_ALPHA. */
+extern int g_sprite_smooth;
+/* WIDESCREEN: the columns a full-screen sprite clip reaches (inclusive). 0 .. SPR_W-1 is the board; a renderer that shows more than 4:3 (the
+ * Super 22 compositor) sets them before sprite_collect, so a sprite at the side of the picture -- Aqua Jet's spray, a dust cloud -- goes on past the 4:3
+ * edges instead of stopping at them. An item can then be wider than SPR_W (at most SPR_WIDE_MAX); a game's own narrower clip window is kept. */
+#define SPR_WIDE_MAX 1920                  /* (a texture this wide, +2, fits every GPU's 2048 limit) */
+extern int g_sprite_x_lo, g_sprite_x_hi;
+extern int g_sprite_smooth_fast;   /* 1: resolve each tile's texels once for the smooth path (identical pixels, a fraction of the time); the Super 22 compositor sets it */
+void sprite_set_effect_tiles(const int (*ranges)[2], int n);
+int  sprite_effects_known(void);                       /* 1 once a game registered ranges: the menu offers the option */
+int  sprite_item_smooth(const sprite_item *it);
+void sprite_set_soft_tiles(const int (*ranges)[2], int n);   /* glow sprites drawn 1:1 (Dirt Dash's headlights): smoothed AND softened */
+int  sprite_item_soft(const sprite_item *it);                /* 1: smoothing is on and the item is one of them */
+void sprite_pad_premul(const uint8_t *rgba, int w, int h, uint8_t *dst);   /* dst: (w+2)*(h+2)*4 bytes */
 /* Render one sprite into a w*h RGBA buffer whose origin is (it->x0, it->y0). */
 void sprite_render_item(const sprite_state *st, const fog_state *fog,
                         const sprite_item *it, uint8_t *rgba, int compose_alpha);

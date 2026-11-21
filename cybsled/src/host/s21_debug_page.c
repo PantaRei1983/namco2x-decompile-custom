@@ -130,4 +130,5 @@ static void notes(void (*line)(const char *fmt, ...))
     line("DSW2 / DSW7: the board's developer DIP switches, read by the game every frame (pause input: cabinet MCUB bits 5 / 3).");
 }
 static const eng_ui_page page = { "Debug", 560, 230, 0, nrows, has_value, enabled, text, change, notes };
-const eng_ui_page *s21_debug_page(void) { return &page; }
+bool link_host_arcade_mode(void);                               /* engine/link_host.c: link.cfg arcade_mode (on unless off) */
+const eng_ui_page *s21_debug_page(void) { return link_host_arcade_mode() ? NULL : &page; }   /* developer screens: arcade mode off only */

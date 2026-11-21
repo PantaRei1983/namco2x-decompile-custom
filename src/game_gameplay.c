@@ -1195,7 +1195,7 @@ int stage_camera_interpolate(void)
   {
     intptr_t nb;
     int guard = 0;
-    for (nb = 0xB704; (int32_t)W[nb] >= 0 && guard++ < 64; nb += 0x80)
+    for (nb = 0xB704; nb + 0x80 <= WORK_RAM_SIZE && (int32_t)W[nb] >= 0 && guard++ < 256; nb += 0x80)   /* no limit in the ROM (game_dsp3d.c's ANIM_CHAIN_MAX) */
       scene_node_render((int *)&W[nb]);
   }
   if (W[0x1664C] == 2) W16_SET(0x16650, (int16_t)(W16(0x16650) + 1));

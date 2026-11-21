@@ -17,6 +17,7 @@
 #include "ss22_game.h"
 #include "ss22_link.h"
 #include "net.h"
+#include "eng_net_ui.h"
 
 #define TW_FRAME_SIZE 720                  /* 9 link frames of 80 bytes + the 3-byte header (a battle sends 7-8 a frame: measured max 643) */
 
@@ -74,16 +75,23 @@ static void tw_net_frame(uint32_t frame)
 }
 
 /* before ss22_main: true = online was asked for (the link is then on from power-on, with this as its transport) */
-bool tw_net_boot(void)
+/* menu: link.cfg method=author (the Network page's "Link method") -- the Online page is added and the link is on from power-on, with
+ * nothing connected until the player hosts or joins there */
+static bool net_menu, net_on;
+void tw_net_paused(void) { if (net_on) eng_net_poll_paused(); }   /* the menu open (the Online page is in it): the lobby goes on */
+const struct eng_ui_page *tw_net_page(void) { return net_menu ? eng_net_ui_page() : NULL; }
+
+bool tw_net_boot(bool menu)
 {
     const char *srv = getenv("TW_NET_SERVER"), *hst = getenv("TW_NET_HOST"), *dsc = getenv("TW_NET_DISCOVER"), *nm = getenv("TW_NET_NAME");
     const bool want = (srv && *srv) || (hst && *hst == '1') || (dsc && *dsc == '1');
-    if (!want) return false;
+    if (!want && !menu) return false;
+    net_menu = menu; net_on = true;
     eng_net_init(&net_game);
     if (nm && *nm) eng_net_set_name(nm);
     if (hst && *hst == '1') eng_net_host_start();
     else if (dsc && *dsc == '1') { eng_net_discover_autojoin(1); eng_net_discover(); }
-    else if (eng_net_set_server(srv)) eng_net_connect();
+    else if (srv && *srv && eng_net_set_server(srv)) eng_net_connect();
     ss22_link_set_external(tw_net_frame);
 #ifdef _WIN32
     if (!getenv("TW_LINK")) _putenv("TW_LINK=0");          /* the link from power-on; GO renumbers the cabinet */

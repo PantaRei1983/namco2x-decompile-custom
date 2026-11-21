@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """setup_roms.py [ZIP-or-FOLDER ...] -- unpack MAME's crszone.zip (and namco_csz1.zip, if the I/O board's program is there) into
 extracted/, every chip checked by name, size and MAME's CRC32. A source build needs this before building: the two H8 programs are
-translated from the ROM at build time. (The game itself does the same unpack on its first start: ../tc2/src/tc2_rom.c with src/csz_game.c's chip list.)
+translated from the ROM at build time. (The game itself does the same unpack on its first start: ../s23/src/s23_rom.c with src/csz_game.c's chip list.)
   --check   exit 0 if extracted/ is already complete"""
 import os, sys, zipfile, zlib
 CHIPS = {"cszo4verb.ic4": (0x800000, 0x6192533d), "cszo3verb.ic1": (0x80000, 0xc790743b), "csz1prg0a.8f": (0x20000, 0x8edc36b3), "csz1mtah.2j": (0x800000, 0x66b076ad), "csz1mtal.2h": (0x800000, 0x38dc639a), "csz1mtbh.2m": (0x800000, 0xbdec4188), "csz1mtbl.2f": (0x800000, 0x9c8f8d7a), "csz1cgll.4m": (0x800000, 0x0bcd41f2), "csz1cglm.4k": (0x800000, 0xd4af93d1), "csz1cgum.4j": (0x800000, 0x913c98b5), "csz1cguu.5f": (0x800000, 0xe1d1bf24), "csz1ccrl.7f": (0x400000, 0x1c20768d), "csz1ccrh.7e": (0x200000, 0xbc2fa03c), "csz1pt0h.7a": (0x400000, 0xe82f1abb), "csz1pt0l.7c": (0x400000, 0xb0d66afe), "csz1pt1h.5a": (0x400000, 0xe54f80ad), "csz1pt1l.5c": (0x400000, 0x527171c8), "csz1pt2h.4a": (0x400000, 0xe295137a), "csz1pt2l.4c": (0x400000, 0xc87d6dbd), "csz1pt3h.3a": (0x400000, 0x05f65bdf), "csz1pt3l.3c": (0x400000, 0x5d077c0f), "csz1wavel.2c": (0x800000, 0xd0d74132), "csz1waveh.2a": (0x800000, 0xde9d14a8)}

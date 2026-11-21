@@ -120,15 +120,38 @@ static void audio_frame(void)
 }
 #endif
 
-extern int g_eng_disp_native_default;
+#ifdef S21_WITH_HOST
+#include "link_host.h"
+#include "eng_ui.h"
+bool s21_lanlink_open(bool first_run, void (*save_and_close)(void));   /* src/link/s21_lanlink.c */
+void s21_lanlink_started(void);
+static char g_nvname[64] = "cs21.nv";
+static int host_open;
+static void save_and_close(void)                    /* the link's safety net restarts the program: keep the settings, close the window */
+{
+    s21_net_restore_settings();
+    if (s21_nvram_save(g_nvname)) fprintf(stderr, "[cs21] NVRAM saved to %s\n", g_nvname);
+    if (host_open) { ss22_host_close(); host_open = 0; }
+}
+#endif
+extern int g_eng_disp_native_default, g_eng_tex_filter_known;   /* engine/eng_display.c, engine/tex_bake.c */
 int main(int argc, char **argv)
 {
     eng_args_strip(&argc, argv);    /* --set KEY=VALUE: a setting for this run (engine/eng_args.h, GitHub #85) */
 #ifdef S21_WITH_HOST
     g_eng_disp_native_default = 1;    /* the board is 496x480: draw at the window's size, so the picture is resized once (s21_glutil.c) */
+    g_eng_tex_filter_known = 0;       /* flat and shaded colour polygons, no textures: the Display menu has no 3D texture filter row */
 #endif
 #ifdef S21_WITH_HOST
-    eng_win_startup("cybsled.log");     /* Windows: the program's own folder, the log beside the .exe, real pixel sizes (a no-op elsewhere) */
+    /* our fork, the cabinet LAN (src/link/s21_lanlink.c): a linked cabinet has its own log, NVRAM and window title, so copies on one
+     * PC (the test windows) do not share them */
+    const int cab = link_host_prescan(argc, argv);
+    static char logname[64], nvname[64], title[64];
+    if (cab > 0) { snprintf(logname, sizeof logname, "cybsled_cab%d.log", cab); snprintf(nvname, sizeof nvname, "cs21_cab%d.nv", cab);
+                   snprintf(title, sizeof title, "Cyber Sled - Cabinet %d", cab); }
+    else { snprintf(logname, sizeof logname, "cybsled.log"); snprintf(nvname, sizeof nvname, "cs21.nv"); snprintf(title, sizeof title, "Cyber Sled"); }
+    snprintf(g_nvname, sizeof g_nvname, "%s", nvname);
+    eng_win_startup(logname);           /* Windows: the program's own folder, the log beside the .exe, real pixel sizes (a no-op elsewhere) */
     static char *dflt[] = { NULL, "extracted", "--window", NULL };
     if (argc == 1) { dflt[0] = argv[0]; argv = dflt; argc = 3; }   /* no arguments (a double-click, the Windows how-to): play, in a window */
 #endif
@@ -163,6 +186,9 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--coin") && i + 1 < argc) coin_f = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--start") && i + 1 < argc) start_f = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--play") && i + 1 < argc) play_f = atoi(argv[++i]);
+#ifdef S21_WITH_HOST
+        else if (link_host_arg(argc, argv, &i)) {}     /* --link N, --link-cabinets, --mute, ... (engine/link_host.c) */
+#endif
         else { fprintf(stderr, "unknown option %s\n", argv[i]); return 2; }
     }
     if (frames < 0) frames = window ? 0x7FFFFFFF : 600;
@@ -182,10 +208,17 @@ int main(int argc, char **argv)
     int vmode = S21_OUT_SW;                         /* headless: the software picture, the oracle (--shots) */
     { const char *e = getenv("CS_NVRAM");             /* tests: a headless run from a given NVRAM file (read only) */
       if (!window && e && s21_nvram_load(e)) fprintf(stderr, "[cs21] NVRAM from %s (not saved)\n", e); }
+    bool nv_loaded = false;
+    if (window) { nv_loaded = s21_nvram_load(nvname); if (nv_loaded) fprintf(stderr, "[cs21] NVRAM from %s\n", nvname); }
+    if (!s21_lanlink_open(!nv_loaded, save_and_close)) {
+        if (window) SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Cyber Sled", "The link could not start.\n\nUsually another copy of the game is still running as the same cabinet: close it, or restart the PC, and try again.\n\nDetails are in the log file beside the program.", NULL);
+        return 2;
+    }
     if (window) {
-        if (s21_nvram_load("cs21.nv")) fprintf(stderr, "[cs21] NVRAM from cs21.nv\n");
         if (!ss22_host_open(&game, scale, fs)) return 1;
-        s21_net_window_init();                      /* the Online page (src/link/s21_net.c): inert until the player connects */
+        host_open = 1;
+        if (!link_host_on() && !link_host_arcade_mode()) s21_net_window_init();   /* the author's Online page: not in the arcade package,
+                                                                                   * nor on a cabinet of our LAN (one link at a time) */
     } else if (glshots || glgate || gldraw) {
         if (glgate) { glshot_w = S21_W; glshot_h = S21_H; }
         if (!eng_gl_open_headless(glshot_w, glshot_h)) return 1;
@@ -194,6 +227,10 @@ int main(int argc, char **argv)
         { const char *e = getenv("ENG_WIDESCREEN"); if (e) g_eng_disp.wide = atoi(e) != 0; }   /* Hor+ widescreen in the GL shots (window: the cfg) */
         { extern int g_eng_hud_edges_on; const char *e = getenv("ENG_WIDE_HUD"); if (e) g_eng_hud_edges_on = atoi(e) != 0; }   /* tests: the Widescreen HUD row (window: the cfg) */
     }
+    if (g_link_mute) eng_audio_set_volume(0);       /* --mute: a test window that is not cabinet 1 */
+    link_host_gather(title, window ? SDL_GL_GetCurrentWindow() : NULL, window ? eng_ui_set_hint : NULL, window ? ss22_host_message : NULL);
+                                                    /* linked: the cabinets start together, as boards switched on together */
+    s21_lanlink_started();                          /* alone in the session: play on its own (src/link/s21_lanlink.c) */
     if (shots) mkdir(shots, 0755);
     if (glshots) mkdir(glshots, 0755);
     if (glgate_dir) mkdir(glgate_dir, 0755);
@@ -259,6 +296,9 @@ int main(int argc, char **argv)
         else if (glshots || gldraw) s21_view_for(glshot_w, glshot_h);
 #endif
         s21_run_frame();
+#ifdef S21_WITH_HOST
+        link_host_frame((uint32_t)f + 1, !window);  /* linked: the log, the safety net, real-time pacing headless (engine/link_host.c) */
+#endif
         { static int every = -1; static const char *dir; if (every < 0) { const char *e = getenv("CS_RAMDUMP"); every = e ? atoi(e) : 0; dir = getenv("CS_RAMDUMP_DIR"); }
           if (every > 0 && dir && (f + 1) % every == 0) {    /* tests: the master's work RAM (big-endian words) every N frames */
               char p[512]; snprintf(p, sizeof p, "%s/m%05d.bin", dir, f + 1); FILE *o = fopen(p, "wb");
@@ -290,9 +330,7 @@ int main(int argc, char **argv)
 #ifdef S21_WITH_HOST
     glgate_summary();
     if (window) {
-        s21_net_restore_settings();
-        if (s21_nvram_save("cs21.nv")) fprintf(stderr, "[cs21] NVRAM saved to cs21.nv\n");
-        ss22_host_close();
+        save_and_close();
     }
 #endif
     return 0;

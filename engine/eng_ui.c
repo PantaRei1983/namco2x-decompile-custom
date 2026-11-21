@@ -21,11 +21,15 @@
 #include "../third_party/nuklear.h"
 #include "../third_party/nuklear_sdl_gl2.h"
 #include "eng_nk_style.h"
+#include "eng_nk_click.h"
 
 #include "eng_ui.h"
+#include "link_host.h"
 #include "eng_crosshair.h"
 #include "eng_vsync.h"
 #include "eng_display.h"
+#include "link_lights_nk.h"
+#include "tex_bake.h"
 
 #define MAXPAGES 8
 static struct nk_context *ctx;
@@ -60,17 +64,22 @@ static void file_change(int r, int dir)
 static const eng_ui_page page_file = { "File", 220, 0, 0, file_n, file_val, NULL, file_text, file_change, NULL };
 
 /* ---- Display: the choices of engine/eng_display.h ------------------------------ */
-enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_CROSS, D_XIMG, D_N };   /* D_CROSS.. last: only light-gun games show them */
-static int disp_n(void) { return g_eng_disp_light_gun ? D_N : D_CROSS; }
+enum { D_WIDE, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TIMING, D_TEXF, D_ANISO, D_FX, D_CROSS, D_XIMG, D_N };   /* D_CROSS.. last: only light-gun games show them; D_TEXF only a game with textured polygons; D_FX only a game that names its effect sprites */
+static bool disp_has(int r) { return !(((r == D_TEXF || r == D_ANISO) && !g_eng_tex_filter_known) || (r == D_FX && !g_eng_fx_known) || (r >= D_CROSS && !g_eng_disp_light_gun)); }
+static int disp_n(void) { int n = 0; for (int r = 0; r < D_N; r++) n += disp_has(r); return n; }
+static int disp_row(int i) { for (int r = 0; r < D_N; r++) if (disp_has(r) && i-- == 0) return r; return D_N - 1; }   /* menu line -> D_ row: the lines a game does not have are left out */
 static bool disp_enabled(int r)
 {
+    r = disp_row(r);
     if (r == D_SIZE) return g_eng_disp.winmode == 0;
     if (r == D_HUD) return g_eng_disp.wide;
     if (r == D_XIMG) return g_eng_disp.crosshair;
+    if (r == D_ANISO) return g_eng_disp.tex_filter >= 3;     /* anisotropy rides on the trilinear modes' mips */
     return true;
 }
 static void disp_text(int r, char *l, size_t ln, char *v, size_t vn)
 {
+    r = disp_row(r);
     *v = 0;
     switch (r) {
     case D_WIDE:    snprintf(l, ln, "Widescreen"); snprintf(v, vn, "%s", !g_eng_disp.wide ? "OFF (4:3)" : g_eng_disp.wide_169 ? "ON (16:9)" : "ON (fill the window)"); break;
@@ -82,7 +91,12 @@ static void disp_text(int r, char *l, size_t ln, char *v, size_t vn)
                     snprintf(v, vn, "%s", g_eng_disp.wide ? (g_eng_disp.wide_169 ? "16:9" : "Fill the window") : eng_disp_aspect_name(g_eng_disp.aspect)); break;
     case D_SCALING: snprintf(l, ln, "Scaling"); snprintf(v, vn, "%s", eng_disp_scaling_name(g_eng_disp.scaling)); break;
     case D_HUD:     snprintf(l, ln, "Widescreen HUD"); snprintf(v, vn, "%s", g_eng_disp.hud_edges ? "at the screen edges" : "original (4:3 centre)"); break;
+    case D_TEXF:    { static const char *const nm[5] = { "Off (arcade)", "Bilinear (3D only)", "Sharp bilinear (3D only)", "Trilinear (3D only)", "Sharp trilinear (3D only)" };
+                      snprintf(l, ln, "3D texture filter"); snprintf(v, vn, "%s", nm[g_eng_disp.tex_filter < 0 || g_eng_disp.tex_filter > 4 ? 0 : g_eng_disp.tex_filter]); break; }
+    case D_ANISO:   snprintf(l, ln, "Anisotropic filter"); if (g_eng_disp.tex_aniso) snprintf(v, vn, "%dx", g_eng_disp.tex_aniso); else snprintf(v, vn, "Off"); break;
+    case D_FX:      snprintf(l, ln, "Effects (dust, mud, spray)"); snprintf(v, vn, "%s", g_eng_disp.fx_filter ? "Smooth (2D effects only)" : "Off (arcade)"); break;
     case D_FPS:     snprintf(l, ln, "Frame rate"); snprintf(v, vn, "%s", eng_vsync_rate_name(g_eng_disp.fps)); break;
+    case D_TIMING:  snprintf(l, ln, "Frame timing"); link_timing_text(v, vn); break;   /* (link.cfg timing=: engine/link_host.c) */
     case D_CROSS:   snprintf(l, ln, "Crosshair"); snprintf(v, vn, "%s", g_eng_disp.crosshair ? "ON" : "OFF"); break;
     case D_XIMG:    snprintf(l, ln, "Crosshair image"); snprintf(v, vn, eng_xhair_count() ? "%s" : "%s (no PNG in crosshairs/)", eng_xhair_name()); break;
     }
@@ -90,6 +104,7 @@ static void disp_text(int r, char *l, size_t ln, char *v, size_t vn)
 static void disp_change(int r, int dir)
 {
     if (!disp_enabled(r)) return;
+    r = disp_row(r);
     const int d = dir ? dir : 1;
     switch (r) {
     case D_WIDE:    eng_disp_set_wide(!g_eng_disp.wide); break;
@@ -104,7 +119,12 @@ static void disp_change(int r, int dir)
     case D_ASPECT:  if (g_eng_disp.wide) eng_disp_set_wide_169(!g_eng_disp.wide_169); else eng_disp_set_aspect(cyc(g_eng_disp.aspect, d, 4)); break;
     case D_SCALING: eng_disp_set_scaling(cyc(g_eng_disp.scaling, d, 3)); break;
     case D_HUD:     eng_disp_set_hud_edges(!g_eng_disp.hud_edges); break;
+    case D_FX:      eng_disp_set_fx(!g_eng_disp.fx_filter); break;
     case D_FPS:     eng_disp_set_fps(eng_vsync_rate_step(g_eng_disp.fps, d)); break;
+    case D_TIMING:  link_timing_change(); break;
+    case D_TEXF:    eng_disp_set_texfilter(cyc(g_eng_disp.tex_filter, d, 5)); break;
+    case D_ANISO:   { static const int lv[5] = { 0, 2, 4, 8, 16 }; int i = 0; for (int k = 0; k < 5; k++) if (lv[k] == g_eng_disp.tex_aniso) i = k;
+                      eng_disp_set_texaniso(lv[cyc(i, d, 5)]); break; }
     case D_CROSS:   eng_disp_set_crosshair(!g_eng_disp.crosshair); break;
     case D_XIMG:    eng_xhair_step(d); break;
     }
@@ -146,14 +166,17 @@ static const eng_ui_page page_display = { "Display", 440, 120, 26, disp_n, NULL,
 /* ---- Audio ------------------------------------------------------------------- */
 static const eng_ui_mixer *mixer;                              /* the game's speakers under the Volume row (eng_ui_set_mixer) */
 void eng_ui_set_mixer(const eng_ui_mixer *m) { mixer = m; }
-static int aud_n(void) { return 1 + (mixer ? mixer->rows() : 0); }
+static int aud_n(void) { return 2 + (mixer ? mixer->rows() : 0); }   /* Volume, the speakers, then the volume boxes (our fork: a row for the keys) */
+static bool aud_boxes(int r) { return r == aud_n() - 1; }
 static void aud_text(int r, char *l, size_t ln, char *v, size_t vn)
 {
+    if (aud_boxes(r)) { snprintf(l, ln, "Volume boxes"); *v = 0; return; }
     if (r > 0) { snprintf(l, ln, "%s", mixer->name(r - 1)); snprintf(v, vn, "%d%%", mixer->get(r - 1)); return; }
     snprintf(l, ln, "Volume"); snprintf(v, vn, "%d%%", g_eng_disp.volume);
 }
 static void aud_change(int r, int dir)
 {
+    if (aud_boxes(r)) { const int v = eng_vol_box_key(dir, g_eng_disp.volume); if (v >= 0) eng_disp_set_volume(v); return; }   /* Left / Right pick a box, Enter sets it */
     if (r > 0) {                                             /* a mixer row: 5% steps, Enter back to 100% */
         const int m = mixer->get(r - 1) + dir * 5;
         mixer->set(r - 1, dir == 0 ? 100 : m < 0 ? 0 : m > mixer->max ? mixer->max : m);
@@ -167,11 +190,7 @@ static void aud_change(int r, int dir)
 static void aud_notes(void (*line)(const char *fmt, ...))
 {
     (void)line;
-    nk_layout_row_dynamic(ctx, 24, 4);
-    if (nk_button_label(ctx, "Mute")) eng_disp_set_volume(0);
-    if (nk_button_label(ctx, "25%"))  eng_disp_set_volume(25);
-    if (nk_button_label(ctx, "50%"))  eng_disp_set_volume(50);
-    if (nk_button_label(ctx, "100%")) eng_disp_set_volume(100);
+    eng_vol_boxes(ctx, aud_boxes(row), g_eng_disp.volume, eng_disp_set_volume);
 }
 static const eng_ui_page page_audio = { "Audio", 300, 120, 26, aud_n, NULL, NULL, aud_text, aud_change, aud_notes };
 
@@ -182,6 +201,17 @@ static bool row_enabled(int t, int r) { return pages[t]->enabled ? pages[t]->ena
 static bool is_audio(int t) { return pages[t] == &page_audio; }
 
 void eng_ui_add_page(const eng_ui_page *p) { if (npages < MAXPAGES) pages[npages++] = p; }
+
+/* ENG_UI_DUMP=1 (tests: menu audits): every page's rows as text to the log, once, the first time the menu is drawn */
+static void ui_dump(void)
+{
+    static int done; if (done || !getenv("ENG_UI_DUMP")) return; done = 1;
+    for (int t = 0; t < npages; t++) {
+        const int n = pages[t]->nrows ? pages[t]->nrows() : 0;
+        fprintf(stderr, "[UIDUMP] == %s (%d rows)\n", pages[t]->name, n);
+        for (int r = 0; r < n; r++) { char l[160] = "", v[200] = ""; if (pages[t]->text) pages[t]->text(r, l, sizeof l, v, sizeof v); fprintf(stderr, "[UIDUMP] %s | %s | %s\n", pages[t]->name, l, v); }
+    }
+}
 
 bool eng_ui_init(SDL_Window *win, const char *title)
 {
@@ -228,7 +258,7 @@ void eng_ui_set_open(bool on) {
     if (input_cap_cb) { input_cap_cb(NULL, cap_u); input_cap_cb = NULL; }
     if (on && row >= nrows(tab)) row = 0;
 }
-void eng_ui_input_begin(void) { if (ctx) nk_input_begin(ctx); }
+void eng_ui_input_begin(void) { if (ctx) { nk_input_begin(ctx); nkc_begin(); } }
 void eng_ui_input_end(void)   { if (ctx) nk_input_end(ctx); }
 void eng_ui_capture_key(void (*cb)(SDL_Scancode, void *), void *u) { input_cap_cb = NULL; cap_cb = cb; cap_u = u; }
 void eng_ui_capture_input(bool (*cb)(const SDL_Event *, void *), void *u) { cap_cb = NULL; input_cap_cb = cb; cap_u = u; }
@@ -288,7 +318,7 @@ bool eng_ui_event(SDL_Event *e)
     }
     int k = -1;
     if (layer_modal()) {                                 /* a layer's window has the keyboard: only the mouse goes on to Nuklear */
-        if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP && e->type != SDL_TEXTINPUT && e->type != SDL_CONTROLLERBUTTONDOWN) nk_sdl_handle_event(e);
+        if (e->type != SDL_KEYDOWN && e->type != SDL_KEYUP && e->type != SDL_TEXTINPUT && e->type != SDL_CONTROLLERBUTTONDOWN) nkc_event(e);
         return true;
     }
     if (e->type == SDL_KEYDOWN) {
@@ -299,8 +329,7 @@ bool eng_ui_event(SDL_Event *e)
         case SDL_SCANCODE_LEFT: k = K_LEFT; break;
         case SDL_SCANCODE_RIGHT: k = K_RIGHT; break;
         case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_SPACE: if (!rep) k = K_OK; break;
-        case SDL_SCANCODE_ESCAPE: if (!rep) k = K_EXIT; break;     /* Esc twice = exit; Backspace / pad B = back to the game */
-        case SDL_SCANCODE_BACKSPACE: if (!rep) k = K_BACK; break;
+        case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_BACKSPACE: if (!rep) k = K_BACK; break;   /* Esc closes the menu (our fork: never quits -- File > Exit does) */
         case SDL_SCANCODE_TAB: if (!rep) k = (e->key.keysym.mod & KMOD_SHIFT) ? K_TABPREV : K_TABNEXT; break;
         case SDL_SCANCODE_PAGEUP: if (!rep) k = K_TABPREV; break;
         case SDL_SCANCODE_PAGEDOWN: if (!rep) k = K_TABNEXT; break;
@@ -318,17 +347,27 @@ bool eng_ui_event(SDL_Event *e)
         case SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: k = K_TABNEXT; break;
         default: break;
         }
-    } else if (e->type == SDL_JOYHATMOTION) {           /* raw sticks: the hat navigates */
+    } else if (e->type == SDL_JOYHATMOTION && !SDL_GameControllerFromInstanceID(e->jhat.which)) {   /* raw sticks: the hat navigates
+                                                         * (a game controller's D-pad is also its joystick's hat: one press, one step) */
         if (e->jhat.value & SDL_HAT_UP) k = K_UP; else if (e->jhat.value & SDL_HAT_DOWN) k = K_DOWN;
         else if (e->jhat.value & SDL_HAT_LEFT) k = K_LEFT; else if (e->jhat.value & SDL_HAT_RIGHT) k = K_RIGHT;
     }
+    else if (e->type == SDL_CONTROLLERAXISMOTION && (e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTX || e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY)) {
+        /* the LEFT STICK navigates as the d-pad does, one step per push (as s23/src/eng/eng_ui.c) */
+        static int held[2]; const int ax = e->caxis.axis == SDL_CONTROLLER_AXIS_LEFTY, v = e->caxis.value;
+        const int dir = v > 20000 ? 1 : v < -20000 ? -1 : 0;
+        if (dir && dir != held[ax]) k = ax ? (dir > 0 ? K_DOWN : K_UP) : (dir > 0 ? K_RIGHT : K_LEFT);
+        if (v > -12000 && v < 12000) held[ax] = 0; else if (dir) held[ax] = dir;
+    }
     if (k >= 0) { nav(k); return true; }
     if (e->type == SDL_KEYDOWN || e->type == SDL_KEYUP) return true;   /* the game does not see keys while open */
-    nk_sdl_handle_event(e);                              /* mouse */
+    nkc_event(e);                                        /* mouse (a quick click held a frame: engine/eng_nk_click.h) */
     return true;
 }
 
 /* ---- drawing ---------------------------------------------------------------- */
+static int note_count;
+static void count_line(const char *fmt, ...) { (void)fmt; note_count++; }   /* a page's notes, counted (the dropdown's height) */
 static void note_line(const char *fmt, ...)      /* what a page's notes() calls: one line under the rows */
 {
     char b[160];
@@ -339,24 +378,37 @@ static void note_line(const char *fmt, ...)      /* what a page's notes() calls:
 static char hint_text[96]; static int hint_left;
 void eng_ui_set_hint(const char *text, int frames) { snprintf(hint_text, sizeof hint_text, "%s", text ? text : ""); hint_left = frames; }
 
+void eng_ui_draw_message(const char *const *lines, int n)
+{
+    if (!ctx || n <= 0) return;
+    int ww, wh; SDL_GetWindowSize(uwin, &ww, &wh);
+    const float w = 560 < ww - 16 ? 560.0f : (float)ww - 16, h = 24.0f + (float)n * 22;
+    if (nk_begin(ctx, "linkwait", nk_rect(((float)ww - w) / 2, ((float)wh - h) / 2, w, h), NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BORDER | NK_WINDOW_NO_INPUT)) {
+        nk_layout_row_dynamic(ctx, 18, 1);
+        for (int i = 0; i < n; i++) nk_label(ctx, lines[i], NK_TEXT_CENTERED);
+    }
+    nk_end(ctx);
+    nk_sdl_render(NK_ANTI_ALIASING_ON);
+}
+
 void eng_ui_draw(bool *quit)
 {
     if (quit_req && quit) *quit = true;
     if (!ctx) return;
     if (!open_) {                                    /* the menu-button hint (a pad has no Esc), for a few seconds after the start */
-        int lw, lh; SDL_GetWindowSize(uwin, &lw, &lh);
+        int hw, hh; SDL_GetWindowSize(uwin, &hw, &hh);
         bool any = hint_left > 0 && hint_text[0];
-        for (int i = 0; i < nlayers; i++) if (layers[i]->draw) { layers[i]->draw(ctx, lw, lh, false); any = true; }
+        for (int i = 0; i < nlayers; i++) if (layers[i]->draw) { layers[i]->draw(ctx, hw, hh, false); any = true; }
         if (hint_left > 0 && hint_text[0]) {
             hint_left--;
-            int hw, hh; SDL_GetWindowSize(uwin, &hw, &hh);
             const float w = 440 < hw - 8 ? 440.0f : (float)hw - 8;
-            if (nk_begin(ctx, "hint", nk_rect(((float)hw - w) / 2, (float)hh - 36, w, 28), NK_WINDOW_NO_SCROLLBAR)) {
+            if (nk_begin(ctx, "hint", nk_rect(((float)hw - w) / 2, (float)hh - 36 - link_lights_hint_lift(), w, 28), NK_WINDOW_NO_SCROLLBAR)) {
                 nk_layout_row_dynamic(ctx, 18, 1);
                 nk_label(ctx, hint_text, NK_TEXT_CENTERED);
             }
             nk_end(ctx);
         }
+        any |= link_lights_nk(ctx, hw, hh);          /* the link lights (Network page), when on */
         if (any) nk_sdl_render(NK_ANTI_ALIASING_ON);
         return;
     }
@@ -378,17 +430,20 @@ void eng_ui_draw(bool *quit)
             if (nk_select_label(ctx, pages[t]->name, NK_TEXT_CENTERED, t == tab) && t != tab) { tab = t; row = 0; }
         }
         nk_layout_row_push(ctx, (float)ww - x - 8 > 60 ? (float)ww - x - 8 : 60);
-        nk_label(ctx, row < 0 ? "<- Left/Right ->   Down: open   Backspace: resume   Esc: exit game" : "Arrows, Enter   Backspace: resume   Esc: exit game", NK_TEXT_RIGHT);
+        nk_label(ctx, row < 0 ? "<- Left/Right ->   Down: open   Esc: close" : "Arrows, Enter, Esc", NK_TEXT_RIGHT);
         nk_menubar_end(ctx);
     }
     nk_end(ctx);
 
     /* the dropdown: sized to its page, under its title, inside the window */
+    ui_dump();
     const eng_ui_page *pg = pages[tab];
     const int n0 = nrows(tab);
     const float rh = pg->row_h > 0 ? pg->row_h : 26;
     const float lw = pg->label_w > 0 ? pg->label_w : 120;
-    float dh = 48 + n0 * (rh + 4) + (pg == &page_display ? 88 + 160 : pg->notes ? 44 : 0);
+    float nh = pg->notes ? (pg->notes_h > 0 ? pg->notes_h : 44) : 0;   /* the notes: their room, or more if there are more lines (they were cut) */
+    if (pg->notes && pg != &page_display && pg != &page_audio) { note_count = 0; pg->notes(count_line); if (12 + 21 * note_count > nh) nh = 12 + 21 * note_count; }
+    float dh = 48 + (n0 - (pg == &page_audio ? 1 : 0)) * (rh + 4) + (pg == &page_display ? 88 + 160 : nh);
     if (dh > wh - 34) dh = (float)wh - 34;
     float dw = (pg->drop_w > 0 ? pg->drop_w : 340) < ww - 8 ? (pg->drop_w > 0 ? pg->drop_w : 340) : (float)ww - 8;
     float dx = title_x[tab];
@@ -403,6 +458,7 @@ void eng_ui_draw(bool *quit)
 
         /* the rows: [label][<][value][>]; the selected row is highlighted */
         for (int i = 0; i < n0; i++) {
+            if (pg == &page_audio && aud_boxes(i)) continue;     /* the volume boxes: drawn under the rows (aud_notes) */
             char label[64], value[96];
             pg->text(i, label, sizeof label, value, sizeof value);
             const bool en = row_enabled(tab, i), val = has_value(tab, i);
@@ -425,10 +481,10 @@ void eng_ui_draw(bool *quit)
             if (is_audio(tab) && i > 0) {                /* a mixer row */
                 int v = mixer->get(i - 1);
                 if (nk_slider_int(ctx, 0, &v, mixer->max, 1) && v != mixer->get(i - 1)) mixer->set(i - 1, v);
-            } else if (is_audio(tab)) {                  /* the volume is a slider too */
+            } else if (is_audio(tab) && i == 0) {        /* the volume is a slider too */
                 int v = g_eng_disp.volume;
                 if (nk_slider_int(ctx, 0, &v, 100, 1) && v != g_eng_disp.volume) eng_disp_set_volume(v);
-            } else if (nk_button_label(ctx, value[0] ? value : label)) { row = i; pg->change(i, 0); }
+            } else if (eng_nk_button_sel(ctx, value[0] ? value : label, pg == &page_file && i == row)) { row = i; pg->change(i, 0); }
             if (val && nk_button_symbol(ctx, NK_SYMBOL_TRIANGLE_RIGHT)) { row = i; pg->change(i, +1); }
             if (!en) nk_widget_disable_end(ctx);
         }

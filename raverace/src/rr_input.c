@@ -38,6 +38,9 @@ int g_cfg_fullscreen = 0, g_cfg_scale = 2, g_cfg_scaling = 0;
  * widescreen; and the picture aspect when widescreen is off (0 stretch, 1 4:3,
  * 2 8:7, 3 16:9) */
 int g_cfg_draw = 0;          /* draw distance level 0..3 (rr_host_set_draw) */
+int g_cfg_fxfilter = 0;      /* Display > Effects: the game's effect polygons (rr_game_t.fx_tex) sampled bilinearly (rr_host_set_fxfilter) */
+int g_cfg_texaniso = 0;      /* anisotropic filtering with the trilinear modes: 0 off, else 2/4/8/16 (rr_host_set_texaniso) */
+int g_cfg_texfilter = 0;     /* 3D polygon texture filter: 0 off (the board's NEAREST), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear; never the HUD, text or sprite layers (rr_host_set_texfilter) */
 int g_cfg_wide_169;                  /* widescreen's shape: 0 the window's (default), 1 16:9 (saved as wide_aspect) */
 int g_cfg_fps;                       /* Display > Frame rate: pictures a second, 0 = Auto, the default (engine/eng_vsync.h) */
 int g_cfg_winmode = -1, g_cfg_res_w = 640, g_cfg_res_h = 480, g_cfg_wide = 0, g_cfg_aspect = 1;   /* scaling: 0 smooth, 1 sharp, 2 integer */            /* free_play = 0|1 in rr_controls.cfg; -1 = not set */
@@ -135,6 +138,10 @@ static void load_kv(const char *path, char *k, char *v)
     if (!strcmp(k, "wide_aspect")) { g_cfg_wide_169 = !strcmp(v, "16:9"); return; }
     if (!strcmp(k, "widescreen")) { g_cfg_wide = atoi(v) ? 1 : 0; return; }
     if (!strcmp(k, "wide_hud")) { extern int g_eng_hud_edges_on; g_eng_hud_edges_on = atoi(v) ? 1 : 0; return; }
+    if (!strcmp(k, "texture_filter")) { g_cfg_texfilter = (!strcmp(v, "sharp-trilinear") || !strcmp(v, "4")) ? 4 : (!strcmp(v, "trilinear") || !strcmp(v, "3")) ? 3
+                                                        : (!strcmp(v, "sharp") || !strcmp(v, "2")) ? 2 : (!strcmp(v, "bilinear") || !strcmp(v, "1")) ? 1 : 0; return; }
+    if (!strcmp(k, "effects_filter")) { g_cfg_fxfilter = !strncmp(v, "on", 2) || atoi(v) == 1; return; }
+    if (!strcmp(k, "texture_aniso")) { int n = atoi(v); g_cfg_texaniso = n >= 16 ? 16 : n >= 8 ? 8 : n >= 4 ? 4 : n >= 2 ? 2 : 0; return; }
     if (!strcmp(k, "draw_distance")) {
         g_cfg_draw = !strcmp(v, "far") ? 1 : !strcmp(v, "farther") ? 2 : !strcmp(v, "maximum") ? 3 : 0;
         return; }
@@ -237,6 +244,8 @@ bool rr_input_write(const char *path)
                "resolution = 640x480  # render size: 640x480 (the board) | native (window) | WxH\n"
                "widescreen = 0      # 1: fill a wide window with more track at the sides\n"
                "draw_distance = original  # original | far | farther | maximum: track pieces drawn ahead\n"
+               "texture_filter = off  # off | bilinear | sharp | trilinear | sharp-trilinear: smooth the 3D polygon textures; sharp keeps the texels solid and smooths only their edges, trilinear adds mipmaps (no shimmer far away) (the HUD, text and sprites stay as they are)\n"
+               "texture_aniso = off  # off | 2 | 4 | 8 | 16: anisotropic filtering with the trilinear modes (sharper textures at a slant)\n"
                "aspect = 4:3        # widescreen off: stretch | 4:3 | 8:7 | 16:9\n"
                "scaling = smooth    # smooth | sharp | integer\nvolume = 100        # master volume, percent\n"
                "ffb_strength = 100  # the steering motor on a force-feedback wheel, percent (0 = off)\n"
@@ -290,6 +299,7 @@ static uint32_t rep_next_frame = UINT32_MAX;
 static unsigned rep_in, rep_st, rep_gas, rep_br;
 static uint16_t last[4];
 static bool rec_first;
+static char rec_name[260];                 /* our fork: the recording's file, for a glitch capture / crash copy */
 
 static void rep_read(void)
 {
@@ -339,6 +349,7 @@ bool rr_input_record_start(const char *path)
     if (!rec_f) { fprintf(stderr, "[INPUT] cannot write %s\n", path); return false; }
     fprintf(rec_f, "# %s input recording: F frame inputs steer gas brake (hex), on change\n", g_rr_game->title);
     rec_first = true;
+    snprintf(rec_name, sizeof rec_name, "%s", path);
     fprintf(stderr, "[INPUT] recording to %s\n", path);
     return true;
 }
@@ -354,6 +365,18 @@ void rr_input_record_stop(void)
     if (rec_f) { fclose(rec_f); rec_f = NULL; fprintf(stderr, "[INPUT] recording stopped\n"); }
 }
 bool rr_input_recording(void) { return rec_f != NULL; }
+/* our fork: this session's recording so far, copied to dst (a glitch capture or a crash: replayed with --replay it reaches the same frame) */
+bool rr_input_record_copy(const char *dst)
+{
+    if (!rec_name[0]) return false;
+    if (rec_f) fflush(rec_f);
+    FILE *in = fopen(rec_name, "rb"); if (!in) return false;
+    FILE *out = fopen(dst, "wb"); if (!out) { fclose(in); return false; }
+    char b[65536]; size_t n;
+    while ((n = fread(b, 1, sizeof b, in)) > 0) fwrite(b, 1, n, out);
+    fclose(in); fclose(out);
+    return true;
+}
 
 /* once per frame, after the host has polled: replay overrides, recorder logs */
 void rr_input_frame(uint32_t frame)
@@ -414,10 +437,38 @@ bool rr_input_button_matches(int a, SDL_Joystick *js, int button)
            rr_input_device_matches(js, g_joy_button_guid[a]) &&
            button < SDL_JoystickNumButtons(js);
 }
+bool rr_input_trigger_held(int a, SDL_GameController *gc)
+{
+    if (!gc || a < 0 || a >= RR_ACT_N || g_joy_button[a] < RR_PAD_TRIG) return false;
+    if (!rr_input_device_matches(SDL_GameControllerGetJoystick(gc), g_joy_button_guid[a])) return false;
+    return SDL_GameControllerGetAxis(gc, g_joy_button[a] == RR_PAD_TRIG ? SDL_CONTROLLER_AXIS_TRIGGERLEFT : SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 12000;
+}
+/* a trigger bound to action a pulled past the half-way mark (an event: the one-shot actions) */
+bool rr_input_trigger_pressed(int a, const SDL_Event *e)
+{
+    static Sint16 last[2], before[2]; static Uint32 seen[2];
+    if (e->type != SDL_CONTROLLERAXISMOTION) return false;
+    const int t = e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT ? 0 : e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT ? 1 : -1;
+    if (t < 0) return false;
+    if (e->caxis.timestamp != seen[t] || e->caxis.value != last[t]) { seen[t] = e->caxis.timestamp; before[t] = last[t]; last[t] = e->caxis.value; }   /* a new event */
+    const bool edge = e->caxis.value > 20000 && before[t] <= 20000;
+    if (a < 0 || a >= RR_ACT_N || g_joy_button[a] != RR_PAD_TRIG + t || !edge) return false;
+    return rr_input_device_matches(SDL_GameControllerGetJoystick(SDL_GameControllerFromInstanceID(e->caxis.which)), g_joy_button_guid[a]);
+}
 static struct { SDL_JoystickID id; int base[16], n; } capture_base[16];
 static int capture_count;
+/* the buttons already held when a capture starts (as engine/ss22_input.c, GitHub #21): the pad's A that OPENS a binding row also
+ * arrives as an SDL_JOYBUTTONDOWN after the menu acted on it, so A itself was bound at once */
+static struct { SDL_JoystickID id; Uint8 b[64]; } cap_held[16];
 void rr_input_capture_begin(int action)
 {
+    memset(cap_held, 0, sizeof cap_held);
+    for (int i = 0; i < SDL_NumJoysticks() && i < 16; i++) {
+        SDL_Joystick *js = SDL_JoystickFromInstanceID(SDL_JoystickGetDeviceInstanceID(i));
+        if (!js) continue;
+        cap_held[i].id = SDL_JoystickInstanceID(js);
+        for (int b = 0; b < SDL_JoystickNumButtons(js) && b < 64; b++) cap_held[i].b[b] = SDL_JoystickGetButton(js, b);
+    }
     capture_count = 0;
     if (!action_axis(action)) return;
     for (int i = 0; i < SDL_NumJoysticks() && capture_count < 16; i++) {
@@ -438,11 +489,17 @@ bool rr_input_capture_event(int a, const SDL_Event *e)
         if (e->key.keysym.scancode != SDL_SCANCODE_ESCAPE) rr_input_bind_key(a, e->key.keysym.scancode);
         return true;
     }
-    if (e->type == SDL_JOYBUTTONDOWN) {
-        SDL_Joystick *js = SDL_JoystickFromInstanceID(e->jbutton.which);
+    if (e->type == SDL_JOYBUTTONUP && e->jbutton.button < 64)
+        for (int i = 0; i < 16; i++) if (cap_held[i].id == e->jbutton.which) cap_held[i].b[e->jbutton.button] = 0;
+    const bool trig = e->type == SDL_CONTROLLERAXISMOTION && e->caxis.value > 20000 &&
+        (e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT || e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
+    if (e->type == SDL_JOYBUTTONDOWN || trig) {
+        SDL_Joystick *js = SDL_JoystickFromInstanceID(trig ? e->caxis.which : e->jbutton.which);
         if (!js) return false;
+        if (!trig && e->jbutton.button < 64)                       /* the press that opened the row */
+            for (int i = 0; i < 16; i++) if (cap_held[i].id == e->jbutton.which && cap_held[i].b[e->jbutton.button]) return false;
         char key[64], value[32];
-        g_joy_button[a] = e->jbutton.button;
+        g_joy_button[a] = trig ? RR_PAD_TRIG + (e->caxis.axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) : e->jbutton.button;
         SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(js), g_joy_button_guid[a], sizeof g_joy_button_guid[a]);
         snprintf(key, sizeof key, "joy_button_%s", act_name[a]);
         snprintf(value, sizeof value, "%d", g_joy_button[a]);
@@ -502,7 +559,8 @@ void rr_input_binding_label(int a, char *text, size_t size)
     snprintf(text, size, "%s", *key ? key : "(none)");
     if (g_joy_button[a] >= 0) {
         size_t n = strlen(text);
-        snprintf(text + n, size - n, " / button %d", g_joy_button[a]);
+        if (g_joy_button[a] >= RR_PAD_TRIG) snprintf(text + n, size - n, " / %s", g_joy_button[a] == RR_PAD_TRIG ? "left trigger" : "right trigger");
+        else snprintf(text + n, size - n, " / button %d", g_joy_button[a]);
     }
     rr_joyaxis_t *ax = action_axis(a);
     if (ax && ax->axis >= 0) {

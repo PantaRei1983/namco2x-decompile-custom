@@ -18,7 +18,7 @@ extern const char *const g_stick_steer_name[RR_STICK_N];
 extern const double g_stick_steer_curve[RR_STICK_N];
 extern int g_cfg_stick_steer;
 extern int g_cfg_fullscreen, g_cfg_scale, g_cfg_scaling, g_cfg_volume;
-extern int g_cfg_winmode, g_cfg_res_w, g_cfg_res_h, g_cfg_wide, g_cfg_aspect, g_cfg_draw, g_cfg_fps;
+extern int g_cfg_winmode, g_cfg_res_w, g_cfg_res_h, g_cfg_wide, g_cfg_aspect, g_cfg_draw, g_cfg_fps, g_cfg_texfilter, g_cfg_texaniso;
 extern int g_cfg_wide_169;                  /* widescreen's shape: 0 the window's, 1 16:9 */
 extern char g_cfg_net_server[128], g_cfg_net_name[24];   /* the Online page's server and lobby name */
 bool rr_input_set_option(const char *path, const char *key, const char *val);
@@ -39,6 +39,9 @@ bool rr_input_device_matches(SDL_Joystick *js, const char *guid);
  * "FANATEC Wheel"s under one GUID (12 axes / 63 buttons and 8 axes / 108 buttons) */
 bool rr_input_axis_device(const rr_joyaxis_t *ax, SDL_Joystick *js);
 bool rr_input_button_matches(int action, SDL_Joystick *js, int button);
+#define RR_PAD_TRIG 100                                 /* g_joy_button = RR_PAD_TRIG + 0 (LT) / + 1 (RT): a pad's trigger bound as a button */
+bool rr_input_trigger_held(int action, SDL_GameController *gc);
+bool rr_input_trigger_pressed(int action, const SDL_Event *e);
 double rr_input_pedal_value(rr_joyaxis_t *axis, int value);
 extern rr_joyaxis_t g_joy_steer, g_joy_gas, g_joy_brake;
 extern int g_joy_button[RR_ACT_N];
@@ -54,6 +57,7 @@ void rr_input_record_eeprom(const uint8_t *ee);      /* the boot's EEPROM into t
 bool rr_input_replay_eeprom(uint8_t *ee);            /* a recording's EEPROM, if it has one */
 void rr_input_record_stop(void);
 bool rr_input_recording(void);
+bool rr_input_record_copy(const char *dst);         /* our fork: the recording so far, copied (glitch capture, crash) */
 void rr_input_frame(uint32_t frame);           /* apply replay / log recording */
 
 #endif

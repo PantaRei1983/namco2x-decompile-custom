@@ -10,6 +10,7 @@ Sets (MAME `namcos22.cpp`, System 22 -- the same board as Rave Racer and Ridge R
   victlap   Ace Driver: Victory Lap (World, ADV2 Ver.B, 96/05/21) -> extracted_victlap/
   cybrcomm  Cyber Commando (Japan, CY1, 94/10/14)                  -> ../cybrcomm/extracted/
   ridgera2  Ridge Racer 2 (World, RRS2, 94/06/21)                  -> ../ridgera2/extracted/
+  ridgerac  Ridge Racer (World, RR2 Ver.B, 94/01/17)               -> ../ridgerac/extracted/
 
 Every chip is checked by name, size AND CRC32 before anything is written, so a wrong or incomplete set is
 reported instead of producing a game that crashes later. c74.bin (the sound MCU BIOS) comes from namcoc74.zip;
@@ -139,16 +140,42 @@ GAMES = {
         ("gamma_proms", "rr1gam.3d", 0x100, 0x100, 0xb2161bce),
         ("gamma_proms", "rr1gam.4d", 0x200, 0x100, 0xb2161bce),
     ],
+    "ridgerac": [
+        ("maincpu", "rr2_prgllb.4d", 0x3, 0x80000, 0xd50d4fa0),
+        ("maincpu", "rr2_prglmb.2d", 0x2, 0x80000, 0x6a266f42),
+        ("maincpu", "rr2_prgumb.8d", 0x1, 0x80000, 0x64c3aff1),
+        ("maincpu", "rr2_prguub.6d", 0x0, 0x80000, 0xe6ff0b8d),
+        ("mcu", "rr1data.6r", 0x0, 0x80000, 0x18f5f748),
+        ("textile", "rr1cg0.bin", 0x800000, 0x200000, 0xb557a795),
+        ("textile", "rr1cg1.bin", 0xa00000, 0x200000, 0x0fa212d9),
+        ("textile", "rr1cg2.bin", 0xc00000, 0x200000, 0x18e2d2bd),
+        ("textile", "rr1cg3.bin", 0xe00000, 0x200000, 0x9564488b),
+        ("textilemap", "rr1ccrl.bin", 0x0, 0x200000, 0x6092d181),
+        ("textilemap", "rr1ccrh.bin", 0x200000, 0x80000, 0xdd332fd5),
+        ("pointrom", "rr1potl0.5b", 0x0, 0x80000, 0x3ac193e3),
+        ("pointrom", "rr1potl1.4b", 0x80000, 0x80000, 0xac3ffba5),
+        ("pointrom", "rr1potm0.5c", 0x100000, 0x80000, 0x42a3fa08),
+        ("pointrom", "rr1potm1.4c", 0x180000, 0x80000, 0x1bc1ea7b),
+        ("pointrom", "rr1potu0.5d", 0x200000, 0x80000, 0x5e367f72),
+        ("pointrom", "rr1potu1.4d", 0x280000, 0x80000, 0x31d92475),
+        ("c352", "rr1wav0.10r", 0x0, 0x100000, 0xa8e85bde),
+        ("c352", "rr1wav1.10p", 0x200000, 0x100000, 0x35f47c8e),
+        ("c352", "rr1wav2.10n", 0x100000, 0x100000, 0x3244cb59),
+        ("c352", "rr1wav3.10l", 0x300000, 0x100000, 0xc4cda1a7),
+        ("gamma_proms", "rr1gam.2d", 0x0, 0x100, 0xb2161bce),
+        ("gamma_proms", "rr1gam.3d", 0x100, 0x100, 0xb2161bce),
+        ("gamma_proms", "rr1gam.4d", 0x200, 0x100, 0xb2161bce),
+    ],
 }
 
 OPTIONAL = {"eeprom"}                # a default EEPROM image older MAME sets lack: without it the game starts from a blank EEPROM
 EXTRA = {"c74.bin": 0x4000}          # the sound MCU BIOS, from namcoc74.zip (size only). The DSP BIOS c71.bin is built into the engine.
-MAIN_NAME = {"acedrive": "acedriver_main.bin", "victlap": "victlap_main.bin", "cybrcomm": "../cybrcomm/cybrcomm_main.bin",
-             "ridgera2": "../ridgera2/ridgera2_main.bin"}   # <dir>_main.bin: the shared tools find the image by the game directory name
-DEST_NAME = {"acedrive": "extracted", "victlap": "extracted_victlap", "cybrcomm": "../cybrcomm/extracted", "ridgera2": "../ridgera2/extracted"}   # Cyber Commando lives in its own directory
+MAIN_NAME = {"acedrive": "acedriver_main.bin", "victlap": "../victlap/victlap_main.bin", "cybrcomm": "../cybrcomm/cybrcomm_main.bin",
+             "ridgera2": "../ridgera2/ridgera2_main.bin", "ridgerac": "../ridgerac/ridgerac_main.bin"}   # <dir>_main.bin: the shared tools find the image by the game directory name
+DEST_NAME = {"acedrive": "extracted", "victlap": "../victlap/extracted", "cybrcomm": "../cybrcomm/extracted", "ridgera2": "../ridgera2/extracted", "ridgerac": "../ridgerac/extracted"}   # Cyber Commando lives in its own directory
 TITLE = {"acedrive": "Ace Driver: Racing Evolution (World, AD2)", "victlap": "Ace Driver: Victory Lap (World, ADV2 Ver.B)",
          "cybrcomm": "Cyber Commando (Japan, CY1)",
-         "ridgera2": "Ridge Racer 2 (World, RRS2)"}
+         "ridgera2": "Ridge Racer 2 (World, RRS2)", "ridgerac": "Ridge Racer (World, RR2 Ver.B)"}
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 

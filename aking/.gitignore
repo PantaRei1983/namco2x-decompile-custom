@@ -14,6 +14,8 @@
 /gen/ak_io.c
 /aking.cfg
 /tc2.log
+/s23.log
+/build.out
 /aking*.log
 /aking_backup.nv
 /aking_backup.nv.tmp
@@ -21,3 +23,4 @@
 /aking_prev.rec
 /screenshots/
 __pycache__/
+/work/

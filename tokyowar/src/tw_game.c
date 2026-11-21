@@ -180,10 +180,24 @@ static void autoplay(long n, uint16_t *p, unsigned *wheel, unsigned *pedal1, uns
     if (n % 55 < 4) *p |= IN_RTRIG;
 }
 
+/* the link driver's own state (work RAM, A6 = 0xE08000): what the game thinks of the link, for the log (docs/LINK_NOTES.md) */
+static void link_report(char *buf, int n)
+{
+    snprintf(buf, (size_t)n, "game: cabinet %u, hears %02X, ring of %u, link %s, frames since own came back %u",
+             rr_read(0xE02000u, 2) + 1, rr_read(0xE02010u, 2), rr_read(0xE02006u, 2), rr_read(0xE0200Cu, 2) ? "GOOD" : "down",
+             rr_read(0xE0200Au, 2));
+}
+
+static bool link_good(void) { return rr_read(0xE0200Cu, 2) != 0; }
+static int  link_game_id(void) { return (int)(rr_read(0xE02000u, 2) & 3); }
+
 /* THE CABINET LINK (engine/ss22_link.h, --link ID/N). The game's link driver (FUN_00092F82 init, FUN_00093072 send, FUN_000932A0 the SCI
  * handler, FUN_0009362E the per-frame latch) takes its cabinet number from the operator setting at EEPROM byte 9 (0x460012, & 3: four cabinets,
  * FUN_00012BB6 masks it), the high word of the setting at 0xE0A00C. Online play: src/tw_net.c. */
-bool tw_net_boot(void);
+bool tw_net_boot(bool menu);
+const struct eng_ui_page *tw_net_page(void);
+void tw_net_paused(void);
+bool link_host_author_method(int argc, char **argv);
 void tw_link_cabinet(int id)
 {
     g_ss22.eeprom[8] = 0; g_ss22.eeprom[9] = (uint8_t)(id & 3);                    /* read at boot (FUN_00092F82, FUN_0000532C) */
@@ -197,6 +211,11 @@ static void tw_link_debug(uint32_t f)
             w16(0xE02062), w16(0xE02064), w16(0xE02066), w16(0xE02068));
 }
 
+/* The smoke, fire and spark sprites of the 2D layer, by the first tile of each sprite (found by listing every sprite of a played game against the sprite ROM's
+ * pictures): the ROM keeps all the explosion and smoke clouds, in their growing sizes, and the sparks from tile 0 up to ~5600; the banners, labels and fonts
+ * (6552 and up in play) come after. The Display menu's "Effects" option smooths exactly these. */
+static const int fx_tiles[][2] = { { 0, 5600 } };
+
 static const ss22_game game = {
     .name = "Tokyo Wars", .tag = "TW", .lname = "tw", .logname = "tokyowar.log", .zip = "tokyowar.zip",
     .out_gain = 1.4,      /* the chip runs ~4x hotter than Rave Racer's (raw median RMS 2369 against 563): x6 put 15% of the samples above the limiter's knee; 1.4 lands on Rave Racer's level (~3400 RMS) */
@@ -208,7 +227,8 @@ static const ss22_game game = {
     .snd = { "tw1data.8k", { "tw1wavea.2l", NULL }, { 0, 0 }, 0x400000, 0xFFFF, { 2, 3 } },
     .video = { { "tw1cg0.8d", "tw1cg1.10d", "tw1cg2.12d", "tw1cg3.13d", "tw1cg4.14d", "tw1cg5.16d", "tw1cg6.18d", "tw1cg7.19d" },
                "tw1ccrl.3d", "tw1ccrh.1d", { "tw1scg0.12f", "tw1scg1.10f", "tw1scg2.8f", "tw1scg3.7f" }, 4, 4 * 0x200000, 0x00,
-               .hud = { hud_marks, 2, 0x10, -1, .bake_all_without_hud = true } },
+               .hud = { hud_marks, 2, 0x10, -1, .bake_all_without_hud = true },
+               .fx = fx_tiles, .n_fx = 1 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_4000,
@@ -217,8 +237,11 @@ static const ss22_game game = {
     .presses = presses, .n_presses = (int)(sizeof presses / sizeof *presses),
     .autoplay = autoplay,
     .pedal_full = { 0x100, 0x100 },
+    .link_id_byte = 9,                  /* link play: GAME OPTIONS -> ID NO. = EEPROM byte 9, bits 0-1 (the driver reads it at 0x92F82) */
+    .link_report = link_report, .link_good = link_good, .link_game_id = link_game_id,
     .link_cabinet = tw_link_cabinet, .link_debug = tw_link_debug,
+    .menu_page = tw_net_page, .paused_tick = tw_net_paused,   /* the author's Online page, when link.cfg asks for that method (src/tw_net.c) */
     .recoil_mask = 0x0010,              /* mcuout4, MAME "4 = handle solenoid": rises on each cannon shot (either trigger) -> pad rumble + wheel kick */
 };
 
-int main(int argc, char **argv) { tw_net_boot(); return ss22_main(argc, argv, &game); }
+int main(int argc, char **argv) { tw_net_boot(link_host_author_method(argc, argv)); return ss22_main(argc, argv, &game); }

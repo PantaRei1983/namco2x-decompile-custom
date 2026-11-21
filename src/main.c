@@ -82,6 +82,7 @@ static bool no_audio = false;   /* --noaudio; see AUDIO_PLAN.md phase 1 */
 static char shot_dir[256] = "screenshots";
 static bool shot_pending = false;   /* F12 armed a capture */
 static int  shot_every = 0;         /* PROPCYCL_SHOT_EVERY=N */
+static long shot_from = 0, shot_to = -1;   /* PROPCYCL_SHOT_FROM / _TO: only within these frames */
 FILE *g_sndcmd_f;                   /* PROPCYCL_SNDCMDLOG=<path> */
 static const char* screenshot_path = "screenshot.ppm";
 static int screenshot_frame = 10;  /* capture after N frames */
@@ -828,6 +829,7 @@ int main(int argc, char* argv[]) {
     { extern int g_mat_dump; g_mat_dump = getenv("PROPCYCL_MATDUMP") ? 1 : 0; }
     { extern int g_ik_dump; g_ik_dump = getenv("PROPCYCL_IKDUMP") ? 1 : 0; }
     { extern int g_rig_dump; g_rig_dump = getenv("PROPCYCL_RIGDUMP") ? 1 : 0; }
+    { extern long g_nodedump; const char *e = getenv("PROPCYCL_NODEDUMP"); g_nodedump = (e && *e) ? atol(e) : -1; }
     { const char *e = getenv("PROPCYCL_SPRCALL"); extern int g_sprcall;
       g_sprcall = e ? atoi(e) : 0; if (e && g_sprcall == 0) g_sprcall = 1; }
     { extern int g_cglog; g_cglog = getenv("PROPCYCL_CGLOG") ? 1 : 0; }
@@ -903,7 +905,9 @@ int main(int argc, char* argv[]) {
     /* PROPCYCL_SHOT_EVERY=N captures every N frames without a keypress, so a
      * headless or offscreen run produces the same PNGs F12 does. */
     { const char *e = getenv("PROPCYCL_SHOT_EVERY");
-      if (e) shot_every = atoi(e); }
+      if (e) shot_every = atoi(e);
+      if ((e = getenv("PROPCYCL_SHOT_FROM"))) shot_from = atol(e);
+      if ((e = getenv("PROPCYCL_SHOT_TO")))   shot_to = atol(e); }
     input_init();
     { extern void pedal_enc_init(int); pedal_enc_init(!headless); }   /* reads PROPCYCL_ENC once */
     renderer2d_init();
@@ -1317,6 +1321,14 @@ int main(int argc, char* argv[]) {
           if (at >= 0 && (long)g_sys.frame_count == at) {
               extern void level_select_request(int adv, int course);
               level_select_request(adv, course); } }
+        /* PROPCYCL_LEVEL=inter:<day>[@frame]: straight to the story intermission after that day (level_select.c). */
+        { static int done; static long at = -1; static int day;
+          if (!done) { done = 1;
+              extern int level_select_parse_inter(const char *, int *, long *);
+              if (!level_select_parse_inter(getenv("PROPCYCL_LEVEL"), &day, &at)) at = -1; }
+          if (at >= 0 && (long)g_sys.frame_count == at) {
+              extern void level_select_inter(int day);
+              level_select_inter(day); } }
         /* PROPCYCL_LEVEL=end:<clear|bad>[:phase][@frame]: straight to the
          * story ENDING (level_select.c); PROPCYCL_ENDING_TOTAL sets the total. */
         { static int done; static long at = -1; static int cleared, phase;
@@ -1771,7 +1783,8 @@ int main(int argc, char* argv[]) {
          * UI included. Headless has a real GL context too (offscreen
          * driver), so a frame-triggered capture works there as well. */
         if (shot_pending ||
-            (shot_every > 0 && g_sys.frame_count % (unsigned)shot_every == 0)) {
+            (shot_every > 0 && g_sys.frame_count % (unsigned)shot_every == 0 &&
+             (long)g_sys.frame_count >= shot_from && (shot_to < 0 || (long)g_sys.frame_count <= shot_to))) {
             shot_pending = false;
             screenshot_capture(window, shot_dir, g_sys.frame_count);
             { extern void blinklog_mark(const char *, unsigned);

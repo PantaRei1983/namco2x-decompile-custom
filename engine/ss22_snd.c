@@ -58,6 +58,8 @@ static double    want_phase = 97;        /* the scanline of its frame at which t
 static uint64_t  chip_done;              /* C352 frames generated so far */
 
 static uint16_t  pressed;                /* the INPUTS bits currently held */
+void (*g_ss22_adc_hook)(uint16_t *adc4);             /* optional: the four A-D channels as just set from the controls, for a game to adjust */
+uint16_t (*g_ss22_inputs_hook)(uint16_t inputs);   /* optional: the INPUTS word as the MCU is about to read it, for a game's own device */
 static uint16_t  adc[4] = { 0x200, 0, 0, 0 };            /* the A-D channels: 0 the wheel, the pedals as the game wires them */
 static uint8_t   iocontrol, outdata;
 static uint16_t  outputs;
@@ -240,7 +242,8 @@ static uint8_t port_r(void *u, unsigned reg, uint8_t latch)
     case 0x0A: in = iocontrol; break;                                                     /* mcu_port4_r */
     case 0x0B: {                                                                          /* mcu_port5_r */
         static int clr = -1; if (clr < 0) { const char *e = getenv("SS22_INPUTS_CLEAR"); clr = e ? (int)(strtol(e, NULL, 16) & 0xFFFF) : 0; }   /* tests: e.g. 80 = Tokyo Wars' Deluxe cabinet */
-        const uint16_t inputs = (uint16_t)(g_ss22_game->snd.inputs_idle & ~pressed & ~clr);      /* IP_ACTIVE_LOW, idle high (Dirt Dash: bit 9 is the cabinet switch, Standard = 0) */
+        uint16_t inputs = (uint16_t)(g_ss22_game->snd.inputs_idle & ~pressed & ~clr);
+        if (g_ss22_inputs_hook) inputs = g_ss22_inputs_hook(inputs);   /* a cabinet device that answers on INPUTS bits (Alpine Racer's step-lock motor) */      /* IP_ACTIVE_LOW, idle high (Dirt Dash: bit 9 is the cabinet switch, Standard = 0) */
         in = (iocontrol & 8) ? (uint8_t)(inputs & 0xFF) : (uint8_t)(inputs >> 8);
         break;
     }
@@ -476,6 +479,7 @@ void ss22_snd_inputs(uint16_t p, unsigned wheel, unsigned pedal1, unsigned pedal
     adc[0] = (uint16_t)(wheel & 0x3FF);
     adc[c->adc_pedal[0]] = (uint16_t)(pedal1 & 0x3FF);
     adc[c->adc_pedal[1]] = (uint16_t)(pedal2 & 0x3FF);
+    if (g_ss22_adc_hook) g_ss22_adc_hook(adc);            /* a game whose second axis is not a pedal (Alpine Racer's steps: edge rests at centre) */
     cpu.analog[0] = adc[0]; cpu.analog[c->adc_pedal[0]] = adc[c->adc_pedal[0]]; cpu.analog[c->adc_pedal[1]] = adc[c->adc_pedal[1]];
 }
 uint16_t ss22_snd_outputs(void) { return outputs; }
