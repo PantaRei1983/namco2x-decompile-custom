@@ -160,6 +160,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   0x03164C), and the sacred altar picture gets its frame number again. `PROPCYCL_SHOT_FROM` / `PROPCYCL_SHOT_TO` limit
   `PROPCYCL_SHOT_EVERY` captures to a range of frames.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Ridge Racer 2:** the test menu's GAME OPTIONS and COIN OPTIONS change again (gas held, wheel left / right) and are saved when the
+  Test switch goes off: the four `cmp2.b` of the lifted code read their bounds from a wrong address, so every step "wrapped" and the
+  value flickered between two settings (namco22-decompile issue #101). `ridgera2/tools/gen/fix_cmp2b.py` rewrites them.
 - **Widescreen fog (System 22 games):** the depth fog of a quad past the 4:3 sides is taken as far as the frame's edge would
   see it. The fog level is the depth along the view axis, so the sky panels out to the side -- seen only in a wider picture --
   had less of it: Ridge Racer's sunset (red) and dawn (white), which are fog on the sky dome, left a blue strip of sky at the

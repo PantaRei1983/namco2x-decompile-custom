@@ -336,6 +336,22 @@ void rr_tick(void)
               pa[np] = a; ps[np] = s; pv[np] = v; np++; e = q + n; if (*e == ',') e++; else break; } }
       for (int i = 0; i < np; i++) if (frame >= pf[i] && frame <= pt[i]) rr_write(pa[i], ps[i], pv[i]); }
     for (int i = 0; i < n_steer; i++) if (frame >= (uint32_t)test_steer[i].at) g_hw.steer = (uint16_t)test_steer[i].value;
+    { static FILE *sf; static int init; static long nf = -1; static char ln[256];   /* RR_INSCRIPT=<file>: headless inputs per frame, lines
+      * "<frame> steer=V gas=V brake=V test=0|1 in=MASK:BITS ...", each applied at its frame and kept (test-menu and select-screen checks) */
+      if (!init) { init = 1; const char *e = getenv("RR_INSCRIPT"); if (e) sf = fopen(e, "r"); }
+      while (sf) {
+          if (nf < 0) { if (!fgets(ln, sizeof ln, sf)) { fclose(sf); sf = NULL; break; } if (ln[0] == '#' || sscanf(ln, "%ld", &nf) != 1) { nf = -1; continue; } }
+          if ((uint32_t)nf > frame) break;
+          for (char *t = strtok(ln, " \t\n"); t; t = strtok(NULL, " \t\n")) {
+              unsigned v, m;
+              if (sscanf(t, "steer=%i", &v) == 1) g_hw.steer = (uint16_t)v;
+              else if (sscanf(t, "gas=%i", &v) == 1) g_hw.gas = (uint16_t)v;
+              else if (sscanf(t, "brake=%i", &v) == 1) g_hw.brake = (uint16_t)v;
+              else if (sscanf(t, "test=%u", &v) == 1) { if (v) g_hw.inputs &= (uint16_t)~0x0400; else g_hw.inputs |= 0x0400; }
+              else if (sscanf(t, "in=%x:%x", &m, &v) == 2) g_hw.inputs = (uint16_t)((g_hw.inputs & ~m) | (v & m));
+          }
+          nf = -1;
+      } }
     for (int i = 0; i < n_adc; i++) if (frame >= (uint32_t)test_adc[i].at) g_hw.adc[test_adc[i].idx & 3] = (uint8_t)test_adc[i].value;
     { static long pf = -2; if (pf == -2) { const char *e = getenv("RR_TEST_PLAY"); pf = e ? atol(e) : -1; }   /* RR_TEST_PLAY=F (twin-stick games, headless
       * tests): from frame F the gun pulses and both sticks turn left / centre / right in turn, so a match runs (with --coin);

@@ -262729,21 +262729,7 @@ A_210BA: RR_INS(0x210BAU); /* add.b D0b,D1b */
   P_210BA_8: RS1(0x45, ((u16c00 & 0xFFULL) == 0x0ULL));
   A_END_210BA: ;
 A_210BC: RR_INS(0x210BCU); /* cmp2.b (A0),D1 */
-  P_210BC_0: u10f00 = ((uint64_t)MRD1((uint32_t)RG4(0x20))) & 0xFFULL;
-  P_210BC_1: u3c900 = ((u10f00 & 0xFFULL)) & 0xFFFFFFFFULL;
-  P_210BC_2: u3cb00 = ((uint64_t)MRD1((uint32_t)(u3c900 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_210BC_3: u3cc00 = ((u3c900 & 0xFFFFFFFFULL) + 0x1ULL) & 0xFFFFFFFFULL;
-  P_210BC_4: u3ce00 = ((uint64_t)MRD1((uint32_t)(u3cc00 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_210BC_5: u3d000 = ((uint64_t)SX1((u3cb00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_210BC_6: u3d200 = ((uint64_t)SX1((u3ce00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_210BC_7: u3d400 = (RG4(0x4)) & 0xFFFFFFFFULL;
-  P_210BC_8: u3d500 = (((u3d400 & 0xFFFFFFFFULL) == (u3d000 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_210BC_9: u3d600 = (((u3d400 & 0xFFFFFFFFULL) == (u3d200 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_210BC_10: RS1(0x45, (u3d500 & 0xFFULL) | (u3d600 & 0xFFULL));
-  P_210BC_11: u3d800 = ((SX4((u3d000 & 0xFFFFFFFFULL)) <= SX4((u3d400 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_210BC_12: u3d900 = ((SX4((u3d400 & 0xFFFFFFFFULL)) <= SX4((u3d200 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_210BC_13: u3da00 = ((u3d800 & 0xFFULL) & (u3d900 & 0xFFULL)) & 0xFFULL;
-  P_210BC_14: RS1(0x47, ((u3da00 & 0xFFULL) ^ 1));
+  P_210BC_0: { uint32_t ea_ = (uint32_t)(RG4(0x20)); int64_t lo_ = (int8_t)MRD1(ea_), hi_ = (int8_t)MRD1(ea_ + 1), x_ = (int8_t)RG1(0x7); RS1(0x45, x_ == lo_ || x_ == hi_); RS1(0x47, ((uint64_t)(x_ - lo_) & 0xFFULL) > ((uint64_t)(hi_ - lo_) & 0xFFULL)); }   /* cmp2.b: the bounds AT <ea>, the low byte of D1, C = out of bounds modulo 256 (tools/gen/fix_cmp2b.py) */
   A_END_210BC: ;
 A_210C0: RR_INS(0x210C0U); /* bcc.b 0x000210c4 */
   P_210C0_0: u14200 = ((RG1(0x47) ^ 1)) & 0xFFULL;
@@ -264784,21 +264770,7 @@ A_215AA: RR_INS(0x215AAU); /* add.b D0b,D1b */
   P_215AA_8: RS1(0x45, ((u16c00 & 0xFFULL) == 0x0ULL));
   A_END_215AA: ;
 A_215AC: RR_INS(0x215ACU); /* cmp2.b (A0),D1 */
-  P_215AC_0: u10f00 = ((uint64_t)MRD1((uint32_t)RG4(0x20))) & 0xFFULL;
-  P_215AC_1: u3c900 = ((u10f00 & 0xFFULL)) & 0xFFFFFFFFULL;
-  P_215AC_2: u3cb00 = ((uint64_t)MRD1((uint32_t)(u3c900 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_215AC_3: u3cc00 = ((u3c900 & 0xFFFFFFFFULL) + 0x1ULL) & 0xFFFFFFFFULL;
-  P_215AC_4: u3ce00 = ((uint64_t)MRD1((uint32_t)(u3cc00 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_215AC_5: u3d000 = ((uint64_t)SX1((u3cb00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_215AC_6: u3d200 = ((uint64_t)SX1((u3ce00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_215AC_7: u3d400 = (RG4(0x4)) & 0xFFFFFFFFULL;
-  P_215AC_8: u3d500 = (((u3d400 & 0xFFFFFFFFULL) == (u3d000 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_215AC_9: u3d600 = (((u3d400 & 0xFFFFFFFFULL) == (u3d200 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_215AC_10: RS1(0x45, (u3d500 & 0xFFULL) | (u3d600 & 0xFFULL));
-  P_215AC_11: u3d800 = ((SX4((u3d000 & 0xFFFFFFFFULL)) <= SX4((u3d400 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_215AC_12: u3d900 = ((SX4((u3d400 & 0xFFFFFFFFULL)) <= SX4((u3d200 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_215AC_13: u3da00 = ((u3d800 & 0xFFULL) & (u3d900 & 0xFFULL)) & 0xFFULL;
-  P_215AC_14: RS1(0x47, ((u3da00 & 0xFFULL) ^ 1));
+  P_215AC_0: { uint32_t ea_ = (uint32_t)(RG4(0x20)); int64_t lo_ = (int8_t)MRD1(ea_), hi_ = (int8_t)MRD1(ea_ + 1), x_ = (int8_t)RG1(0x7); RS1(0x45, x_ == lo_ || x_ == hi_); RS1(0x47, ((uint64_t)(x_ - lo_) & 0xFFULL) > ((uint64_t)(hi_ - lo_) & 0xFFULL)); }   /* cmp2.b: the bounds AT <ea>, the low byte of D1, C = out of bounds modulo 256 (tools/gen/fix_cmp2b.py) */
   A_END_215AC: ;
 A_215B0: RR_INS(0x215B0U); /* bcc.b 0x000215b4 */
   P_215B0_0: u14200 = ((RG1(0x47) ^ 1)) & 0xFFULL;
@@ -274117,21 +274089,7 @@ A_22BF2: RR_INS(0x22BF2U); /* add.b D0b,D1b */
   P_22BF2_8: RS1(0x45, ((u16c00 & 0xFFULL) == 0x0ULL));
   A_END_22BF2: ;
 A_22BF4: RR_INS(0x22BF4U); /* cmp2.b (A0),D1 */
-  P_22BF4_0: u10f00 = ((uint64_t)MRD1((uint32_t)RG4(0x20))) & 0xFFULL;
-  P_22BF4_1: u3c900 = ((u10f00 & 0xFFULL)) & 0xFFFFFFFFULL;
-  P_22BF4_2: u3cb00 = ((uint64_t)MRD1((uint32_t)(u3c900 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_22BF4_3: u3cc00 = ((u3c900 & 0xFFFFFFFFULL) + 0x1ULL) & 0xFFFFFFFFULL;
-  P_22BF4_4: u3ce00 = ((uint64_t)MRD1((uint32_t)(u3cc00 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_22BF4_5: u3d000 = ((uint64_t)SX1((u3cb00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_22BF4_6: u3d200 = ((uint64_t)SX1((u3ce00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_22BF4_7: u3d400 = (RG4(0x4)) & 0xFFFFFFFFULL;
-  P_22BF4_8: u3d500 = (((u3d400 & 0xFFFFFFFFULL) == (u3d000 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_22BF4_9: u3d600 = (((u3d400 & 0xFFFFFFFFULL) == (u3d200 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_22BF4_10: RS1(0x45, (u3d500 & 0xFFULL) | (u3d600 & 0xFFULL));
-  P_22BF4_11: u3d800 = ((SX4((u3d000 & 0xFFFFFFFFULL)) <= SX4((u3d400 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_22BF4_12: u3d900 = ((SX4((u3d400 & 0xFFFFFFFFULL)) <= SX4((u3d200 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_22BF4_13: u3da00 = ((u3d800 & 0xFFULL) & (u3d900 & 0xFFULL)) & 0xFFULL;
-  P_22BF4_14: RS1(0x47, ((u3da00 & 0xFFULL) ^ 1));
+  P_22BF4_0: { uint32_t ea_ = (uint32_t)(RG4(0x20)); int64_t lo_ = (int8_t)MRD1(ea_), hi_ = (int8_t)MRD1(ea_ + 1), x_ = (int8_t)RG1(0x7); RS1(0x45, x_ == lo_ || x_ == hi_); RS1(0x47, ((uint64_t)(x_ - lo_) & 0xFFULL) > ((uint64_t)(hi_ - lo_) & 0xFFULL)); }   /* cmp2.b: the bounds AT <ea>, the low byte of D1, C = out of bounds modulo 256 (tools/gen/fix_cmp2b.py) */
   A_END_22BF4: ;
 A_22BF8: RR_INS(0x22BF8U); /* bcc.b 0x00022bfc */
   P_22BF8_0: u14200 = ((RG1(0x47) ^ 1)) & 0xFFULL;
@@ -302186,21 +302144,7 @@ A_26BF8: RR_INS(0x26BF8U); /* cmp2.b (0x0,A0,D0w*0x1),D0 */
   P_26BF8_1: u900 = ((u700 & 0xFFFFFFFFULL) * 0x1ULL) & 0xFFFFFFFFULL;
   P_26BF8_2: uf00 = (RG4(0x20) + 0x0ULL) & 0xFFFFFFFFULL;
   P_26BF8_3: u1100 = ((uf00 & 0xFFFFFFFFULL) + (u900 & 0xFFFFFFFFULL)) & 0xFFFFFFFFULL;
-  P_26BF8_4: u11d00 = ((uint64_t)MRD1((uint32_t)(u1100 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_26BF8_5: u3c900 = ((u11d00 & 0xFFULL)) & 0xFFFFFFFFULL;
-  P_26BF8_6: u3cb00 = ((uint64_t)MRD1((uint32_t)(u3c900 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_26BF8_7: u3cc00 = ((u3c900 & 0xFFFFFFFFULL) + 0x1ULL) & 0xFFFFFFFFULL;
-  P_26BF8_8: u3ce00 = ((uint64_t)MRD1((uint32_t)(u3cc00 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_26BF8_9: u3d000 = ((uint64_t)SX1((u3cb00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_26BF8_10: u3d200 = ((uint64_t)SX1((u3ce00 & 0xFFULL))) & 0xFFFFFFFFULL;
-  P_26BF8_11: u3d400 = (RG4(0x0)) & 0xFFFFFFFFULL;
-  P_26BF8_12: u3d500 = (((u3d400 & 0xFFFFFFFFULL) == (u3d000 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_26BF8_13: u3d600 = (((u3d400 & 0xFFFFFFFFULL) == (u3d200 & 0xFFFFFFFFULL))) & 0xFFULL;
-  P_26BF8_14: RS1(0x45, (u3d500 & 0xFFULL) | (u3d600 & 0xFFULL));
-  P_26BF8_15: u3d800 = ((SX4((u3d000 & 0xFFFFFFFFULL)) <= SX4((u3d400 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_26BF8_16: u3d900 = ((SX4((u3d400 & 0xFFFFFFFFULL)) <= SX4((u3d200 & 0xFFFFFFFFULL)))) & 0xFFULL;
-  P_26BF8_17: u3da00 = ((u3d800 & 0xFFULL) & (u3d900 & 0xFFULL)) & 0xFFULL;
-  P_26BF8_18: RS1(0x47, ((u3da00 & 0xFFULL) ^ 1));
+  P_26BF8_4: { uint32_t ea_ = (uint32_t)((u1100 & 0xFFFFFFFFULL)); int64_t lo_ = (int8_t)MRD1(ea_), hi_ = (int8_t)MRD1(ea_ + 1), x_ = (int8_t)RG1(0x3); RS1(0x45, x_ == lo_ || x_ == hi_); RS1(0x47, ((uint64_t)(x_ - lo_) & 0xFFULL) > ((uint64_t)(hi_ - lo_) & 0xFFULL)); }   /* cmp2.b: the bounds AT <ea>, the low byte of D0, C = out of bounds modulo 256 (tools/gen/fix_cmp2b.py) */
   A_END_26BF8: ;
 A_26BFE: RR_INS(0x26BFEU); /* ori.b #0x0,D0b */
   P_26BFE_0: RS1(0x46, 0x0ULL);
