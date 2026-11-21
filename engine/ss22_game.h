@@ -62,6 +62,9 @@ typedef struct {
     int          n_fx;
     const int  (*soft)[2];                   /* optional: glow sprites (a subset of fx) that are drawn 1:1 and get a light blur when the option is on (Dirt Dash's headlights) */
     int          n_soft;
+    const int  (*edge_fill)[2];              /* optional, WIDESCREEN: sprite art (inclusive ranges) the game lays edge to edge across the 640-px screen, anchored to its
+                                              * sides (Aqua Jet's wake spray): a piece at a side is continued, mirrored, out to the picture's edge (engine/ss22_gl.c) */
+    int          n_edge_fill;
 } ss22_video_cfg;
 
 typedef struct { const char *name; uint16_t bit; } ss22_press_name;      /* --press NAME@F[+LEN] */

@@ -64,6 +64,10 @@ typedef struct {
     /* WIDESCREEN: the game's full-screen effects (a camera-facing quad sized to the 640 x 480 screen, e.g. Cyber Commando's hit flash)
      * reach the wide picture's edges (rr_gl.c wide_screen_quad). 0 = off (every other game). */
     int wide_screen_quads;
+    /* THE 2D EFFECTS OPTION (Display > Effects, saved as effects_filter): System 22 has no sprite layer, so a game's explosions are
+     * textured polygons. Each entry {texture bank, u0, u1, v0, v1} (inclusive) names the texture region of such an effect; a quad whose
+     * whole UV box lies inside one is sampled bilinearly when the option is on (rr_gl.c). NULL = no such effects (the row is hidden). */
+    const uint16_t (*fx_tex)[5]; int n_fx_tex;
     /* WIDESCREEN HUD: text cells {row, col, tile} that hold that tile only while the race HUD is up (any one showing = up); the HUD
      * then moves to the picture's sides (engine/hud_edges.h). NULL = Rave Racer's gear-ladder marks (rr_gl.c). */
     const uint16_t (*hud_marks)[3]; int n_hud_marks;

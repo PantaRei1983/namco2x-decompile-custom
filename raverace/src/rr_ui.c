@@ -80,7 +80,7 @@ static int row = 0;                    /* -1 = the tab strip */
 static bool kb_moved;                  /* keep the selected row in view after a key */
 
 /* ---- the rows ------------------------------------------------------------- */
-enum { D_WIDE, D_DRAW, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TIMING, D_TEXF, D_ANISO, D_N };
+enum { D_WIDE, D_DRAW, D_MODE, D_SIZE, D_RES, D_ASPECT, D_SCALING, D_HUD, D_FPS, D_TIMING, D_TEXF, D_ANISO, D_FX, D_N };   /* D_FX last: only a game with fx_tex shows it */
 enum { C_FREEPLAY, C_FFB, C_FFB_DIR, C_FFB_KEEP, C_FFB_LOG, C_STICK, C_CAR, C_FIXED = C_CAR };   /* the Controls page's rows before the bindings */
 #define C_RAW (C_FIXED + (g_rr_game->ncars > 0))               /* + Car, for a game that lists its cars (rr_game_t.cars) */
 /* the rows this game shows: no FFB rows and no Stick steering for twin sticks (Cyber Commando: no wheel); "FFB log" never (a developer's) */
@@ -117,7 +117,7 @@ static int nrows(int t)
 {
     switch (t) {
     case T_FILE: return 4;
-    case T_DISPLAY: return D_N;
+    case T_DISPLAY: return g_rr_game->n_fx_tex ? D_N : D_FX;
     case T_AUDIO: return 2;                 /* Volume, then the volume boxes (our fork: a row for the keys) */
     case T_CONTROLS: return C_N + n_acts() + n_ts();
     case T_RECORD: return 1;
@@ -175,6 +175,8 @@ static void row_text(int t, int r, char *label, size_t ln, char *value, size_t v
                         { static const char *const nm[5] = { "Off (arcade)", "Bilinear (3D only)", "Sharp bilinear (3D only)", "Trilinear (3D only)", "Sharp trilinear (3D only)" };
                           snprintf(value, vn, "%s", nm[g_cfg_texfilter < 0 || g_cfg_texfilter > 4 ? 0 : g_cfg_texfilter]); }
                         break;
+        case D_FX:      { extern int g_cfg_fxfilter; snprintf(label, ln, "Effects (explosions)");
+                          snprintf(value, vn, "%s", g_cfg_fxfilter ? "Smooth (2D effects only)" : "Off (arcade)"); } break;
         case D_ANISO:   snprintf(label, ln, "Anisotropic filter");
                         if (g_cfg_texaniso) snprintf(value, vn, "%dx", g_cfg_texaniso); else snprintf(value, vn, "Off");
                         break;
@@ -318,6 +320,7 @@ static void row_change(int t, int r, int dir)
         case D_ASPECT:  if (g_cfg_wide) rr_host_set_wide_169(!g_cfg_wide_169); else rr_host_set_aspect(cyc(g_cfg_aspect, d, 4)); break;
         case D_SCALING: rr_host_set_scaling(cyc(g_cfg_scaling, d, 3)); break;
         case D_TEXF:    rr_host_set_texfilter(cyc(g_cfg_texfilter, d, 5)); break;
+        case D_FX:      { extern int g_cfg_fxfilter; rr_host_set_fxfilter(!g_cfg_fxfilter); break; }
         case D_ANISO:   { static const int lv[5] = { 0, 2, 4, 8, 16 }; int i = 0; for (int k = 0; k < 5; k++) if (lv[k] == g_cfg_texaniso) i = k;
                           rr_host_set_texaniso(lv[cyc(i, d, 5)]); break; }
         case D_HUD:     { extern int g_eng_hud_edges_on; rr_host_set_hud_edges(!g_eng_hud_edges_on); break; }

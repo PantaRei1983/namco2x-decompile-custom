@@ -30,6 +30,7 @@ void rr_host_set_wide(int on);
 void rr_host_set_hud_edges(int on);                /* widescreen: the HUD at the edges (default) or the original, in the 4:3 centre */
 void rr_host_set_draw(int level);           /* draw distance 0 original .. 3 maximum */
 const char *rr_host_draw_name(int level);
+void rr_host_set_fxfilter(int on);           /* the 2D effects (a game's explosion polygons, rr_game_t.fx_tex): 0 nearest, 1 smoothed (saved as effects_filter) */
 void rr_host_set_texfilter(int mode);       /* 3D polygon texture filter: 0 off, 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear (saved as texture_filter) */
 void rr_host_set_texaniso(int level);       /* anisotropic filtering with the trilinear modes: 0 off, else 2/4/8/16 (saved as texture_aniso) */
 void rr_host_set_aspect(int a);          /* 0 stretch, 1 4:3, 2 8:7, 3 16:9 */

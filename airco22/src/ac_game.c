@@ -181,6 +181,13 @@ static void ac_send(uint16_t p, unsigned wheel, unsigned pedal1, unsigned pedal2
     ss22_snd_inputs((uint16_t)(p & ~IN_VIRTUAL), wheel, clamp_adc(0x200 + y), clamp_adc(0x200 + t));
 }
 
+/* The 2D effects of the sprite layer, by the tile each sprite draws (listed from the attract's kills against the sprite ROM's pictures): 2106..2462
+ * the explosion (a white flash that turns into an orange fireball), 2551..2911 the black smoke a falling plane trails, 3262..3390 the smoke puffs of a
+ * hit; the rest of 2100..3583 is the same kind of art (more smoke and cloud frames). 2048..2099 are pictures, from 3584 the HUD's symbols and the map.
+ * The Display menu's "Effects" option smooths exactly these -- and, as they are drawn close to their own size (where bilinear sampling changes
+ * little), also softens them a little, like Dirt Dash's headlights (.soft). */
+static const int fx_tiles[][2] = { { 2100, 3583 } };
+
 static const ss22_game game = {
     .name = "Air Combat 22", .tag = "AC", .lname = "ac", .logname = "airco22.log", .zip = "airco22b.zip",
     .board = &ac_board,
@@ -191,7 +198,8 @@ static const ss22_game game = {
     .snd = { "acs1data.8k", { "acs1wav0.1", "acs1wav1.2" }, { 0x400000, 0x800000 }, 0x1000000, 0xFFFF, { 1, 2 } },
     .video = { { "acs1cg0.8d", "acs1cg1.10d", "acs1cg2.12d", "acs1cg3.13d", "acs1cg4.14d", "acs1cg5.16d", "acs1cg6.18d", "acs1cg7.19d" },
                "acs1ccrl.3d", "acs1ccrh.1d", { "acs1scg0.12f", "acs1scg1.10f" }, 2, 0x1000000, 0xFF,
-               false, false, { 0 }, true },  /* vics_linked: set 1 is set 2's header (engine/ss22_game.h) */                     /* the VICS sprite count is the REGISTER (0x40), not the list: MAME reads it from the list as for Dirt Dash, but Air Combat 22 rotates 4 lists and that word never changes (65 sprites always -- old sprites stuck on screen, the user's captures) */
+               false, false, { 0 }, true,    /* vics_linked: set 1 is set 2's header (engine/ss22_game.h) */
+               .fx = fx_tiles, .n_fx = 1, .soft = fx_tiles, .n_soft = 1 },   /* drawn near 1:1: bilinear alone leaves the pixel edge, so softened too */  /* vics_linked: set 1 is set 2's header (engine/ss22_game.h) */                     /* the VICS sprite count is the REGISTER (0x40), not the list: MAME reads it from the list as for Dirt Dash, but Air Combat 22 rotates 4 lists and that word never changes (65 sprites always -- old sprites stuck on screen, the user's captures) */
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_5000,

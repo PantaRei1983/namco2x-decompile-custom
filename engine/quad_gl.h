@@ -56,6 +56,9 @@ typedef struct {
     /* g_eng_tex_filter (engine/tex_bake.h) asks for filtered 3D textures; this says which quads must stay NEAREST anyway (a game's
      * HUD pieces drawn as polygons). 1 = keep this quad nearest. May be NULL (every textured quad takes the filter). */
     int  (*nofilter_quad)(const geo_quad *q);
+    /* THE 2D EFFECTS OPTION ON A POLYGON BOARD (System 22 has no sprite layer: Cyber Commando's explosions are textured meshes). 1 = this
+     * quad is such an effect and the option is on: it is sampled bilinearly even with the 3D texture filter off. May be NULL. */
+    int  (*fx_quad)(const geo_quad *q);
     /* FLAT QUADS (System 21: untextured polygons). Non-NULL and returning 1: the quad is drawn as its rv polygon in ONE colour,
      * rgba[0..3] written to the framebuffer as given -- no texture, shade, fog, alpha test, blend or software clip (the viewport
      * clips). The board decides what the four channels mean (Cyber Sled: pen and z, resolved by its own mixer pass). */

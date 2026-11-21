@@ -424,7 +424,16 @@ int rr_gl_quads(void) { return qn; }
 /* The polygons that are the HUD, not the world, stay NEAREST when the 3D texture filter is on, like the text and sprite layers: the same pieces the
  * widescreen HUD moves (engine/hud_edges.c, scanned just below with band 0 and zero depth): direct polygons, band 0 (map dots, mirror frame), depth 0 (the
  * tacho needle). */
-extern int g_cfg_texfilter, g_cfg_texaniso;             /* rr_input.c: Display > 3D texture filter, anisotropic filter */
+extern int g_cfg_texfilter, g_cfg_texaniso;
+/* the game's 2D effects (rr_game_t.fx_tex): a quad whose whole UV box lies in one of its texture regions */
+static int fx_quad(const geo_quad *q)
+{
+    for (int i = 0; i < g_rr_game->n_fx_tex; i++) {
+        const uint16_t *f = g_rr_game->fx_tex[i];
+        if (q->texbank == f[0] && q->uvbox[0] >= f[1] && q->uvbox[1] <= f[2] && q->uvbox[2] >= f[3] && q->uvbox[3] <= f[4]) return 1;
+    }
+    return 0;
+}             /* rr_input.c: Display > 3D texture filter, anisotropic filter */
 
 void rr_gl_draw(int vw, int vh)
 {
@@ -481,9 +490,20 @@ void rr_gl_draw(int vw, int vh)
           static const char *const nm[5] = { "off", "bilinear", "sharp bilinear", "trilinear", "sharp trilinear" };
           fprintf(stderr, "[TEX] 3D texture filter: %s, anisotropy %dx\n", nm[last], lasta ? lasta : 1); } }
     dc.nofilter_quad = eng_hud_quad_piece;
+    { extern int g_cfg_fxfilter; static int ef = -2;                       /* Display > Effects (ENG_FX_FILTER=0|1 wins for a run) */
+      if (ef == -2) { const char *e = getenv("ENG_FX_FILTER"); ef = e && *e ? (atoi(e) != 0) : -1; }
+      dc.fx_quad = g_rr_game->n_fx_tex && (ef >= 0 ? ef : g_cfg_fxfilter) ? fx_quad : NULL; }
     dc.flat_white = seamtest == 1 || seamtest == 2;
     if (seamtest >= 3) { dc.flat_quad = seam_colour; seam_by_quad = seamtest == 4; }         /* RR_SEAMTEST=3: each object its own flat colour, to name the backdrop pieces */
     eng_draw_begin();
+    { static int ql = -1; if (ql < 0) ql = getenv("RR_QUADLOG") != NULL;     /* dev: every drawn quad (finding a game's effect models) */
+      if (ql) for (int i = 0; i < qn; i++) {
+          int x0 = 1 << 30, x1 = -(1 << 30), y0 = 1 << 30, y1 = -(1 << 30);
+          for (int k = 0; k < qbuf[i].nrv; k++) { int x = qbuf[i].rv[k].sx16 >> 4, y = qbuf[i].rv[k].sy16 >> 4;
+              if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+          fprintf(stderr, "[QL] %d pick %d direct %d bank %d cmode %d pal %02X x %d..%d y %d..%d uv %d..%d %d..%d z %06X\n", i, qbuf[i].pick_code, qbuf[i].direct,
+                  qbuf[i].texbank, qbuf[i].cmode, (qbuf[i].color >> 8) & 0x7F, x0, x1, y0, y1, qbuf[i].uvbox[0], qbuf[i].uvbox[1], qbuf[i].uvbox[2], qbuf[i].uvbox[3], qbuf[i].zsort & 0xFFFFFF);
+      } }
     for (int i = 0; i < qn; i++) {
         if (seamtest) {                                   /* RR_SEAMSKIP=<code>[-<hi>],...: leave the backdrop out, or it covers every crack */
             static int nsk = -1; static int sk[32][2];

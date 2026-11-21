@@ -150,6 +150,9 @@ static void aj_adc(uint16_t *adc)
  * runs under the waterfall. 801.. are the TIME digits, the banners and the course pictures; from 3586 the ranking and the staff roll's letters. The
  * Display menu's "Effects" option smooths exactly these. */
 static const int fx_tiles[][2] = { { 1, 800 }, { 1346, 3585 } };
+/* Widescreen: the riding spray is laid edge to edge across the 640-px screen (each frame's four pieces end a few pixels past its sides): the outer
+ * pieces are continued, mirrored, out to a wider picture's edges (engine/ss22_gl.c, edge_fill) instead of stopping at the 4:3 lines. */
+static const int edge_tiles[][2] = { { 1, 800 } };
 
 static const ss22_game game = {
     .name = "Aqua Jet", .tag = "AJ", .lname = "aj", .logname = "aquajet.log", .zip = "aquajet.zip",
@@ -162,7 +165,7 @@ static const ss22_game game = {
              .aux = { [0] = { "Tank speaker", 1.0f } } },
     .video = { { "aj1cg0.8d", "aj1cg1.10d", "aj1cg2.12d", "aj1cg3.13d", "aj1cg4.14d", "aj1cg5.16d", "aj1cg6.18d", "aj1cg7.19d" },
                "aj1ccrl.3d", "aj1ccrh.1d", { "aj1scg0.12f", "aj1scg1.10f", "aj1scg2.8f" }, 3, 0x1000000, 0xFF,
-               .fx = fx_tiles, .n_fx = 2 },
+               .fx = fx_tiles, .n_fx = 2, .edge_fill = edge_tiles, .n_edge_fill = 1 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_800,

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <SDL2/SDL.h>
 #include "eng_gl.h"
 #include "eng.h"
@@ -102,6 +103,43 @@ static const eng_hud_cfg *hud_cfg;           /* the game's HUD description, set 
 
 void ss22_gl_set_hud(const eng_hud_cfg *h) { hud_cfg = h; }
 void ss22_gl_set_soft_effects(const int (*ranges)[2], int n) { sprite_set_soft_tiles(ranges, n); }
+
+/* WIDESCREEN, EDGE-ANCHORED ART (Aqua Jet's wake spray: a band of 160-px pieces laid edge to edge across the 640-px screen, swung up to ~100 px left or
+ * right as the jet leans). The board shows 4:3, so the game never drew more: in 16:9 the spray stopped in a straight line at the 4:3 edges. A piece of the
+ * game's edge_fill art that crosses a screen side (its other side on the screen: the band's end) is continued out to the picture's edge by copies of
+ * itself, each mirrored from the last (seamless at every join, and the noise of a spray shows no repeat). Everything else past the sides is drawn as it is. */
+static int edge_tiles[8][2], edge_n;
+void ss22_gl_set_edge_fill(const int (*ranges)[2], int n)
+{
+    edge_n = (!ranges || n < 0) ? 0 : (n > 8 ? 8 : n);
+    for (int i = 0; i < edge_n; i++) { edge_tiles[i][0] = ranges[i][0]; edge_tiles[i][1] = ranges[i][1]; }
+}
+static int edge_anchor(const sprite_item *it)          /* bit 0: anchored at the left side, bit 1: at the right */
+{
+    if (!edge_n || g_scene_x0 > -0.5f) return 0;
+    int in = 0;
+    for (int i = 0; i < edge_n && !in; i++) in = it->art >= edge_tiles[i][0] && it->art <= edge_tiles[i][1];
+    if (!in) return 0;
+    return (it->x0 <= 0 && it->x0 + it->w > 0 ? 1 : 0) | (it->x0 < SPR_W && it->x0 + it->w >= SPR_W ? 2 : 0);
+}
+/* the copies of one drawn quad (x0..x1, its texture u0..u1 / v0..v1) out to the picture's sides; inside glBegin(GL_QUADS) */
+static void edge_mirror_quads(int anchor, float x0, float x1, float y0, float y1, float u0, float u1, float v0, float v1)
+{
+    const float w = x1 - x0;
+    if (w < 1.0f) return;
+    if (anchor & 1)
+        for (int k = 1; x1 - k * w > g_scene_x0 && k < 64; k++) {
+            const float a = x0 - k * w, b = a + w, ua = (k & 1) ? u1 : u0, ub = (k & 1) ? u0 : u1;
+            glTexCoord2f(ua, v0); glVertex2f(a, y0); glTexCoord2f(ub, v0); glVertex2f(b, y0);
+            glTexCoord2f(ub, v1); glVertex2f(b, y1); glTexCoord2f(ua, v1); glVertex2f(a, y1);
+        }
+    if (anchor & 2)
+        for (int k = 1; x0 + k * w < g_scene_x1 && k < 64; k++) {
+            const float a = x0 + k * w, b = a + w, ua = (k & 1) ? u1 : u0, ub = (k & 1) ? u0 : u1;
+            glTexCoord2f(ua, v0); glVertex2f(a, y0); glTexCoord2f(ub, v0); glVertex2f(b, y0);
+            glTexCoord2f(ub, v1); glVertex2f(b, y1); glTexCoord2f(ua, v1); glVertex2f(a, y1);
+        }
+}
 void ss22_gl_set_effects(const int (*ranges)[2], int n)
 {
     if (!ranges || n <= 0) return;
@@ -157,6 +195,13 @@ void ss22_prepare(const ss22_regs *r)
     if (!spr_off && g_sprite_tiles && r->spriteram &&
         sprite_load_regs(&sst, r->spriteram, r->spriteram_size, r->vics, r->vics_size, r->vics_ctl, r->pal)) {
         have_spr = true;
+        {   /* widescreen: a full-screen sprite reaches the picture's sides (the last drawn frame's width; sprite_hw.h) */
+            int lo = (int)floorf(g_scene_x0), hi = (int)ceilf(g_scene_x1) - 1;
+            if (hi - lo + 1 > SPR_WIDE_MAX) { const int e = (SPR_WIDE_MAX - SPR_W) / 2; lo = -e; hi = SPR_W - 1 + e; }
+            if (lo > 0) lo = 0;
+            if (hi < SPR_W - 1) hi = SPR_W - 1;
+            g_sprite_x_lo = lo; g_sprite_x_hi = hi;
+        }
         ni = sprite_collect(&sst, &g_fog, items, (int)(sizeof items / sizeof items[0]));
         static int sprlog = -1;                      /* ENG_SPRLOG=<n>: the sprite list of update n, one line each (finding a HUD's parts) */
         if (sprlog < 0) { const char *e = getenv("ENG_SPRLOG"); sprlog = e ? atoi(e) : 0; }
@@ -260,7 +305,7 @@ static int spr_fx_next;
 static uint8_t *spr_fx_buf;
 static void draw_effect_sprite(const sprite_item *it)
 {
-    const int TW = SPR_W + 2, TH = SPR_H + 2;
+    const int TW = SPR_WIDE_MAX + 2, TH = SPR_H + 2;              /* an item can be wider than 640 in widescreen */
     if (!spr_fx_buf && !(spr_fx_buf = malloc((size_t)TW * TH * 4))) return;
     const int w = it->w, h = it->h;
     int bx0 = w, bx1 = -1, by0 = h, by1 = -1;                                /* the pixels with any alpha */
@@ -341,6 +386,8 @@ static void draw_effect_sprite(const sprite_item *it)
     glTexCoord2f(u1, v0); glVertex2f(qx1, qy0);
     glTexCoord2f(u1, v1); glVertex2f(qx1, qy1);
     glTexCoord2f(u0, v1); glVertex2f(qx0, qy1);
+    { const int an = edge_anchor(it);                                    /* widescreen: edge-anchored spray, mirrored about its drawn columns (not the blur's margin) */
+      if (an) edge_mirror_quads(an, qx0 + ext, qx1 - ext, qy0, qy1, u0 + (float)ext / TW, u1 - (float)ext / TW, v0, v1); }
     glEnd();
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_BLEND);
@@ -351,21 +398,24 @@ static void draw_effect_sprite(const sprite_item *it)
 /* one sprite in its turn of the merged z order: rendered into the corner of one 640x480 texture, sub-imaged, blended */
 static void draw_sprite(const sprite_item *it)
 {
-    if (!spr_buf && !(spr_buf = malloc((size_t)SPR_W * SPR_H * 4))) return;
+    if (!spr_buf && !(spr_buf = malloc((size_t)SPR_WIDE_MAX * SPR_H * 4))) return;      /* widescreen: an item up to SPR_WIDE_MAX wide */
     sprite_render_item(&sst, &g_fog, it, spr_buf, 1);
     if (sprite_item_smooth(it)) { draw_effect_sprite(it); return; }       /* dust / mud / spray with the option on: a linear texture, never a HUD sprite */
     if (it->prioverchar) {                    /* the text layer shows nothing under this sprite's pixels */
         for (int y = 0; y < it->h; y++)
             for (int x = 0; x < it->w; x++)
-                {   /* a TRANSLUCENT one (Air Combat 22's name-entry cursor box, alpha 0x82) covers the text only by its opacity: the letter under it shows through */
+                if (it->x0 + x >= 0 && it->x0 + x < SPR_W) {   /* (the text layer is 640 wide: a widescreen item's sides cover nothing) */   /* a TRANSLUCENT one (Air Combat 22's name-entry cursor box, alpha 0x82) covers the text only by its opacity: the letter under it shows through */
                     const uint8_t a = spr_buf[((size_t)y * it->w + x) * 4 + 3]; uint8_t *m = &prio_mask[(size_t)(it->y0 + y) * SPR_W + it->x0 + x];
                     if (a > *m) *m = a;
                 }
         prio_any = true;
     }
-    if (!spr_tex) tex_alloc(&spr_tex); else glBindTexture(GL_TEXTURE_2D, spr_tex);
+    if (!spr_tex) {
+        tex_alloc(&spr_tex);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SPR_WIDE_MAX, SPR_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);   /* widescreen: as wide as an item can be */
+    } else glBindTexture(GL_TEXTURE_2D, spr_tex);
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, it->w, it->h, GL_RGBA, GL_UNSIGNED_BYTE, spr_buf);
-    const float su = (float)it->w / SPR_W, sv = (float)it->h / SPR_H;
+    const float su = (float)it->w / SPR_WIDE_MAX, sv = (float)it->h / SPR_H;
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_ALPHA_TEST);
     glEnable(GL_BLEND);
@@ -378,6 +428,14 @@ static void draw_sprite(const sprite_item *it)
     glTexCoord2f(su, 0);  glVertex2f((float)(it->x0 + it->w + dx), (float)it->y0);
     glTexCoord2f(su, sv); glVertex2f((float)(it->x0 + it->w + dx), (float)(it->y0 + it->h));
     glTexCoord2f(0,  sv); glVertex2f((float)(it->x0 + dx),          (float)(it->y0 + it->h));
+    { const int an = edge_anchor(it);                                   /* widescreen: edge-anchored spray, continued to the sides */
+      if (an) {   /* mirrored about the columns that draw anything: a clear outer column would show as a gap at every join */
+          int cl = 0, cr = it->w - 1;
+          while (cl < cr) { int y = 0; while (y < it->h && !spr_buf[((size_t)y * it->w + cl) * 4 + 3]) y++; if (y < it->h) break; cl++; }
+          while (cr > cl) { int y = 0; while (y < it->h && !spr_buf[((size_t)y * it->w + cr) * 4 + 3]) y++; if (y < it->h) break; cr--; }
+          edge_mirror_quads(an, (float)(it->x0 + cl), (float)(it->x0 + cr + 1), (float)it->y0, (float)(it->y0 + it->h),
+                            (float)cl / SPR_WIDE_MAX, (float)(cr + 1) / SPR_WIDE_MAX, 0.0f, sv);
+      } }
     glEnd();
     glDisable(GL_BLEND);
     glEnable(GL_ALPHA_TEST);

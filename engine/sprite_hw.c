@@ -60,6 +60,7 @@ int      g_sprite_vics_linked;            /* ss22_video_cfg.vics_linked */
  * choice) makes sprite_render_item sample those tiles bilinearly instead -- only the tile ranges a game registered here, never the gauges, the
  * banners, the digits or any title. */
 int g_sprite_smooth;
+int g_sprite_x_lo = 0, g_sprite_x_hi = SPR_W - 1;   /* widescreen: sprite_hw.h */
 int g_sprite_smooth_fast;      /* 1: the smooth path resolves each tile's texels once (draw_tile_smooth) instead of per tap -- same pixels, much cheaper; set by the Super 22 compositor */
 static int g_fx_tiles[16][2], g_fx_n;
 void sprite_set_effect_tiles(const int (*ranges)[2], int n)
@@ -240,7 +241,7 @@ static void draw_tile_smooth(const tile_dst *dst, const uint8_t *pal, int pal_ba
         const float wv0 = rwv0[oy], wv1 = rwv1[oy];
         for (int ox = 0; ox < ssw; ox++) {
             const int px = x0 + ox;
-            if (px < 0 || px >= SPR_W || px < c->cxn || px > c->cxx) continue;
+            if (px < g_sprite_x_lo || px > g_sprite_x_hi || px < c->cxn || px > c->cxx) continue;
             const int bx = px - dst->ox;
             if (bx < 0 || bx >= dst->w) continue;
             const smooth_texel *t[4] = { ra + cu0[ox], ra + cu1[ox], rb + cu0[ox], rb + cu1[ox] };
@@ -300,7 +301,7 @@ static void draw_tile_dst(const tile_dst *dst, const uint8_t *pal,
         const uint8_t *rowb = tilep + tv * 32;
         for (int ox = 0; ox < ssw; ox++) {
             int px = x0 + ox;
-            if (px < 0 || px >= SPR_W || px < c->cxn || px > c->cxx) continue;
+            if (px < g_sprite_x_lo || px > g_sprite_x_hi || px < c->cxn || px > c->cxx) continue;
             int bx = px - dst->ox;
             if (bx < 0 || bx >= dst->w) continue;
             int u = (int)((ox + 0.5) * 32.0 / ssw);
@@ -503,6 +504,10 @@ static void decode_sprite(const sprite_state *st, const fog_state *fog,
     d->c.cxx = -g_dx + s16(WQ(0x80 + clip) & 0xFFFF);
     d->c.cyn = -g_dy + s16(WQ(0x80 + (1 | clip)) >> 16);
     d->c.cyx = -g_dy + s16(WQ(0x80 + (1 | clip)) & 0xFFFF);
+    if (d->c.cxn <= 0 && d->c.cxx >= SPR_W - 1) {            /* the whole screen's width: in widescreen, the whole picture's (g_sprite_x_lo/hi) */
+        if (g_sprite_x_lo < d->c.cxn) d->c.cxn = g_sprite_x_lo;
+        if (g_sprite_x_hi > d->c.cxx) d->c.cxx = g_sprite_x_hi;
+    }
     if (d->rows == 0) d->rows = 8;
     if (d->cols == 0) d->cols = 8;
     if ((src[2] >> 9) & 1) d->xpos -= d->sizex * d->cols - 1;
@@ -563,9 +568,9 @@ int sprite_collect(const sprite_state *st, const fog_state *fog,
         if (maxx > d.c.cxx) maxx = d.c.cxx;
         if (miny < d.c.cyn) miny = d.c.cyn;
         if (maxy > d.c.cyx) maxy = d.c.cyx;
-        if (minx < 0) minx = 0;
+        if (minx < g_sprite_x_lo) minx = g_sprite_x_lo;
         if (miny < 0) miny = 0;
-        if (maxx > SPR_W - 1) maxx = SPR_W - 1;
+        if (maxx > g_sprite_x_hi) maxx = g_sprite_x_hi;
         if (maxy > SPR_H - 1) maxy = SPR_H - 1;
         if (minx > maxx || miny > maxy) continue;      /* offscreen */
         out[n].z = g_list[i].att[0] & 0xFFFFFF;

@@ -160,6 +160,13 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   0x03164C), and the sacred altar picture gets its frame number again. `PROPCYCL_SHOT_FROM` / `PROPCYCL_SHOT_TO` limit
   `PROPCYCL_SHOT_EVERY` captures to a range of frames.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Widescreen (all Super System 22 games):** a sprite that runs past the 4:3 edges now goes on into the wider picture instead of
+  stopping in a straight line. Aqua Jet's riding spray, which the game lays exactly across the 640-px screen, is continued (mirrored) out to
+  the picture's edges (`edge_fill` in the game table).
+- **Air Combat 22:** Display > Effects smooths the explosions and the smoke (sprite art 2100..3583). Its translation scripts
+  (`airco22/tools/*.sh`) also run on Linux now.
+- **Cyber Commando:** a Display > Effects row smooths the explosions, which on System 22 are textured polygons (texture bank 5,
+  u 0..511, v 1024..1535; `fx_tex` in the game table).
 - **Ridge Racer 2:** the test menu's GAME OPTIONS and COIN OPTIONS change again (gas held, wheel left / right) and are saved when the
   Test switch goes off: the four `cmp2.b` of the lifted code read their bounds from a wrong address, so every step "wrapped" and the
   value flickered between two settings (namco22-decompile issue #101). `ridgera2/tools/gen/fix_cmp2b.py` rewrites them.

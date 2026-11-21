@@ -38,6 +38,7 @@ int g_cfg_fullscreen = 0, g_cfg_scale = 2, g_cfg_scaling = 0;
  * widescreen; and the picture aspect when widescreen is off (0 stretch, 1 4:3,
  * 2 8:7, 3 16:9) */
 int g_cfg_draw = 0;          /* draw distance level 0..3 (rr_host_set_draw) */
+int g_cfg_fxfilter = 0;      /* Display > Effects: the game's effect polygons (rr_game_t.fx_tex) sampled bilinearly (rr_host_set_fxfilter) */
 int g_cfg_texaniso = 0;      /* anisotropic filtering with the trilinear modes: 0 off, else 2/4/8/16 (rr_host_set_texaniso) */
 int g_cfg_texfilter = 0;     /* 3D polygon texture filter: 0 off (the board's NEAREST), 1 bilinear, 2 sharp bilinear, 3 trilinear, 4 sharp trilinear; never the HUD, text or sprite layers (rr_host_set_texfilter) */
 int g_cfg_wide_169;                  /* widescreen's shape: 0 the window's (default), 1 16:9 (saved as wide_aspect) */
@@ -139,6 +140,7 @@ static void load_kv(const char *path, char *k, char *v)
     if (!strcmp(k, "wide_hud")) { extern int g_eng_hud_edges_on; g_eng_hud_edges_on = atoi(v) ? 1 : 0; return; }
     if (!strcmp(k, "texture_filter")) { g_cfg_texfilter = (!strcmp(v, "sharp-trilinear") || !strcmp(v, "4")) ? 4 : (!strcmp(v, "trilinear") || !strcmp(v, "3")) ? 3
                                                         : (!strcmp(v, "sharp") || !strcmp(v, "2")) ? 2 : (!strcmp(v, "bilinear") || !strcmp(v, "1")) ? 1 : 0; return; }
+    if (!strcmp(k, "effects_filter")) { g_cfg_fxfilter = !strncmp(v, "on", 2) || atoi(v) == 1; return; }
     if (!strcmp(k, "texture_aniso")) { int n = atoi(v); g_cfg_texaniso = n >= 16 ? 16 : n >= 8 ? 8 : n >= 4 ? 4 : n >= 2 ? 2 : 0; return; }
     if (!strcmp(k, "draw_distance")) {
         g_cfg_draw = !strcmp(v, "far") ? 1 : !strcmp(v, "farther") ? 2 : !strcmp(v, "maximum") ? 3 : 0;

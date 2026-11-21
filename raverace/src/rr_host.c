@@ -201,6 +201,15 @@ void rr_host_set_texfilter(int mode)
     save_opt("texture_filter", nm[g_cfg_texfilter]);
     fprintf(stderr, "[HOST] 3D texture filter: %s\n", nm[g_cfg_texfilter]);
 }
+/* THE 2D EFFECTS (Display > Effects): a game's explosion polygons (rr_game_t.fx_tex) drawn bilinear instead of the board's NEAREST, whatever
+ * the 3D texture filter says. ENG_FX_FILTER=0|1 overrides for a run. */
+void rr_host_set_fxfilter(int on)
+{
+    extern int g_cfg_fxfilter;
+    g_cfg_fxfilter = on ? 1 : 0;
+    save_opt("effects_filter", g_cfg_fxfilter ? "on" : "off");
+    fprintf(stderr, "[HOST] 2D effects: %s\n", g_cfg_fxfilter ? "smooth" : "off");
+}
 void rr_host_set_texaniso(int level)
 {
     g_cfg_texaniso = level >= 16 ? 16 : level >= 8 ? 8 : level >= 4 ? 4 : level >= 2 ? 2 : 0;
