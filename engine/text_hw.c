@@ -27,6 +27,9 @@
 static const uint16_t *g_spotram;
 static int g_spot_on;
 void text_set_spot(const uint16_t *spotram, int enabled) { g_spotram = spotram; g_spot_on = spotram && enabled; }
+/* THE X SCROLL PER ROW (MAME apply_text_scroll): screen row y takes the value saved for row y - 4 (rows 0..3 the first one) */
+static const uint16_t *g_rowscroll;
+void text_set_rowscroll(const uint16_t *rs) { g_rowscroll = rs; }
 
 void text_free(text_state *st)
 {
@@ -110,6 +113,7 @@ void text_render(const text_state *st, const fog_state *fog,
     }
 
     for (int y = 0; y < TH; y++) {
+        if (g_rowscroll) sx = (g_rowscroll[y < 4 ? 0 : y - 4] - 0x35C) & 0x3FF;
         int ty = (y + sy) & 0x3FF;
         int trow = ty >> 4, cy = ty & 15;
         for (int x = 0; x < TW; x++) {

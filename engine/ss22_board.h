@@ -85,6 +85,11 @@ bool ss22_gun_read(uint32_t a, int size, uint32_t *v);
 void ss22_board_use(const ss22_board_cfg *cfg);     /* first: which game this is */
 bool ss22_load_program(const char *rom_dir);
 bool ss22_hw_init(const char *rom_dir);
+extern uint16_t g_ss22_rowscroll[480];
+extern int g_ss22_rowscroll_valid;             /* the text layer's x scroll (tilemapattr[0]) per screen row, this frame */
+void ss22_posirq_slice(int s, int n, void (*deliver)(void));   /* the scanline IRQs of slice s of n (ss22_board.c) */
+void ss22_posirq_frame_start(void);
+void ss22_posirq_frame_end(void);
 void ss22_vics_dma(void);                           /* the vblank: the VICS copies its pending blocks to the sprite chip (ss22_board.c) */
 int  ss22_vics_dma_on(void);                        /* 1 (SS22_VICS_DMA=0 for the old two-set drawing) */
 extern int g_ss22_vics_dma;

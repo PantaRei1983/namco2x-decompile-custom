@@ -27,6 +27,7 @@ void text_free(text_state *st);
  * tilemap attribute words. */
 /* The spot RAM (2048 host-order words) and whether the game has enabled it: (enable & 1) && (chipselect & 0xC000). See text_hw.c. */
 void text_set_spot(const uint16_t *spotram, int enabled);
+void text_set_rowscroll(const uint16_t *rs);   /* 480 raw tilemapattr[0] values, one per screen row (NULL: attr[0] for every row) */
 int  text_load_regs(text_state *st, const uint8_t *cg, const uint8_t *pal, const uint16_t attr[8]);
 
 /* gate_mode = 1: fill the mixer background, apply the final gamma, and

@@ -74,6 +74,7 @@ void ss22_video_prepare(void)
     r.pal = g_ss22.pal;
     r.mixer = g_ss22.mixer;
     for (int i = 0; i < 8; i++) { r.czattr[i] = g_ss22.czattr[i]; r.tilemapattr[i] = g_ss22.tilemapattr[i]; }
+    r.rowscroll = g_ss22_rowscroll_valid ? g_ss22_rowscroll : NULL;                           /* the posirq's per-row x scroll (ss22_board.c) */
     for (int b = 0; b < 4; b++) r.czram[b] = g_ss22.czram[b];
     r.cgram = g_ss22.cgram; r.textram = g_ss22.text;
     r.spotram = g_ss22.spotram;

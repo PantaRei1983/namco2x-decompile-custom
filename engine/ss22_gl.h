@@ -26,6 +26,7 @@ typedef struct {
     const uint16_t *czram[4];                /* the four CZ banks, 256 host-order words each */
     const uint8_t  *cgram, *textram;         /* character RAM (0x1E000) and the text RAM behind it (0x2000) */
     uint16_t        tilemapattr[8];          /* host-order words */
+    const uint16_t *rowscroll;               /* the text x scroll per screen row (480), or NULL: tilemapattr[0] for all */
     const uint8_t  *spriteram;  size_t spriteram_size;   /* C374, big-endian bytes */
     const uint8_t  *vics;       size_t vics_size;        /* VICS data, big-endian bytes */
     uint32_t        vics_ctl[0x20];          /* VICS control, host-order words */

@@ -87,6 +87,7 @@ static void ss22_cliplog_report(void);
 
 /* ------------------------------------------------------------------ prepared state */
 static text_state      tst;
+static const uint16_t *g_text_rowscroll;   /* the text x scroll per row (ss22_render.rowscroll), for the layer's change hash */
 static sprite_state    sst;
 static bool            have_spr;
 static sprite_item     items[1024];
@@ -176,6 +177,7 @@ void ss22_prepare(const ss22_regs *r)
     frames++;
     g_eng_frame++;
     text_set_spot(r->spotram, r->spot_enabled);
+    text_set_rowscroll(r->rowscroll); g_text_rowscroll = r->rowscroll;
     spot_src = r->spotram; spot_on = r->spotram && r->spot_enabled;
 
     fog_load_regs(r->mixer, r->czattr, r->czram);
@@ -588,6 +590,7 @@ static void draw_text(void)
     uint64_t h = 1469598103934665603ULL;
 #define MIX(p, n) do { const uint8_t *_b = (const uint8_t *)(p); for (size_t _i = 0; _i < (size_t)(n); _i++) { h ^= _b[_i]; h *= 1099511628211ULL; } } while (0)
     MIX(tst.cgram, 0x20000); MIX(tst.pal, 0x18000); MIX(tst.attr, sizeof tst.attr);
+    if (g_text_rowscroll) MIX(g_text_rowscroll, 480 * sizeof *g_text_rowscroll);
     MIX(g_fog.poly_fade, sizeof g_fog.poly_fade); MIX(g_fog.gamma, sizeof g_fog.gamma);
     MIX(&g_fog.mixer_flags, 1); MIX(&g_fog.text_palbase, 1); MIX(&g_fog.text_alpha, 1); MIX(&g_fog.text_alpha_lo, 1);
     MIX(&g_fog.text_alpha_hi, 1); MIX(&g_fog.text_alpha_mask, 1); MIX(&g_fog.spot_factor, sizeof g_fog.spot_factor);

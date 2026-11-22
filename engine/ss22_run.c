@@ -73,6 +73,7 @@ void rd_budget_out(void);
  * A linked copy keeps its own EEPROM (<lname>_eeprom_cabN.nv) and log (<game>_cabN.log), so copies can share one folder. */
 static void link_raise(void) { ss22_hw_sci_irq(); }
 static void link_deliver(void) { if (!ss22_env_active()) rr_deliver_irqs(ss22_hw_irq_level); }
+static void posirq_deliver(void) { rr_deliver_irqs(ss22_hw_irq_level); }
 
 #ifdef RR_TRACE
 /* <tag>_PCRING=<frame>: at that frame, the 68K's hottest PCs over its last 8192 instructions (where is it stuck?). Trace build only. */
@@ -416,7 +417,8 @@ void rr_tick(void)
     link_host_slice();                                    /* and the link chip */
     if (g_ss22_link_on) ss22_link_slice();                /* --link: the C139's clock and its interrupt (engine/ss22_link.c) */
     if ((serial_acc += 100) >= 60 * SLICES) { serial_acc -= 60 * SLICES; ss22_dsp_serial(); }
-    if (++slice % SLICES) return;
+    if (++slice % SLICES) { if (!ss22_env_active()) ss22_posirq_slice((int)(slice % SLICES), SLICES, posirq_deliver); return; }   /* the scanline IRQs of the slice about to run */
+    ss22_posirq_frame_end();                              /* the text layer's rows not yet drawn take the x scroll as it stands */
     if (ftime_on < 0) { ftime_on = getenv("ENG_FTIME") != NULL; if (ftime_on) { extern int g_perf_enabled; g_perf_enabled = 1; } }
     if (ftime_on) {
         double t0 = ft_now();
@@ -486,6 +488,8 @@ void rr_tick(void)
         ss22_hw_vblank();
         rr_deliver_irqs(ss22_hw_irq_level);
     }
+    ss22_posirq_frame_start();                             /* a new frame: no text row drawn yet */
+    if (!ss22_env_active()) ss22_posirq_slice(0, SLICES, posirq_deliver);
     {   static long lead_cfg = -1;                       /* the master's vblank work before the 68K's vblank handler (ss22_game.dsp_vblank_lead) */
         if (lead_cfg < 0) lead_cfg = getenv("SS22_DSP_LEAD") ? atol(getenv("SS22_DSP_LEAD")) : g_ss22_game->dsp_vblank_lead;
         if (lead_cfg > 0) { g_ss22_in_vblank = true; ss22_dsp_run(lead_cfg); dsp_lead = lead_cfg; } }

@@ -179,9 +179,42 @@ static uint32_t tmattr_h(uint32_t unit)
     if (unit == 7) return 0;
     return g_ss22.tilemapattr[unit];
 }
+/* THE TEXT LAYER'S X SCROLL, LINE BY LINE (MAME update_text_rowscroll: "alpines changes x scroll mid-screen"). The scanline IRQ (posirq,
+ * syscon line 1) fires at line 2 * tilemapattr[4] from the start of the vblank; Alpine Surfer's handler writes a new x scroll there and
+ * the next line into [4], line after line, which slides READY / GO! in and out a row of pixels at a time. Each x-scroll write keeps the
+ * old value for the screen rows already drawn (up to the line of the posirq being handled), so the layer is drawn with one x scroll per
+ * row. A game that never uses the posirq writes before any row is "drawn" (rs_vpos 0): one scroll for the whole frame, as before. */
+uint16_t g_ss22_rowscroll[480];
+static int rs_lastrow, rs_vpos, posirq_last = -1;
+static void rs_update(void)
+{
+    const int y = rs_vpos > 480 ? 480 : rs_vpos;
+    for (int i = rs_lastrow; i < y; i++) g_ss22_rowscroll[i] = g_ss22.tilemapattr[0];
+    if (y > rs_lastrow) rs_lastrow = y;
+}
+int g_ss22_rowscroll_valid;                                                /* (a live run: not a dump replay) */
+void ss22_posirq_frame_end(void) { rs_vpos = 480; rs_update(); g_ss22_rowscroll_valid = 1; }          /* the rest of the rows: the scroll as it stands (before the picture is taken) */
+void ss22_posirq_frame_start(void) { rs_vpos = 0; rs_lastrow = 0; posirq_last = -1; }
+/* the posirqs that fall in slice s of n (the frame from the vblank start, 525 lines), each delivered at its line, in order */
+void ss22_posirq_slice(int s, int n, void (*deliver)(void))
+{
+    static int off = -1; if (off < 0) { const char *e = getenv("SS22_NO_POSIRQ"); off = e && *e && *e != '0'; }   /* (a comparison: the old engine, no scanline IRQ) */
+    if (off) return;
+    const int l0 = s * 525 / n, l1 = (s + 1) * 525 / n;
+    for (int guard = 0; guard < 600; guard++) {
+        const int target = 2 * (int)g_ss22.tilemapattr[4];
+        if (target < l0 || target >= l1 || target <= posirq_last) return;
+        posirq_last = target;
+        rs_vpos = target - 45 < 0 ? 0 : target - 45;                       /* VBEND: the vblank is the first 45 lines */
+        if (!(g_hw.irq_enabled & 2u)) return;
+        ss22_hw_scanline();
+        deliver();
+    }
+}
 static void tmattr_wh(uint32_t unit, uint32_t d, uint32_t m)
 {
     unit &= 7;
+    if (unit == 0) rs_update();                                              /* the rows so far keep the old x scroll */
     g_ss22.tilemapattr[unit] = (uint16_t)((g_ss22.tilemapattr[unit] & ~m) | (d & m));
 }
 
