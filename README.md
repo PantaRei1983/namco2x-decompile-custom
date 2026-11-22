@@ -185,6 +185,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   0x03164C), and the sacred altar picture gets its frame number again. `PROPCYCL_SHOT_FROM` / `PROPCYCL_SHOT_TO` limit
   `PROPCYCL_SHOT_EVERY` captures to a range of frames.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Rapid River and Gunmen Wars build on Linux in one step:** `rapidrvr/build.sh` and `gunwars/build.sh` (new) unpack the ROM
+  zips, translate the program with Ghidra when `N22TOOLS` is set, and build; `./launch.sh rapid` / `./launch.sh gunmen` start
+  them. Their import / regen scripts were Windows-only. Every `.sh` in the repository is now executable (several were not, so
+  `./launch.sh` itself failed on Linux with "Permission denied").
 - **Sprites of the VICS games (Air Combat 22, Armadillo Racing, Dirt Dash, Time Crisis, Tokyo Wars):** the VICS chip now works as
   on the board (MAME PR #16658): in the vblank it copies the sprites the game wrote into the sprite chip, which draws its own list. The
   guessed sprite counts and the per-game fixes are gone; sprites show one frame after the game wrote them, as on the hardware (visible in
@@ -313,6 +317,16 @@ cmake -S launcher -B launcher/build -G Ninja && ninja -C launcher/build
 
 Game folders: `tokyowar raverace acedriver victlap cybrcomm adillor airco22 alpiner alpines alpinr2 aquajet cybrcycc
 dirtdash timecris cybsled crszone gunwars tc2 ridgerac`.
+
+On Linux (any distribution: `./install-deps.sh` installs the compiler, CMake, SDL2, zlib and OpenGL headers), the games
+with their own `build.sh` build in one step from the ROM zips, e.g. Rapid River and Gunmen Wars:
+
+```
+export N22TOOLS=~/n22tools       # Ghidra 12.1.4 (ghidra_12.1.4_PUBLIC/), an empty work/ folder; Java 21 from your distribution
+rapidrvr/build.sh rapidrvr.zip namco_asca1.zip     # the first time: unpacks the ROMs, translates the program, builds
+gunwars/build.sh gunwars.zip namco_asca5.zip
+./launch.sh rapid                                  # or: ./launch.sh gunmen   (a number for the window size, --fullscreen)
+```
 
 The new 68020 ports are translated from each game's own program with Ghidra and this fork's translator
 (`tools/gen/lift68k.py`, `tools/gen/ghidra/`); Gunmen Wars with its MIPS translator (`tools/gen/liftmips.py`,

@@ -21,6 +21,8 @@
 #   ./launch.sh vl           Ace Driver: Victory Lap (add a number for the window size: vl 3)
 #   ./launch.sh al           Alpine Racer (add a number for the window size: al 3)
 #   ./launch.sh cs           Cyber Sled (add a number for the window size: cs 2)
+#   ./launch.sh rapid        Rapid River (add a number for the window size: rapid 2)
+#   ./launch.sh gunmen       Gunmen Wars (add a number for the window size: gunmen 2)
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
 #                   P pause, Esc menu, F12 picture.
@@ -232,7 +234,23 @@ case "$game" in
         fi
         exec ./build/cs21 extracted "$@"
         ;;
+    rapid|rapidrvr|rapidriver)
+        if [ ! -f rapidrvr/build/CMakeCache.txt ]; then
+            echo "Rapid River is not built yet. Run:  rapidrvr/build.sh /path/to/rapidrvr.zip /path/to/namco_asca1.zip  (with N22TOOLS set, the first time)"; exit 1
+        fi
+        rebuild rapidrvr rapidrvr
+        cd rapidrvr
+        exec ./build/rapidrvr --window "$@"
+        ;;
+    gunmen|gunwars|gunmenwars)
+        if [ ! -f gunwars/build/CMakeCache.txt ]; then
+            echo "Gunmen Wars is not built yet. Run:  gunwars/build.sh /path/to/gunwars.zip /path/to/namco_asca5.zip  (with N22TOOLS set, the first time)"; exit 1
+        fi
+        rebuild gunwars gunwars
+        cd gunwars
+        exec ./build/gunwars --window "$@"
+        ;;
     *)
-        sed -n '2,45p' "$0" | sed 's/^# \?//'
+        sed -n '2,47p' "$0" | sed 's/^# \?//'
         ;;
 esac
