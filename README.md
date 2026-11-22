@@ -189,8 +189,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   on the board (MAME PR #16658): in the vblank it copies the sprites the game wrote into the sprite chip, which draws its own list. The
   guessed sprite counts and the per-game fixes are gone; sprites show one frame after the game wrote them, as on the hardware (visible in
   Air Combat 22's gunsight). `SS22_VICS_DMA=0` brings the old drawing back for a comparison.
-- **Effects for Alpine Racer:** Display > Effects now smooths the snow the skis throw up. Alpine Surfer's and Cyber Cycles'
-  translation scripts also run on Linux.
+- **Effects for Alpine Racer, Alpine Surfer and Cyber Cycles:** Display > Effects now smooths the snow the skis and the board throw
+  up, and Cyber Cycles' sparks, gravel and tyre smoke -- every Super System 22 game has the option now. Alpine Surfer's and Cyber
+  Cycles' translation scripts also run on Linux.
 - **Widescreen (all Super System 22 games):** a sprite that runs past the 4:3 edges now goes on into the wider picture instead of
   stopping in a straight line. Aqua Jet's riding spray, which the game lays exactly across the 640-px screen, is continued (mirrored) out to
   the picture's edges (`edge_fill` in the game table).

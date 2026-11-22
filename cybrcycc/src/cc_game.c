@@ -175,6 +175,11 @@ static void cc_link_debug(uint32_t f)
             w16(0xE0A606), w16(0xE0A60A), w16(0xE0A60E), w16(0xE0A612));
 }
 
+/* The 2D effects of the sprite layer (the Display menu's "Effects" option smooths them): 333..511 the sparks of a scraping bike and a wall hit
+ * (streaks, star bursts) and the grass and gravel it throws up, 512..819 the tyre smoke and dust clouds. Below 333 the title's letters, from 820
+ * the ROM's pictures. Found by logging every sprite of an autoplay run against the sprite ROM's pictures. */
+static const int fx_tiles[][2] = { { 333, 819 } };
+
 static const ss22_game game = {
     .name = "Cyber Cycles", .tag = "CC", .lname = "cc", .logname = "cybrcycc.log", .zip = "cybrcycc.zip",
     .board = &cc_board,
@@ -185,7 +190,8 @@ static const ss22_game game = {
     .snd = { "cb1datab.8k", { "cb1wavea.2l", "cb1waveb.1l" }, { 0, 0x800000 }, 0x1000000, 0xFFFF, { 1, 2 },
              .aux = { [0] = { "Tank speaker", 1.0f } } },
     .video = { { "cb1cg0.8d", "cb1cg1.10d", "cb1cg2.12d", "cb1cg3.13d", "cb1cg4.14d", "cb1cg5.16d", "cb1cg6.18d", NULL },
-               "cb1ccrl.3d", "cb1ccrh.1d", { "cb1scg0.12f" }, 1, 0x1000000, 0xFF },
+               "cb1ccrl.3d", "cb1ccrh.1d", { "cb1scg0.12f" }, 1, 0x1000000, 0xFF,
+               .fx = fx_tiles, .n_fx = 1 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_5E8,

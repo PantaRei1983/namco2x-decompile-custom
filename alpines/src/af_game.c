@@ -171,6 +171,12 @@ static void af_adc(uint16_t *adc)
     adc[1] = mode == 0 ? 0x200 : mode == 2 ? (uint16_t)(0x400 - s) : s;
 }
 
+/* The 2D effects of the sprite layer (the Display menu's "Effects" option smooths them): 1..221 are the snow the board throws up -- the spray at
+ * the tail, the bursts on a turn or a landing, the big white-out when you hit the snow wall (from 222 the ROM holds the menus' words). 65535 is
+ * how a linked spray sprite whose first cell is empty (link-table word 0xFFFF) comes out: in this game only that spray does. Found by logging
+ * every sprite of an autoplay run against the sprite ROM's pictures. */
+static const int fx_tiles[][2] = { { 1, 221 }, { 65535, 65535 } };
+
 static const ss22_game game = {
     .name = "Alpine Surfer", .tag = "AF", .lname = "af", .logname = "alpines.log", .zip = "alpines.zip",
     .board = &af_board,
@@ -178,7 +184,8 @@ static const ss22_game game = {
     /* MAME's c352 region: af1wavea.2l at 0. INPUTS idle: everything released, the motor "locked" */
     .snd = { "af1data.8k", { "af1wavea.2l", NULL }, { 0, 0 }, 0x1000000, 0xFFFF, { 1, 3 } },
     .video = { { "af1cg0.8d", "af1cg1.10d", "af1cg2.12d", "af1cg3.13d", "af1cg4.14d", NULL, NULL, NULL },
-               "af1ccrl.3d", "af1ccrh.1d", { "af1scg0b.12f" }, 1, 0x1000000, 0xFF },
+               "af1ccrl.3d", "af1ccrh.1d", { "af1scg0b.12f" }, 1, 0x1000000, 0xFF,
+               .fx = fx_tiles, .n_fx = 2 },
     .input = &input,
     .roms = k_roms, .n_roms = NROMS,
     .entry = L_1000,
