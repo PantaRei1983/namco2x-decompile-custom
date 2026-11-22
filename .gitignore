@@ -145,7 +145,7 @@ __pycache__/
 /acedriver/gen_supp/known.txt
 /acedriver/build/
 
-# Alpine Racer 2 (alpinr2/): game files, the translation's working files, test output
+# Alpine Racer 2 (alpinr2/): game files, the translation's working files made by LuKa-86, test output
 /alpinr2/extracted/
 /alpinr2/gen/
 /alpinr2/build/
@@ -160,7 +160,7 @@ __pycache__/
 /alpinr2/*.rec
 /alpinr2/*.wav
 
-# Alpine Surfer (alpines/): game files, the translation's working files, test output
+# Alpine Surfer (alpines/): game files, the translation's working files made by LuKa-86, test output
 /alpines/extracted/
 /alpines/gen/
 /alpines/build/
@@ -174,7 +174,7 @@ __pycache__/
 /alpines/*.rec
 /alpines/*.wav
 
-# Aqua Jet (aquajet/): game files, the translation's working files, test output
+# Aqua Jet (aquajet/): game files, the translation's working files made by LuKa-86, test output
 /aquajet/extracted/
 /aquajet/gen/
 /aquajet/build/
@@ -188,14 +188,14 @@ __pycache__/
 /aquajet/*.rec
 /aquajet/*.wav
 
-# Gunmen Wars (gunwars/): game files, the translation's working files, test output
+# Gunmen Wars (gunwars/): game files, the translation's working files made by LuKa-86, test output
 /gunwars/extracted/
 /gunwars/gen/
 /gunwars/build/
 /gunwars/build_watch/
 /gunwars/*.pcode
 
-# Air Combat 22 (airco22/): game files, the translation's working files, test output
+# Air Combat 22 (airco22/): game files, the translation's working files made by LuKa-86, test output
 /airco22/extracted/
 /airco22/gen/
 /airco22/build/
@@ -210,7 +210,7 @@ __pycache__/
 /airco22/*.wav
 /airco22/*.png
 
-# Ace Driver: Victory Lap (victlap/): game files, the translation's working files, test output
+# Ace Driver: Victory Lap (victlap/): game files, the translation's working files made by LuKa-86, test output
 /victlap/extracted/
 /victlap/gen/
 /victlap/build/
@@ -227,12 +227,13 @@ __pycache__/
 /victlap/tests/
 /crszone/captures/
 
-# Rapid River (rapidrvr/): game files, the translation's working files, test output
+# Rapid River (rapidrvr/): game files, the translation's working files made by LuKa-86, test output
 /rapidrvr/extracted/
 /rapidrvr/gen/
 /rapidrvr/build/
 /rapidrvr/*.pcode
-# Ridge Racer (ridgerac/): game files, the translation's working files, test output
+
+# Ridge Racer (ridgerac/): game files, the translation's working files made by PantaRei1983, test output
 /ridgerac/extracted/
 /ridgerac/gen/
 /ridgerac/build/
@@ -249,3 +250,10 @@ __pycache__/
 /ridgerac/captures/
 /ridgerac/screenshots/
 /ridgerac/recordings/
+
+# Final Furlong (finfurl/): game files, the translation's working files made by LuKa-86, test output
+/finfurl/extracted/
+/finfurl/gen/
+/finfurl/build/
+/finfurl/*.pcode
+/finfurl/build_cfg.log
