@@ -39,6 +39,7 @@ GAMES=(
   "Cyber Sled|CyberSled-ArcadeLAN.exe|cybsled/build/cs21.exe|cybsled.zip namcoc67.zip namcoc68.zip|cybsled"
   "Gunmen Wars|GunmenWars-ArcadeLAN.exe|gunwars/build/gunwars.exe|gunwars.zip namco_asca5.zip|gunwars"
   "Rapid River|RapidRiver-ArcadeLAN.exe|rapidrvr/build/rapidrvr.exe|rapidrvr.zip namco_asca1.zip|rapidrvr"
+  "Final Furlong|FinalFurlong-ArcadeLAN.exe|finfurl/build/finfurl.exe|finfurl.zip namco_asca1.zip|finfurl"
   # the original author's own programs, unchanged (single-cabinet games): from their Windows release, unpacked at $AUTHOR_RELEASE
   "Crisis Zone|CrisisZone.exe|crszone/build/crszone.exe|crszone.zip|crszone"
   "Dirt Dash|DirtDash.exe|dirtdash/build/dd.exe|dirtdash.zip|dirtdash"
