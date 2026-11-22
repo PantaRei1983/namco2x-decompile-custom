@@ -54,7 +54,7 @@ cabinets on the network and links with them, with nobody touching a keyboard, ev
 | **Aqua Jet** | 1996 | Super 22 | 1 | **New** port |
 | **Rapid River** | 1997 | Gorgon (System 23 family) | 1 | **New** port; white-water rafting |
 | **Ridge Racer** | 1993 | System 22 | 1 | **New** Port |
-| **Crisis Zone** | 1999 | System 23 | 1 | Built by this fork, with widescreen and graphics fixes |
+| **Crisis Zone** | 1999 | System 23 Evolution 2 | 1 | Built by this fork, with widescreen and graphics fixes |
 | **Prop Cycle** | 1996 | Super 22 | 1 | The original project's game, with various fixes: attract mode with story and replay fully working |
 | **Dirt Dash** | 1995 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
 | **Time Crisis** | 1995 | Super 22 | 1 | The original project's game, built here from its 0.10.3 source |
@@ -331,10 +331,10 @@ and friends) is kept as it is, hidden by *Arcade mode*, so their releases keep m
 MIT License; see `LICENSE`. Copyright of the original project is its author's; this fork's additions are under the same
 licence.
 
-This project is not affiliated with or endorsed by Bandai Namco. Tokyo Wars, Rave Racer, Ace Driver, Time Crisis,
-Cyber Cycles, Cyber Commando, Cyber Sled, Armadillo Racing, Alpine Racer, Alpine Surfer, Aqua Jet, Air Combat,
-Gunmen Wars, Crisis Zone, Prop Cycle and Dirt Dash are trademarks of Bandai Namco Entertainment Inc. You need your own
-legally obtained copy of each game.
+This project is not affiliated with or endorsed by Bandai Namco. Tokyo Wars, Ridge Racer, Rave Racer, Ace Driver, 
+Ace Driver: Victory Lap, Time Crisis, Cyber Cycles, Cyber Commando, Cyber Sled, Armadillo Racing, Alpine Racer, 
+Alpine Surfer, Aqua Jet, Air Combat, Angler King, Gunmen Wars, Crisis Zone, Prop Cycle and Dirt Dash are trademarks 
+of Bandai Namco Entertainment Inc. You need your own legally obtained copy of each game.
 
 ## Credits
 
