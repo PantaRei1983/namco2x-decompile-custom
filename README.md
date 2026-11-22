@@ -133,9 +133,11 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     score / time, Time Crisis' knives and Armadillo Racing's title logo.
   - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
     `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
-  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/1e2cf134-51b9-469a-a7ee-7bc083d5a3cb" />
-  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e1dca4bb-4c7a-44f2-bd5d-bcabe9d2749f" />
-  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/af8bb80b-4ca6-45ae-a01b-165d0dd17aa3" />
+  <p align="center">  
+  <img width="80%" height="80%" alt="Ridge Racer Flag Title" src="docs/images/ridgeracer-arcade-flag-title-widescreen.png" />
+  <img width="80%" height="80%" alt="Ridge Racer Start" src="docs/images/ridgeracer-start-race-widescreen.png" />
+  <img width="80%" height="80%" alt="Ridge Racer Ingame" src="docs/images/ridgeracer-ingame-race-widescreen.png" />
+  </p>
 - **3D texture filter (Display > 3D texture filter)** for every textured game: **Off, Bilinear, Sharp bilinear, Trilinear,
   Sharp trilinear**, with **anisotropic filtering 2x / 4x / 8x / 16x** in the trilinear modes. Only the 3D polygons are
   filtered: the HUD, the text layer and the 2D sprites stay sharp. It replaces the Texture smoothing switch: Alpine
@@ -160,8 +162,10 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     quad at the output resolution, with no seams between tiles, instead of being stretched with nearest-neighbour
     sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:
     `S23_FX_FILTER` = 0 | 1.
-  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/4760958b-16f1-4b90-80fd-00c1e316713c" />
-  <img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/b42699b2-e812-4bd4-b4ad-989b52e7ccdf" />
+  <p align="center">  
+  <img width="80%" height="80%" alt="Rapid River with no filter (Original Arcade)" src="docs/images/rapidriver-no-filter.png" />
+  <img width="80%" height="80%" alt="Rapid River with trilinear + 16x anisotropic filtering" src="docs/images/rapidriver-with-filter.png" />
+  </p>
 - **Crisis Zone:**
   - The zone select's beam counter is read in System 23 Evolution 2's format (a line count from the start of vblank),
     so the game's own wait puts the ticker's scroll on the ticker rows only. This replaces the fixed row cut-off.
