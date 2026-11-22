@@ -78,6 +78,7 @@ void ss22_video_prepare(void)
     r.cgram = g_ss22.cgram; r.textram = g_ss22.text;
     r.spotram = g_ss22.spotram;
     r.spot_enabled = (g_ss22.spot_enable & 1) && (g_ss22.chipselect & 0xC000);
+    (void)ss22_vics_dma_on();                                 /* (settles the sprite model before the first list: sprite_hw.c) */
     r.spriteram = g_ss22.sprite; r.spriteram_size = sizeof g_ss22.sprite;
     r.vics = g_ss22.vics;        r.vics_size = sizeof g_ss22.vics;
     for (int i = 0; i < 0x20; i++) r.vics_ctl[i] = g_ss22.vics_ctl[i];

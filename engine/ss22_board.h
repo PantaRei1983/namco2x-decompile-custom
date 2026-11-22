@@ -85,6 +85,9 @@ bool ss22_gun_read(uint32_t a, int size, uint32_t *v);
 void ss22_board_use(const ss22_board_cfg *cfg);     /* first: which game this is */
 bool ss22_load_program(const char *rom_dir);
 bool ss22_hw_init(const char *rom_dir);
+void ss22_vics_dma(void);                           /* the vblank: the VICS copies its pending blocks to the sprite chip (ss22_board.c) */
+int  ss22_vics_dma_on(void);                        /* 1 (SS22_VICS_DMA=0 for the old two-set drawing) */
+extern int g_ss22_vics_dma;
 void ss22_hw_vblank(void);                          /* the frame's vblank: raise syscon line 0 if the game enabled it */
 void ss22_hw_scanline(void);                        /* the scanline IRQ (line 1) */
 void ss22_hw_sci_irq(void);                         /* the link chip's IRQ (line 2), engine/lan139.c */

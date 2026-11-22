@@ -208,6 +208,11 @@ static void al_entry(void)
     rr_jump(((uint32_t)r[4] << 24) | ((uint32_t)r[5] << 16) | ((uint32_t)r[6] << 8) | r[7], 0);
 }
 
+/* The 2D effects of the sprite layer (the Display menu's "Effects" option smooths them): 2800..2847, the snow the skis throw up -- the only sprites
+ * drawn in the 3D world (found by logging every sprite of an autoplay run against the sprite ROM's pictures; from 2848 the ROM is empty, below 2800
+ * the HUD's letters and digits). */
+static const int fx_tiles[][2] = { { 2800, 2847 } };
+
 static ss22_game game = {
     .name = "Alpine Racer", .tag = "AL", .lname = "al", .logname = "alpiner.log", .zip = "alpinerd.zip",
     .board = &al_board,
@@ -217,7 +222,8 @@ static ss22_game game = {
     /* INPUTS idle: everything released (active low), and the step-lock motor's status = 2, "locked" (bit 7 clear, bit 8 set, active high) */
     .snd = { "ar1datab.8k", { "ar1wavea.2l", NULL }, { 0, 0 }, 0x400000, 0xFFFF, { 1, 3 } },
     .video = { { "ar1cg0.8d", "ar1cg1.10d", "ar1cg2.12d", "ar1cg3.13d", "ar1cg4.14d", "ar1cg5.16d", "ar1cg6.18d", "ar1cg7.19d" },
-               "ar1ccrl.3d", "ar1ccrh.1d", { "ar1scg0.12f", "ar1scg1.10f" }, 2, 2 * 0x200000, 0xFF },
+               "ar1ccrl.3d", "ar1ccrh.1d", { "ar1scg0.12f", "ar1scg1.10f" }, 2, 2 * 0x200000, 0xFF,
+               .fx = fx_tiles, .n_fx = 1 },
     .input = &input,
     .roms = g_roms,                     /* .n_roms: al_pick_set */
     .entry = al_entry,

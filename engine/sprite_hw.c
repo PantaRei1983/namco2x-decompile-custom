@@ -60,6 +60,7 @@ int      g_sprite_vics_linked;            /* ss22_video_cfg.vics_linked */
  * choice) makes sprite_render_item sample those tiles bilinearly instead -- only the tile ranges a game registered here, never the gauges, the
  * banners, the digits or any title. */
 int g_sprite_smooth;
+int g_ss22_vics_dma = -1;   /* the Super 22 board's VICS DMA (engine/ss22_board.c): 1 = only the sprite chip's list is drawn; -1/0 (Prop Cycle, SS22_VICS_DMA=0) = the old two VICS sets */
 int g_sprite_x_lo = 0, g_sprite_x_hi = SPR_W - 1;   /* widescreen: sprite_hw.h */
 int g_sprite_smooth_fast;      /* 1: the smooth path resolves each tile's texels once (draw_tile_smooth) instead of per tap -- same pixels, much cheaper; set by the Super 22 compositor */
 static int g_fx_tiles[16][2], g_fx_n;
@@ -381,7 +382,8 @@ static spr_entry g_list[4096];
 static int       g_list_n;
 static int       g_dx, g_dy, g_ylow;
 
-/* Build the frame's sprite list: main bank then both VICS banks. They go
+/* Build the frame's sprite list. With the VICS DMA (the default) it is only the sprite chip's own list, which the VICS's copies have filled.
+ * Without it (SS22_VICS_DMA=0, the old model): main bank then both VICS banks. They go
  * into ONE list because the hardware z-sorts them together -- the score
  * digits are VICS sprites while the translucent plate over them is a
  * main-bank sprite. */
@@ -406,13 +408,14 @@ static void build_list_impl(const sprite_state *st)
     { static int lg = -1; if (lg < 0) lg = getenv("VICS_LOG") != NULL;
       if (lg) fprintf(stderr, "[SPR] f%u main on %d base %d num %d\n", rr_frame, sprites_on, base, num);
       if (lg && st->have_vics) { fprintf(stderr, "[VREG] f%u", rr_frame); for (int i = 0; i < 0x80 / 4; i++) fprintf(stderr, " %08X", st->vicsc[i]); fprintf(stderr, "\n"); } }
-    if (sprites_on && num > 0 && num < 0x400 && !(off & 1) && !g_sprite_vics_linked) {   /* (vics_linked: Air Combat 22 never sets this list; its one entry is junk) */
+    const int dma = g_ss22_vics_dma > 0;                              /* the VICS copied its blocks into this list (ss22_board.c): nothing else to draw */
+    if (sprites_on && num > 0 && num < 0x400 && !(off & 1) && (dma || !g_sprite_vics_linked)) {   /* (vics_linked: Air Combat 22 never sets this list; its one entry is junk) */
         for (int i = 0; i < num && n < 4096; i++, n++) {
             for (int k = 0; k < 4; k++) g_list[n].src[k] = W(0x4000/4 + (base+i)*4 + k);
             for (int k = 0; k < 2; k++) g_list[n].att[k] = W(0x20000/4 + (base+i)*2 + k);
         }
     }
-    if (st->have_vics && st->vicsd) {
+    if (st->have_vics && st->vicsd && !dma) {
         const uint32_t *vd = st->vicsd; int vn = st->vicsd_n;
         #define VD(i) (((i) >= 0 && (i) < vn) ? vd[i] : 0u)
         int v_on = !((st->vicsc[0x30/4] >> 24) & 1);

@@ -185,10 +185,39 @@ static void tmattr_wh(uint32_t unit, uint32_t d, uint32_t m)
     g_ss22.tilemapattr[unit] = (uint16_t)((g_ss22.tilemapattr[unit] & ~m) | (d & m));
 }
 
-/* namcos22s_vics_control_r/w: 32-bit registers; reg 0 reads 0, the four size regs read without their busy bit */
+/* THE VICS IS A DMA (C395; MAME PR #16658, gm-matthew, 2026-11). The game writes its sprites into VICS RAM (0x900000) during the frame; in the
+ * vblank the VICS copies up to four blocks of it into the sprite chip's RAM (C374, 0x980000) or its attribute RAM (0x9A0000), and the sprite
+ * chip draws its own list from there -- so a VICS game's sprites are seen one frame after it wrote them, as on the board. Each block is four
+ * registers at 0x940040 + 16*n: [0] bits 31..28 a transfer is pending (cleared when it is done: Dirt Dash waits on it), bit 24 = to attribute
+ * RAM, bits 15..0 the size in bytes; [2] the source in VICS RAM; [3] the destination. This replaces drawing the two VICS sets straight from VICS
+ * RAM with guessed counts and the per-game fixes (vics_count_in_list, vics_linked), which SS22_VICS_DMA=0 brings back for a comparison. */
+int ss22_vics_dma_on(void)
+{
+    if (g_ss22_vics_dma < 0) { const char *e = getenv("SS22_VICS_DMA"); g_ss22_vics_dma = !(e && *e && atoi(e) == 0); }
+    return g_ss22_vics_dma;
+}
+void ss22_vics_dma(void)
+{
+    if (!ss22_vics_dma_on()) return;
+    for (int r = 0x40; r < 0x80; r += 0x10) {
+        const uint32_t c = g_ss22.vics_ctl[r / 4];
+        if (!(c & 0xF0000000u)) continue;
+        uint32_t size = c & 0xFFFEu;
+        const uint32_t src = g_ss22.vics_ctl[(r + 8) / 4] & 0xFFFEu, dst = g_ss22.vics_ctl[(r + 12) / 4] & 0xFFFEu;
+        if (src + size > SS22_VICS_SIZE) size = SS22_VICS_SIZE - src;
+        uint8_t *d; uint32_t lim;
+        if (c & 0x01000000u) { d = g_ss22.sprite + 0x20000u; lim = 0xA00u; }      /* attribute RAM, 0x9A0000-0x9A09FF */
+        else                 { d = g_ss22.sprite;            lim = 0x8000u; }      /* sprite RAM, 0x980000-0x987FFF */
+        if (dst < lim) { if (dst + size > lim) size = lim - dst; memcpy(d + dst, g_ss22.vics + src, size); }
+        g_ss22.vics_ctl[r / 4] = c & ~0xF0000000u;
+    }
+}
+
+/* namcos22s_vics_control_r/w: 32-bit registers; reg 0 reads 0. (Without the DMA, SS22_VICS_DMA=0, the four size regs read without their busy bit.) */
 static uint32_t vicsctl_h(uint32_t unit)
 {
     uint32_t r = g_ss22.vics_ctl[unit & 0x1F];
+    if (ss22_vics_dma_on()) return (unit & 0x1F) ? r : 0;
     switch ((unit & 0x1F) * 4) {
     case 0x00: return 0;
     case 0x40: case 0x50: case 0x60: case 0x70: return r & 0x7FFFFFFFu;

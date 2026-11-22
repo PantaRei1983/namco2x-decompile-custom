@@ -479,6 +479,7 @@ void rr_tick(void)
         ft_bake = g_perf_bake; ft_clip = g_perf_clip; ft_gl = g_perf_gl;
         ft_draws = g_bb_draws; ft_binds = g_bb_binds;
     }
+    ss22_vics_dma();                                       /* the VICS's blocks into the sprite chip, after this frame's picture (ss22_board.c) */
     ss22_dsp_vblank();                                     /* INT0, when the game has enabled the DSP IRQs */
     vblank_slices = 2;
     if (!ss22_env_active()) {                            /* a trace oracle lands the interrupts itself */
