@@ -23,7 +23,8 @@ wr('prog.bin', boot[E + text[1]:E + text[1] + text[4]])
 wr('data.bin', boot[E + data[1]:E + data[1] + data[4]])
 s = bytearray(rd('rd3verc.ic3')); s[0::2], s[1::2] = s[1::2], s[0::2]
 wr('sub.bin', s)
-if os.path.exists(os.path.join(d, 'asc1_io-a.ic13')): wr('io.bin', rd('asc1_io-a.ic13'))   # the ASCA-1 I/O board (H8/3334)
+for n in ('asc1_io-a.ic13', 'asca1_io-a.ic2'):           # the ASCA-1 I/O board (H8/3334): namco_asca1.zip's name, or an older set's inside the game's zip
+    if os.path.exists(os.path.join(d, n)): wr('io.bin', rd(n)); break
 open(os.path.join(o, 'prog_entry.txt'), 'w').write('%08X\n' % entry)
 print('ELF entry %08X' % entry)
 for p in load:

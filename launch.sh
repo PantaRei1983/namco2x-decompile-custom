@@ -23,6 +23,7 @@
 #   ./launch.sh cs           Cyber Sled (add a number for the window size: cs 2)
 #   ./launch.sh rapid        Rapid River (add a number for the window size: rapid 2)
 #   ./launch.sh gunmen       Gunmen Wars (add a number for the window size: gunmen 2)
+#   ./launch.sh finfurl      Final Furlong (add a number for the window size: finfurl 2)
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
 #                   P pause, Esc menu, F12 picture.
@@ -241,6 +242,14 @@ case "$game" in
         rebuild rapidrvr rapidrvr
         cd rapidrvr
         exec ./build/rapidrvr --window "$@"
+        ;;
+    finfurl|ff|finalfurlong)
+        if [ ! -f finfurl/build/CMakeCache.txt ]; then
+            echo "Final Furlong is not built yet. Run:  finfurl/build.sh /path/to/finfurl.zip /path/to/namco_asca1.zip  (with N22TOOLS set, the first time)"; exit 1
+        fi
+        rebuild finfurl finfurl
+        cd finfurl
+        exec ./build/finfurl --window "$@"
         ;;
     gunmen|gunwars|gunmenwars)
         if [ ! -f gunwars/build/CMakeCache.txt ]; then

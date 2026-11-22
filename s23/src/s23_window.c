@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #include <SDL2/SDL.h>
 #ifdef _WIN32
 #include <windows.h>
@@ -504,9 +507,19 @@ void s23_window_frame(void)
     if (!ok) { fprintf(stderr, "[HOST] quit\n"); { void s23_c422_report(void); s23_c422_report(); } { void s23_backup_save(int); s23_backup_save(1); } { void s23_out_close(void); s23_out_close(); } ss22_input_close();
         bool eng_ui_restart_requested(void); const bool restart = eng_ui_restart_requested();   /* File > Restart: power-cycle -- the same program again */
         eng_ui_shutdown(); SDL_Quit();
+#ifdef _WIN32
         if (restart) { static wchar_t exe[32768], cl[32768]; STARTUPINFOW si; PROCESS_INFORMATION pi; memset(&si, 0, sizeof si); si.cb = sizeof si;   /* (it only quit before) */
             const DWORD n = GetModuleFileNameW(NULL, exe, 32768); wcsncpy(cl, GetCommandLineW(), 32767); fflush(NULL);
             if (n > 0 && n < 32768 && CreateProcessW(exe, cl, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
             else fprintf(stderr, "[HOST] the restart failed (error %lu)\n", (unsigned long)GetLastError()); }
+#else
+        if (restart) {                                           /* Linux: the same program with the same arguments (/proc/self/cmdline) */
+            static char buf[65536]; static char *av[512]; int na = 0; size_t len = 0; FILE *cf = fopen("/proc/self/cmdline", "rb");
+            if (cf) { len = fread(buf, 1, sizeof buf - 1, cf); fclose(cf); }
+            for (size_t k = 0; k < len && na < 511; k += strlen(buf + k) + 1) av[na++] = buf + k;
+            av[na] = NULL; fflush(NULL);
+            if (na > 0) execv("/proc/self/exe", av);
+            fprintf(stderr, "[HOST] the restart failed\n"); }
+#endif
         exit(0); }
 }

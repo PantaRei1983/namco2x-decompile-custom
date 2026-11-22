@@ -257,3 +257,8 @@ __pycache__/
 /finfurl/build/
 /finfurl/*.pcode
 /finfurl/build_cfg.log
+/finfurl/roms/
+/finfurl/*.cfg
+/finfurl/*.nv
+/finfurl/*.rec
+/finfurl/*.log
