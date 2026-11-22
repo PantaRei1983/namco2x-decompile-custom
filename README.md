@@ -134,9 +134,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   - Build: `ridgerac/build.sh ridgerac.zip namcoc74.zip` (unpacks the ROMs), then `ridgerac/tools/import.sh` once with
     `N22TOOLS` set (Ghidra translates the program), then `ridgerac/build.sh` again. Start it with `./launch.sh rr1`.
   <p align="center">  
-  <img width="80%" height="80%" alt="Ridge Racer Flag Title" src="docs/images/ridgeracer-arcade-flag-title-widescreen.png" />
-  <img width="80%" height="80%" alt="Ridge Racer Start" src="docs/images/ridgeracer-start-race-widescreen.png" />
-  <img width="80%" height="80%" alt="Ridge Racer Ingame" src="docs/images/ridgeracer-ingame-race-widescreen.png" />
+  <img width="80%" alt="Ridge Racer Flag Title" src="docs/images/ridgeracer-arcade-flag-title-widescreen.png" />
+  <img width="80%" alt="Ridge Racer Start" src="docs/images/ridgeracer-start-race-widescreen.png" />
+  <img width="80%" alt="Ridge Racer Ingame" src="docs/images/ridgeracer-ingame-race-widescreen.png" />
   </p>
 - **3D texture filter (Display > 3D texture filter)** for every textured game: **Off, Bilinear, Sharp bilinear, Trilinear,
   Sharp trilinear**, with **anisotropic filtering 2x / 4x / 8x / 16x** in the trilinear modes. Only the 3D polygons are
@@ -163,8 +163,8 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
     sampling. Other sprites (HUD, title, text) stay sharp. Config: `effects_filter` = `off | on`. Environment:
     `S23_FX_FILTER` = 0 | 1.
   <p align="center">  
-  <img width="80%" height="80%" alt="Rapid River with no filter (Original Arcade)" src="docs/images/rapidriver-no-filter.png" />
-  <img width="80%" height="80%" alt="Rapid River with trilinear + 16x anisotropic filtering" src="docs/images/rapidriver-with-filter.png" />
+  <img width="80%" alt="Rapid River with no filter (Original Arcade)" src="docs/images/rapidriver-no-filter.png" />
+  <img width="80%" alt="Rapid River with trilinear + 16x anisotropic filtering" src="docs/images/rapidriver-with-filter.png" />
   </p>
 - **Crisis Zone:**
   - The zone select's beam counter is read in System 23 Evolution 2's format (a line count from the start of vblank),
