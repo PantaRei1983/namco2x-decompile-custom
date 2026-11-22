@@ -105,7 +105,8 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
 
 - **Victory Lap:** collision tables and race crashes fixed; test mode works; the rev needle is no longer dimmed.
 - **Air Combat 22:** crashes in attract, at mission end and after the mission 2 refuel fixed; stuck sprites fixed; pitch
-  and throttle can be rebound.
+  and throttle can be rebound; the gunsight's pitch ladder no longer cuts thin lines through the TIME LIMIT / SCORE text
+  in the second attract demo (the polygon-over-text mask now stays inside each polygon's clip window).
 - **Crisis Zone:** widescreen HUD with the score bars at the screen edges; 4:3 with fading bars outside play; tank
   shadow colours fixed; HUD icons drawn over the bars; zone-select ticker scrolls on its own.
 - **Gunmen Wars:** the namco logo matched to real-cabinet footage; widescreen HUD; NamCam from a webcam or a picture.

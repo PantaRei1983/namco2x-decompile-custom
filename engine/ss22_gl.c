@@ -700,7 +700,11 @@ void ss22_draw(int vw, int vh)
         float xs[10], ys[10]; const int n = q->nrv > 10 ? 10 : q->nrv;
         float ymin = 1e9f, ymax = -1e9f;
         for (int k = 0; k < n; k++) { xs[k] = q->rv[k].sx16 / 16.0f; ys[k] = q->rv[k].sy16 / 16.0f; if (ys[k] < ymin) ymin = ys[k]; if (ys[k] > ymax) ymax = ys[k]; }
-        int y0 = (int)ymin, y1 = (int)ymax + 1; if (y0 < 0) y0 = 0; if (y1 > SPR_H) y1 = SPR_H;
+        /* only inside the quad's scene clip window, as the rasteriser draws it (engine/quad_gl.c): Air Combat 22's pitch ladder
+         * runs far past its HUD circle and is clipped there; unclipped, its lines cut the TIME LIMIT/SCORE text in the attract */
+        const int cx0 = q->clip[0] < 0 ? 0 : q->clip[0], cx1 = q->clip[1] + 1 > SPR_W ? SPR_W : q->clip[1] + 1;
+        const int cy0 = q->clip[2] < 0 ? 0 : q->clip[2], cy1 = q->clip[3] + 1 > SPR_H ? SPR_H : q->clip[3] + 1;
+        int y0 = (int)ymin, y1 = (int)ymax + 1; if (y0 < cy0) y0 = cy0; if (y1 > cy1) y1 = cy1;
         for (int y = y0; y < y1; y++) {                /* a convex polygon: each scanline (at its centre) is one span */
             const float yc = (float)y + 0.5f; float xl = 1e9f, xr = -1e9f;
             for (int k = 0; k < n; k++) {
@@ -711,7 +715,7 @@ void ss22_draw(int vw, int vh)
                     if (x > xr) xr = x;
                 }
             }
-            int a = (int)(xl + 0.5f), b = (int)(xr + 0.5f); if (a < 0) a = 0; if (b > SPR_W) b = SPR_W;
+            int a = (int)(xl + 0.5f), b = (int)(xr + 0.5f); if (a < cx0) a = cx0; if (b > cx1) b = cx1;
             for (int x = a; x < b; x++) prio_mask[(size_t)y * SPR_W + x] = 255;
             if (a < b) prio_any = true;
         }
