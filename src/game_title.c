@@ -194,7 +194,10 @@ void attract_ground_plane_draw(void)
   ((int32_t*)W[0x0CA4])[7] = 0;
   ((int32_t*)W[0x0CA4])[8] = 0xfffea000;
   ((int32_t*)W[0x0CA4])[9] = 0;
-  ((int32_t*)W[0x0CA4])[10] = R[0x39DE8] + (W[0x0C98] >> 1 & 0xf) * 4 + 0x146;
+  /* the water surface's frame: `lea ([$39de8, d0.l*4], $146)`, a MEMORY-INDIRECT EA -- the ping-pong table's VALUE (0..7..0) plus 0x146.
+   * It was the table's first byte plus the index * 4: models 0x146..0x182 in turn, and every frame past 0x14D is another water piece
+   * (the fountain spray and the flow over the path that flickered in the attract's ranking flight over the town). */
+  ((int32_t*)W[0x0CA4])[10] = vrd32s(0x39DE8 + ((W[0x0C98] >> 1) & 0xf) * 4) + 0x146;
   ((int32_t*)W[0x0CA4])[0xb] = -W[0x0CDC];
   ((int32_t*)W[0x0CA4])[0xc] = 0xa000 - W[0x0CE0];
   ((int32_t*)W[0x0CA4])[0xd] = -W[0x0CE4];

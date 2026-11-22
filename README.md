@@ -185,6 +185,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   0x03164C), and the sacred altar picture gets its frame number again. `PROPCYCL_SHOT_FROM` / `PROPCYCL_SHOT_TO` limit
   `PROPCYCL_SHOT_EVERY` captures to a range of frames.
 - **Ridge Racer 2:** the lap time no longer gains a minute (the 68000 X flag in the lifted code).
+- **Prop Cycle: no more flickering fountain spray and black river in the attract's ranking flight over the town** (before the
+  Savior of Solitar plate): the water surface's animation frame was read wrongly (a 68020 memory-indirect address), so it
+  cycled through other water models -- spray, flow, nothing -- instead of its eight still-water frames.
 - **Alpine Surfer: READY slides in and GO! slides out, row by row, as on the board.** The Super System 22 engine now has the
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,
