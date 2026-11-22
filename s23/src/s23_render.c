@@ -66,7 +66,9 @@ void s23_render_init(const char *dir)
     for (uint32_t k = 0; k < 0x200000; k++) tmlrom[k] = (uint16_t)(raw[2 * k] | raw[2 * k + 1] << 8);   /* ROM_REGION16_LE */
     if (s23_game.gorgon) memcpy(tmlrom + 0x100000, tmlrom, 0x200000);   /* half-size map: mirror it, as MAME's tileid mask wraps */
     ok &= load(dir, s23_game.ccrh, tmhrom, 0x200000);
-    for (int c = 0; c < 4; c++) ok &= load(dir, s23_game.cg[c], texrom + c * 0x800000, 0x800000);
+    const uint32_t cgsz = s23_game.cg_chip ? s23_game.cg_chip : 0x800000;
+    for (int c = 0; c < 4; c++) ok &= load(dir, s23_game.cg[c], texrom + c * cgsz, cgsz);
+    for (uint32_t o = 4 * cgsz; o < 0x2000000; o += 4 * cgsz) memcpy(texrom + o, texrom, 4 * cgsz);   /* a smaller set wraps */
     if (s23_game.spr[0] && (sprrom = malloc(0x1000000)))   /* GORgON's sprite tiles (MAME region "sprites") */
         for (int c = 0; c < 4; c++) ok &= load(dir, s23_game.spr[c], sprrom + c * 0x400000, 0x400000);
     tm_decoded =malloc(4u * (tileid_mask | 0xFF) + 4); tattr_decoded = malloc((tileid_mask | 0xFF) + 1);
@@ -194,6 +196,7 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
         const int zsc = s23_game.zbias_scale && e->type == S23_RE_MODEL ? s23_game.zbias_scale(e->model) : 0;   /* the game's own, per model */
         zsort += (int)((shift_bit != 17 ? 1.f : bsc > 0.f ? bsc : zsc > 0 ? (float)zsc : 1.f) * (float)((polyshift >> shift_bit & 1) ? (int)(polyshift | shift_sign) : (int)(polyshift & shift_mask_lo)));
         ap += (int)((polyshift & 0x1C0000) >> 18);
+		if (s23_game.ap_wrap && e->type == S23_RE_MODEL) ap &= 7;   /* models only (include/s23_game.h ap_wrap) */
     }
     if (zsort < 0) zsort = 0;
     if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
@@ -201,7 +204,7 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
     p->index = (uint32_t)GNPOLY;
     p->vp_size_x = e->vp_size_x; p->vp_size_y = e->vp_size_y; p->vp_offset_x = e->vp_offset_x; p->vp_offset_y = e->vp_offset_y;
     p->clip43 = e->clip43;
-    p->entry = (int)(e - FS->list.e); p->model = e->type == S23_RE_MODEL ? e->model : -1; p->role = p->model >= 0 && s23_game.depth_role ? s23_game.depth_role(p->model) : 0;
+    p->entry = (int)(e - FS->list.e); p->nodepth = 0; p->model = e->type == S23_RE_MODEL ? e->model : -1; p->role = p->model >= 0 && s23_game.depth_role ? s23_game.depth_role(p->model) : 0;
     return 1;
 }
 
@@ -405,6 +408,7 @@ static void render_direct(const s23_render_entry *e)
         p->blend = 0;
         p->prioverchar = 2;                               /* MAME 0.289: render_direct_poly works out (cmode == 1 ? 7 : 0), but render_flush draws EVERY
                                                           * polygon with prioverchar 2 -- text the polygon covers is drawn again over it (Angler King's NOTICE) */
+		p->nodepth = p->pv[0].p[0] == 1.f && p->pv[1].p[0] == 1.f && p->pv[2].p[0] == 1.f;   /* no depth given (mantissa 0): out of exact depth */
         GNPOLY++;
     }
 }
@@ -472,7 +476,7 @@ static void span(const poly *p, int y, int x0, int x1, const float *s, const flo
             continue; }
         if (seamtest) {                                   /* coverage: a stencil cutout is the art's own hole, not a seam -- drawn solid */ dest[vx] = seamtest == 2 ? (uint32_t)(p->entry & 0xFFF) << 12 | ((p->zkey & 0x1FFFFF) >> 9) : (p->zkey & 0xFFFFFF); continue; }   /* 1: depth key; 2: entry << 12 | depth >> 9 */
         if (p->stencil && stencil_lookup(tx, ty)) continue;
-        if (s23_depth_mode || s23_game.depth_within) {   /* depth_within: within one object only, unless the menu's Depth is on too */
+        if ((s23_depth_mode || s23_game.depth_within) && !p->nodepth) {   /* depth_within: within one object only, unless the menu's Depth is on too */
             const int k = oy * 640 + vx, ent = (int)(p->entry & 0x3FFF) + 1, band = (int)(p->zkey >> 21);
             if (near_pass) { if (p->role != 2 && z > zb[k]) { zb[k] = z; eb[k] = (int16_t)ent; ab[k] = (uint8_t)(band | (p->role == 1) << 7); } continue; }   /* (opaque polygons only; bit 7: role 1) */
             if (p->role == 2) { if (eb[k] && (ab[k] & 0x80)) continue; }   /* s23_game.depth_role: under the owner, wherever it is nearest */
@@ -715,6 +719,7 @@ static void build(s23_built *b)
  * own alpha unless its bank is the C404's opaque bank and the pen isn't its alpha pen. Drawn into an ARGB overlay the back end lays over the
  * polygons (ponytail: in list order, over every polygon -- MAME sorts them by depth among the polygons; sort them in if one shows through wrong) */
 int s23_spr_fullpic, s23_spr_hud;
+int s23_spr_only_fe;                                     /* 1: draw only the sprites over the text layer (cz 0xFE, s23_game.spr_fe_over) */
 /* the "Effects" option (eng_display fx_filter): one tile of an effect sprite as a 34 x 34 premultiplied cell (0xAARRGGBB, GL_BGRA), its
  * 32 x 32 texels in the middle and a 1-texel rim from the neighbouring tiles of the same sprite (clear past the sprite's edge), so a
  * filtered tile blends into its neighbours with no seam and fades out at the sprite's own edge. The colour as s23_sprites_draw's */
@@ -736,7 +741,7 @@ void s23_spr_cell(const s23_frame_state *fs, const s23_sprite *s, int row, int c
             if (pen != 0xFF) {
                 const uint32_t pc = pal[pen]; int cr = pc >> 16 & 0xFF, cg = pc >> 8 & 0xFF, cb = pc & 0xFF;
                 if (fade && ffac != 0xFF) { cr = (cr * ffac + fr * (0x100 - ffac)) >> 8; cg = (cg * ffac + fg * (0x100 - ffac)) >> 8; cb = (cb * ffac + fb * (0x100 - ffac)) >> 8; }
-                const uint32_t a = af != 0xFF && (ablend || pen == apen) ? (uint32_t)af : 0xFF;
+                const uint32_t a = af != 0xFF && (ablend || (s23_game.spr_alpha ? pen >= apen : pen == apen)) ? (uint32_t)af : 0xFF;
                 o = a << 24 | (cr * a / 255) << 16 | (cg * a / 255) << 8 | (cb * a / 255);
             }
         }
@@ -751,6 +756,7 @@ void s23_sprites_draw(const s23_frame_state *fs, int i0, int i1, uint32_t *ovl, 
     bb[0] = ow; bb[1] = 480; bb[2] = bb[3] = 0;
     for (int i = i0; i < i1 && i < fs->nspr; i++) {
         const s23_sprite *s = &fs->spr[i];
+		if (s23_spr_only_fe && s->cz != 0xFE) continue;
         const uint32_t *pal = &fs->pens[(s->color & 0x7F) << 8];
         const int fade = (fflags & 2) || s->fade, af = 0xFF - s->alpha, ablend = (s->color & 0x7F) != acolor;
         if (s23_fx_smooth() && s23_spr_is_fx(s)) {   /* "Effects": filtered, from the rimmed cells (the GPU draws them as filtered quads instead: src/s23_gl.c) */
@@ -790,7 +796,7 @@ void s23_sprites_draw(const s23_frame_state *fs, int i0, int i1, uint32_t *ovl, 
                     const int pen = src[v * 32 + u]; if (pen == 0xFF) continue;
                     const uint32_t c = pal[pen]; int r = c >> 16 & 0xFF, g = c >> 8 & 0xFF, b = c & 0xFF;
                     if (fade && ffac != 0xFF) { r = (r * ffac + fr * (0x100 - ffac)) >> 8; g = (g * ffac + fg * (0x100 - ffac)) >> 8; b = (b * ffac + fb * (0x100 - ffac)) >> 8; }
-                    const uint32_t a = af != 0xFF && (ablend || pen == apen) ? (uint32_t)af : 0xFF;
+                    const uint32_t a = af != 0xFF && (ablend || (s23_game.spr_alpha ? pen >= apen : pen == apen)) ? (uint32_t)af : 0xFF;
                     ovl[y * ow + x + ox] = a << 24 | (uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b;
                     if (x + ox < bb[0]) bb[0] = x + ox; if (x + ox >= bb[2]) bb[2] = x + ox + 1; if (y < bb[1]) bb[1] = y; if (y >= bb[3]) bb[3] = y + 1;
                 }
@@ -811,6 +817,9 @@ static void soft_sprites(const s23_built *b, int i0, int i1, uint32_t *rgba)
         const uint32_t d = rgba[k]; uint32_t o = 0;
         for (int sh = 0; sh <= 16; sh += 8) o |= (((s >> sh & 0xFF) * a + (d >> sh & 0xFF) * (0x100 - a)) >> 8) << sh;
         rgba[k] = o; }
+	 if (s23_game.spr_fe_over) {   /* sprites marked over the text layer (cz 0xFE, MAME's prioverchar): no text drawn again over them */
+        s23_spr_only_fe = 1; s23_sprites_draw(&b->fs, i0, i1, ovl, 640, 0, bb); s23_spr_only_fe = 0;
+        for (int y = bb[1]; y < bb[3]; y++) for (int x = bb[0]; x < bb[2]; x++) { const int k = y * 640 + x; if (ovl[k] >> 24) prio[k] &= (uint8_t)~2; ovl[k] = 0; } }
 }
 void s23_soft_raster(const s23_built *b, uint32_t *rgba)
 {
@@ -1124,12 +1133,15 @@ void s23_render_frame_end(void)
       since = seen ? 0 : since + 1; s23_spr_hud = since < 30;
       /* far to near by the C404 depth key (stable: equal keys keep the list order), so the renderers can put each among the polygons as MAME
        * does (the waterfall bonus's sun glow behind the helicopter and the text, the paddles' splash behind the raft) */
+	  if (s23_game.spr_first_top) for (int i = 0, j = snap->nspr - 1; i < j; i++, j--) { const s23_sprite t = snap->spr[i]; snap->spr[i] = snap->spr[j]; snap->spr[j] = t; }
       for (int i = 1; i < snap->nspr; i++) { const s23_sprite s = snap->spr[i]; int j = i;
           while (j > 0 && snap->spr[j - 1].z < s.z) { snap->spr[j] = snap->spr[j - 1]; j--; } snap->spr[j] = s; } }
     { static long at = -2, to; extern uint32_t rr_frame; if (at == -2) { const char *e = getenv("S23_SPRLOG"); at = -1; if (e && sscanf(e, "%ld-%ld", &at, &to) < 2) to = at; }   /* debug: $S23_SPRLOG=frame[-frame]: sprites; a range logs the header only */
       if (to > at && (long)rr_frame >= at && (long)rr_frame <= to) { fprintf(stderr, "[SPRN] %u %d %02X full %d", rr_frame, snap->nspr, snap->c404[2 * 0x1F + 1], s23_spr_fullpic);
           for (int i = 0; i < snap->nspr && i < 8; i++) fprintf(stderr, " | %d,%d %04X a%02X z%06X", snap->spr[i].x, snap->spr[i].y, snap->spr[i].code, snap->spr[i].alpha, snap->spr[i].z); fprintf(stderr, "\n"); }
-      if (at >= 0 && (long)rr_frame == at) { fprintf(stderr, "[SPR] %u: layer byte %02X, %d sprites, list %d entries\n", rr_frame, snap->c404[2 * 0x1F + 1], snap->nspr, snap->list.count); }   /* (Gorgon's header words: $S23_SPRRAW) */
+       if (at >= 0 && (long)rr_frame == at) { fprintf(stderr, "[SPR] %u: layer byte %02X, %d sprites, list %d entries; alpha colour %02X pen %02X\n", rr_frame, snap->c404[2 * 0x1F + 1], snap->nspr, snap->list.count, snap->c404[2 * 0x0F + 1], snap->c404[2 * 0x10 + 1]);
+        FILE *pf = getenv("S23_PENDUMP") ? fopen(getenv("S23_PENDUMP"), "wb") : NULL;   /* debug: with $S23_SPRLOG, the palette (0x8000 x 0x00RRGGBB) -- a logo from the sprite ROM */
+        if (pf) { fwrite(snap->pens, 4, 0x8000, pf); fclose(pf); } }   /* (Gorgon's header words: $S23_SPRRAW) */
       static long at2 = -2; if (at2 == -2) { const char *e = getenv("S23_SPRLOG"), *c = e ? strchr(e, ',') : NULL; at2 = c ? atol(c + 1) : -1; }   /* =a,b: two frames' lists */
       if ((at >= 0 && (long)rr_frame == at) || (long)rr_frame == at2) for (int i = 0; i < snap->nspr; i++) { const s23_sprite *s = &snap->spr[i];
           fprintf(stderr, "[SPR] %u #%d at %d,%d size %d x %d, %d x %d tiles, code %04X colour %02X alpha %02X fade %d z %06X cz %02X\n", rr_frame, i, s->x, s->y, s->xs, s->ys, s->cols, s->rows, s->code, s->color, s->alpha, s->fade, s->z, s->cz); } }
@@ -1158,7 +1170,7 @@ void s23_render_frame_end(void)
               if (s23_game.wide_pillar && s23_game.wide_pillar() && fade >= 20) e->clip43 = 1;   /* the game's option: everything in 4:3 outside a match */
               if (e->type == S23_RE_MODEL && e->vp_fov > 0.f && (float)e->v[2] >= e->vp_fov - 8.f && (float)e->v[2] <= e->vp_fov + 8.f) e->clip43 = 1;
           } }
-      else if (g_eng_hud_edges_on && ex > 0)
+      else if (g_eng_hud_edges_on && ex > 0 && !s23_game.no_hud_shift)
           for (int i = 0; i < snap->list.count; i++) {
               s23_render_entry *e = &snap->list.e[i];
               if (e->type != S23_RE_MODEL || e->vp_fov <= 0.f || e->v[0] == 0) continue;

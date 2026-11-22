@@ -123,12 +123,12 @@ static const char *fs_poly =
     "  ty += uint(v_par.z);\n"
     "  float oz = gl_FragCoord.w;\n"                                      /* 1/z: what the software renderer interpolates */
     "  if (u_near != 0) {\n"                                              /* EXACT DEPTH pre-pass: the nearest opaque pixel, its object and band */
-    "    if ((fl & 2) != 0 || (u_alpha != 255 && (fl & 4) != 0) || (fl & 512) != 0) discard;\n"
+    "    if ((fl & 2) != 0 || (u_alpha != 255 && (fl & 4) != 0) || (fl & 512) != 0 || (fl & 1024) != 0) discard;\n"
     "    gl_FragDepth = clamp(0.5 + log2(max(oz, 1e-30)) / 256.0, 0.0, 1.0);\n"
     "    int e = int(v_ext.x);\n"
     "    gl_FragColor = vec4(float(e & 255) / 255.0, float((e >> 8) & 255) / 255.0, v_ext.y / 255.0, (fl & 256) != 0 ? 0.75 : 1.0); return;\n"   /* alpha 0.75: s23_game.depth_role 1 */
     "  }\n"
-    "  if (u_depth != 0) {\n"                                             /* hidden if ANOTHER object of this band is clearly nearer here */
+    "  if (u_depth != 0  && (fl & 1024) == 0) {\n"                                             /* hidden if ANOTHER object of this band is clearly nearer here */
     "    ivec2 fp = fc; vec4 nn = texelFetch(t_near, fp, 0);\n"
     "    if ((fl & 512) != 0) { if (nn.a > 0.5 && nn.a < 0.9) discard; }\n"   /* depth_role 2: under a role-1 owner wherever it is nearest */
     "    else if ((fl & 256) != 0 && nn.a > 0.9 && (int(nn.r * 255.0 + 0.5) | (int(nn.g * 255.0 + 0.5) << 8)) != int(v_ext.x)) { }\n"   /* an owner is never hidden by another model (the raft floor under the water) */
@@ -418,7 +418,7 @@ static int fill_vertices(const s23_built *b)
         /* widescreen (Hor+): a viewport that fills the 4:3 screen fills the wide one -- same camera, more world at the sides */
         const int full = ex && cl <= 0 && cr >= 640 && !p->clip43;
         const int ccl = full ? -ex : cl, ccr = full ? 640 + ex : cr;
-        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | (p->model < 0) << 10);   /* bits 8-9: s23_game.depth_role; bit 10: an immediate / direct (screen-space) polygon: the 3D texture filter leaves it sharp */   /* bit 7: the author's depth fog (bit 6 is our boost) */
+        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | p->nodepth << 10 | (p->model < 0) << 10);   /* bits 8-9: s23_game.depth_role; bit 10: no depth (s23_poly.nodepth) and an immediate / direct (screen-space) polygon: the 3D texture filter leaves it sharp */   /* bit 7: the author's depth fog (bit 6 is our boost) */
         /* the polygon's uv box for the bilinear filters (fs_poly): the first texel and the last one the board shows (texel floor(u) for u
          * inside the box: ceil(max) - 1, a hair of float slack below an exact integer) */
         float bu0 = 1e30f, bv0 = 1e30f, bu1 = -1e30f, bv1 = -1e30f;
@@ -524,6 +524,19 @@ static void spr_ovl(const s23_built *b, int i0, int i1)
         glTexCoord2f(u0, v0); glVertex2f(x0, (float)bb[1]); glTexCoord2f(u1, v0); glVertex2f(x1, (float)bb[1]);
         glTexCoord2f(u1, v1); glVertex2f(x1, (float)bb[3]); glTexCoord2f(u0, v1); glVertex2f(x0, (float)bb[3]);
         glEnd();
+		if (s23_game.spr_fe_over) {   /* sprites over the text layer (cz 0xFE): G back to 0 under them -- no text drawn again over them */
+            extern int s23_spr_only_fe; int fb[4]; s23_spr_only_fe = 1; s23_sprites_draw(&b->fs, i0, i1, ovl, 1280, 320, fb); s23_spr_only_fe = 0;
+            if (fb[0] < fb[2] && fb[1] < fb[3]) {
+                bind_tex(0, t_spr); glPixelStorei(GL_UNPACK_ROW_LENGTH, 1280);
+                glTexSubImage2D(GL_TEXTURE_2D, 0, bb[0], bb[1], bb[2] - bb[0], bb[3] - bb[1], GL_BGRA, GL_UNSIGNED_BYTE, ovl + bb[1] * 1280 + bb[0]);   /* (the FE ones lie inside bb) */
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+                glColor4f(0, 0, 0, 1);
+                glBegin(GL_QUADS);
+                glTexCoord2f(u0, v0); glVertex2f(x0, (float)bb[1]); glTexCoord2f(u1, v0); glVertex2f(x1, (float)bb[1]);
+                glTexCoord2f(u1, v1); glVertex2f(x1, (float)bb[3]); glTexCoord2f(u0, v1); glVertex2f(x0, (float)bb[3]);
+                glEnd(); }
+            for (int y = bb[1]; y < bb[3]; y++) memset(ovl + y * 1280 + bb[0], 0, (size_t)(bb[2] - bb[0]) * 4);
+        }
         glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE); glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glDisable(GL_ALPHA_TEST); glColor4f(1, 1, 1, 1);
         glEnable(GL_BLEND);   /* the text pass after the last group blends (session 16: left off, the banners went solid over scenery) */
         p_glBindFramebuffer(GL_FRAMEBUFFER, fbo_col); glViewport(0, 0, fbw, fbh);

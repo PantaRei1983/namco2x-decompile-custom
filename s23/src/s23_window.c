@@ -501,5 +501,12 @@ void s23_window_frame(void)
     int ok = pass(1);
     int s23_c422_linked(void);                                   /* LINKED (our fork): the game plays on under the menu -- a cabinet that stops goes */
     while (ok && !s23_c422_linked() && (eng_ui_is_open() || paused)) { ok = pass(0); if (!eng_ui_is_open() && !paused) eng_vsync_resync(&vs); }   /* silent and the other one carries on without it */
-    if (!ok) { fprintf(stderr, "[HOST] quit\n"); { void s23_c422_report(void); s23_c422_report(); } { void s23_backup_save(int); s23_backup_save(1); } { void s23_out_close(void); s23_out_close(); } ss22_input_close(); eng_ui_shutdown(); SDL_Quit(); exit(0); }
+    if (!ok) { fprintf(stderr, "[HOST] quit\n"); { void s23_c422_report(void); s23_c422_report(); } { void s23_backup_save(int); s23_backup_save(1); } { void s23_out_close(void); s23_out_close(); } ss22_input_close();
+        bool eng_ui_restart_requested(void); const bool restart = eng_ui_restart_requested();   /* File > Restart: power-cycle -- the same program again */
+        eng_ui_shutdown(); SDL_Quit();
+        if (restart) { static wchar_t exe[32768], cl[32768]; STARTUPINFOW si; PROCESS_INFORMATION pi; memset(&si, 0, sizeof si); si.cb = sizeof si;   /* (it only quit before) */
+            const DWORD n = GetModuleFileNameW(NULL, exe, 32768); wcsncpy(cl, GetCommandLineW(), 32767); fflush(NULL);
+            if (n > 0 && n < 32768 && CreateProcessW(exe, cl, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+            else fprintf(stderr, "[HOST] the restart failed (error %lu)\n", (unsigned long)GetLastError()); }
+        exit(0); }
 }

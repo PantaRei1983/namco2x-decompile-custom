@@ -87,6 +87,22 @@ typedef struct {
     int npt; const char *pt_rom[4][2];            /* the point ROM chip pairs [high, low] */
     const char *ccrl, *ccrh, *cg[4];              /* texture tile maps and tiles */
     const char *spr[4];                           /* GORgON: the sprite tile ROMs (4 MB each, 32x32 8-bit tiles), NULL elsewhere */
+	 int spr_alpha;                                /* GORgON sprites in the C404's alpha bank: 1 = pens AT OR ABOVE the alpha pen take the sprite's alpha (Final
+                                                   * Furlong: panel backgrounds are pen FD -- the race map with the alpha pen at FB went solid white by MAME's
+                                                   * "pen == alpha pen"; making every pen see-through washed out the select screens' text, pens 00-1A / E7);
+                                                   * 0 = MAME's rule */
+    int c422_mame;                                /* the C422 as MAME has it: registers kept, the interrupt raised by 0xFFFB and acked by 0x000F written
+                                                   * to +2, no data path (Final Furlong alone; linked, its .link models the chip: finfurl/src/ff_link.c) */
+	int spr_fe_over;                              /* GORgON: 1 = sprites with cz 0xFE stay over the text layer (MAME's prioverchar; Final Furlong's course
+                                                   * select: the see-through text-layer band washed out "ROYAL GARDEN'S CUP" over it) */
+    int spr_first_top;                            /* GORgON sprites of equal depth: 1 = the list's first on top (Final Furlong, against arcade footage: the
+                                                   * message board over "4/8 POSITION", the horse dots over the course-map panel); 0 = the last on top (MAME) */
+    int no_hud_shift;                             /* 1 = no widescreen move of screen-plane models to the edges (Final Furlong: its HUD is sprites; the move
+                                                   * pulled the rider's arms off the hands in the attract's TURN LEFT / RIGHT) */
+    int ap_wrap;                                  /* 1 = a polygon's priority adjust (z-shift bits 18-20) wraps in 3 bits: Final Furlong's island (priority 6,
+                                                   * adjust 7 -> 5) sits on the sea; MAME's plain add (13) drew it under the sea (attract fly-over: sea only). MODELS ONLY: the
+                                                   * attract's scrolling tile background (direct polygons, 6 + 7 too) must stay at 13, behind the jockey */
+    uint32_t cg_chip;                             /* the texture tile chips' size: 0 = 8 MB; Final Furlong 4 MB (the 16 MB region mirrored, as an address wraps) */
     const char *wave[2];                          /* the C352's samples: low, high */
     int recoil_hold;                              /* 1 = 0x6002 bit 0 stays on WHILE the gun fires (Crisis Zone's machine gun: measured on a player's
                                                    * session, on for the whole burst), 0 = a 3-frame pulse per shot (Time Crisis 2) */
@@ -144,6 +160,9 @@ typedef struct s23_link_ops {
     void (*report)(void);                         /* closing: the totals to the log, the others told */
     int  (*linked)(void);                         /* 1 = in a linked session (no pause: the others would lose this one) */
     int  (*lights)(int kind[2], int lit[2]);      /* the link lights as s23_c422_lights; NULL = none */
+	int  (*c422_read)(unsigned k, uint32_t *v);   /* optional: the game's own model of the C422's registers (k = word 0-7); 0 = not now (the
+                                                   * engine's model answers) -- Final Furlong's ring link (finfurl/src/ff_link.c) */
+    int  (*c422_write)(unsigned k, uint32_t v);
 } s23_link_ops;
 
 /* THE GORgON BOARD (s23_game.gorgon; src/s23_gorgon.c): the engine calls these only on that board */

@@ -322,7 +322,8 @@ static uint8_t asca_switches(int n)
     if ((in & IN_TEST) && !test_was) test_on ^= 1;
     test_was = (in & IN_TEST) != 0;
     switch (n) {
-    case 0: return (uint8_t)~((s23_game.gorgon && (in & IN_TRIGGER)) << 4   /* GORgON (Rapid River): the trigger key is START (p1.0) */
+    case 0: return (uint8_t)~((s23_game.gorgon && (in & 0x2000)) << 5      /* GORgON p1.15: Final Furlong's right whip (Rapid River never sets 0x2000) */
+                              | (s23_game.gorgon && (in & IN_TRIGGER)) << 4   /* GORgON p1.0: Rapid River's START, Final Furlong's left whip */
                               | (!!(in & (IN_USR_ENTER | IN_PEDAL))) << 3 | (!!(in & IN_USR_DOWN)) << 2 | (!!(in & IN_USR_UP)) << 1 | test_on);
     case 1: return 0xFF;
     case 2: return (uint8_t)~((!!(in & IN_COIN)) << 3 | (!s23_game.gorgon && (in & IN_TRIGGER)) << 2);
