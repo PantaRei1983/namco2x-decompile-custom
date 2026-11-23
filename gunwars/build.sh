@@ -2,7 +2,12 @@
 # Build Gunmen Wars (System 23 / GORgON host in ../s23) on Linux -- or Windows (MSYS2 MINGW64).
 #
 #   ./build.sh /path/to/gunwars.zip /path/to/namco_asca5.zip     first time: the ROMs into roms/ (and extracted/)
+#   ./build.sh /path/to/gunwarsj.zip /path/to/gunwars.zip /path/to/namco_asca5.zip     a clone set (its graphics are in gunwars.zip)
 #   ./build.sh                                           later: just rebuild
+#
+# Any of MAME's three sets: gunwars (World, GM2 Ver. B), gunwarsj (Japan, GM1 Ver. B), gunwarsa (Japan, GM1 Ver. A). The first one found
+# is built, in that order; GW_SET=gunwarsj ./build.sh (or gunwarsa / gunwars) picks one when you have several. Changing the set translates
+# the program again (N22TOOLS needed).
 #
 # The game program is translated from YOUR ROM with Ghidra: gen/gunwars_lifted_*.c is not in the repository. With N22TOOLS set (the folder
 # with ghidra_12.1.4_PUBLIC -- plus jdk-21.0.12.1+1 on Windows; Linux uses the system's Java 21 -- and an empty work/), this script runs it
@@ -29,8 +34,14 @@ for i in z.infolist():
          cp -f "$z" roms/
     fi
 done
-[ -f extracted/roms/gm1verb.ic2 ] || fail "No ROMs yet. Run:   ./build.sh /path/to/gunwars.zip /path/to/namco_asca5.zip"
-python3 -I tools/make_prog.py extracted/roms extracted >/dev/null
+ls extracted/roms/gm[12]ver[ab].ic2 >/dev/null 2>&1 || fail "No ROMs yet. Run:   ./build.sh /path/to/gunwars.zip /path/to/namco_asca5.zip"
+python3 -I tools/make_prog.py extracted/roms extracted >/dev/null || fail "No complete Gunmen Wars program (see above)"
+SET="$(cat extracted/SET)"; echo "Gunmen Wars set: $SET"
+if ls gen/gunwars_lifted_*.c >/dev/null 2>&1; then
+    HAVE="$(cat gen/SET 2>/dev/null || echo gunwarsj)"          # (a translation from before the sets: Ver. B)
+    if [ "$HAVE" != "$SET" ]; then echo "gen/ holds $HAVE's program: translating $SET's"; rm -f gen/gunwars_lifted_*.c
+    else [ -f gen/gw_set.h ] || { cp extracted/SET gen/SET; cp extracted/gw_set.h gen/gw_set.h; }; fi
+fi
 if ! ls gen/gunwars_lifted_*.c >/dev/null 2>&1; then
     [ -n "${N22TOOLS:-}" ] || fail "The program is not translated yet. Set N22TOOLS to your Ghidra tools folder and run ./build.sh again
     (or:  export N22TOOLS=<tools folder>;  tools/regen.sh)"

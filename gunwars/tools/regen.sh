@@ -9,4 +9,5 @@ ROOT="$(cd "$HERE/.." && pwd)"
 bash "$HERE/tools/import.sh" "${1:-$HERE/extracted/roms}"
 mkdir -p "$HERE/gen"; rm -f "$HERE"/gen/gunwars_lifted_*.c
 ( cd "$ROOT" && $PY -I tools/gen/liftmips.py gunwars/gunwars.pcode gunwars/gen gunwars 16 )
+cp "$HERE/extracted/SET" "$HERE/gen/SET"; cp "$HERE/extracted/gw_set.h" "$HERE/gen/gw_set.h"   # which set gen/ is (include/gw_version.h)
 NINJA_OR_MAKE   # (no build/ yet on a first import: build.sh configures it)

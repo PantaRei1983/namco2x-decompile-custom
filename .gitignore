@@ -194,6 +194,10 @@ __pycache__/
 /gunwars/build/
 /gunwars/build_watch/
 /gunwars/*.pcode
+/gunwars/roms/
+/gunwars/*.cfg
+/gunwars/*.nv
+/gunwars/*.rec
 
 # Air Combat 22 (airco22/): game files, the translation's working files made by LuKa-86, test output
 /airco22/extracted/

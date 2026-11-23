@@ -33,7 +33,9 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   in the second attract demo (the polygon-over-text mask now stays inside each polygon's clip window).
 - **Crisis Zone:** widescreen HUD with the score bars at the screen edges; 4:3 with fading bars outside play; tank
   shadow colours fixed; HUD icons drawn over the bars; zone-select ticker scrolls on its own.
-- **Gunmen Wars:** the namco logo matched to real-cabinet footage; widescreen HUD; NamCam from a webcam or a picture.
+- **Gunmen Wars:** the namco logo matched to real-cabinet footage; widescreen HUD; NamCam from a webcam or a picture. Any of MAME's
+  three sets builds: `gunwars` (World, GM2 Ver. B, MAME's parent), `gunwarsj` (Japan, GM1 Ver. B) and `gunwarsa` (Japan, GM1 Ver. A);
+  the program is translated from the one you have (`GW_SET=gunwarsj gunwars/build.sh ...` picks one when you have several).
 - **System 23 engine:** about 4 times faster priority drawing; correct texture sampling for some polygons.
 - **Super 22 / System 22:** translucent sprites over text; priority of some polygons over the text layer; guard-band
   polygons drawn.
@@ -178,7 +180,7 @@ with their own `build.sh` build in one step from the ROM zips, e.g. Rapid River 
 ```
 export N22TOOLS=~/n22tools       # Ghidra 12.1.4 (ghidra_12.1.4_PUBLIC/), an empty work/ folder; Java 21 from your distribution
 rapidrvr/build.sh rapidrvr.zip namco_asca1.zip     # the first time: unpacks the ROMs, translates the program, builds
-gunwars/build.sh gunwars.zip namco_asca5.zip
+gunwars/build.sh gunwars.zip namco_asca5.zip       # or a clone: gunwarsj.zip / gunwarsa.zip with gunwars.zip
 ./launch.sh rapid                                  # or: ./launch.sh gunmen   (a number for the window size, --fullscreen)
 ```
 

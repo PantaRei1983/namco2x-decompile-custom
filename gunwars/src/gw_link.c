@@ -53,6 +53,7 @@ typedef int sock_t;
 #include <SDL2/SDL.h>
 #include "s23_game.h"
 #include "gw_link.h"
+#include "gw_version.h"
 #include "../../engine/lan_via.h"         /* out of the connection each cabinet was heard on (a VPN on 169.254.x.x) */
 
 uint64_t s23_cycles_now(void);
@@ -537,10 +538,10 @@ static void tick(void)
           extern uint8_t s23_ram[]; extern uint8_t gw_gmen_ram[];
           #define RD32(a) ((uint32_t)s23_ram[(a)] << 24 | (uint32_t)s23_ram[(a) + 1] << 16 | (uint32_t)s23_ram[(a) + 2] << 8 | s23_ram[(a) + 3])
           #define SH32(o) ((uint32_t)gw_gmen_ram[(o)] << 24 | (uint32_t)gw_gmen_ram[(o) + 1] << 16 | (uint32_t)gw_gmen_ram[(o) + 2] << 8 | gw_gmen_ram[(o) + 3])
-          const uint32_t ok = RD32(0x333DE8), slot = RD32(0x333DD8) >> 16, rp = RD32(0x333B78);
+          const uint32_t ok = RD32(GW_RAM(0x333DE8)), slot = RD32(GW_RAM(0x333DD8)) >> 16, rp = RD32(GW_RAM(0x333B78));
           const uint32_t rv = (rp & 0x1FFF0000u) == 0x0E700000u ? SH32(rp & 0xFFFC) : 0xEEEEEEEEu;
           fprintf(stderr, "[LSTAT] f%u ok %u slot %u ready@%08X=%08X recs", rr_frame, ok, slot, rp, rv);
-          for (int i = 0; i < 4; i++) { const uint32_t pp = RD32(0x369F10 + 4 * i); fprintf(stderr, " %08X", pp); }
+          for (int i = 0; i < 4; i++) { const uint32_t pp = RD32(GW_RAM(0x369F10) + 4 * i); fprintf(stderr, " %08X", pp); }
           fprintf(stderr, "\n"); } }
       static uint32_t lastf; static int pl = -1; if (pl < 0) pl = getenv("GW_PCBLOG") != NULL; if (pl && rr_frame / 200 != lastf) { lastf = rr_frame / 200; uint8_t *s23_vram_ptr(uint32_t); const uint8_t *p = s23_vram_ptr(0x06000F20u);
           fprintf(stderr, "[LINK] f%u backup F20: %02X %02X %02X %02X\n", rr_frame, p[0], p[1], p[2], p[3]); } }

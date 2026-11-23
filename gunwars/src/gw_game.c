@@ -1,4 +1,4 @@
-/* gw_game.c -- GUNMEN WARS' table for the System 23 host (../s23/include/s23_game.h): MAME's gunwars set (Japan, GM1 Ver. B), Super System 23
+/* gw_game.c -- GUNMEN WARS' table for the System 23 host (../s23/include/s23_game.h): any of MAME's three sets (include/gw_version.h), Super System 23
  * with the GMEN board. Values from MAME's namcos23.cpp (namcoss23_gmen_state, ROM_START(gunwars)).
  *
  * SUPER SYSTEM 23 = System 23 (Time Crisis 2's board, same clocks and interrupt pins) plus one register: a write to 0x0100005C acknowledges
@@ -13,9 +13,10 @@
 #include <math.h>
 #include "s23_game.h"
 #include "s23_host.h"
+#include "gw_version.h"
 
 static const eng_rom_t chips[] = {
-    { "gm1verb.ic2", 0x200000, NULL, NULL, 0x401F8264 }, { "gm1verb.ic1", 0x200000, NULL, NULL, 0xF9FD0F2B },
+    { GW_PROG_HI, 0x200000, NULL, NULL, GW_CRC_HI }, { GW_PROG_LO, 0x200000, NULL, NULL, GW_CRC_LO },   /* the program of the set translated */
     { "gm1vera.ic3", 0x80000, NULL, NULL, 0x5582FDD4 },  { "asc5_io-a.ic14", 0x20000, NULL, NULL, 0x5964767F },
     { "gm1mtah.2j", 0x800000, NULL, NULL, 0x3CEA9094 }, { "gm1mtal.2h", 0x800000, NULL, NULL, 0xD531DFCD },
     { "gm1cgll.4m", 0x800000, NULL, NULL, 0x936C0079 }, { "gm1cglm.4k", 0x800000, NULL, NULL, 0xE2EE5493 },
@@ -25,15 +26,23 @@ static const eng_rom_t chips[] = {
     { "gm1pt1h.5a", 0x400000, NULL, NULL, 0x5F6CEBAB }, { "gm1pt1l.5c", 0x400000, NULL, NULL, 0xF44C149F },
     { "gm1wave.2c", 0x800000, NULL, NULL, 0x7D5C79A4 },
 };
-static const char *const zips[] = { "gunwars.zip", "namco_asca5.zip" };   /* a split MAME set keeps the I/O board's program in its device zip */
+/* a split MAME set keeps the I/O board's program in its device zip, and a clone's graphics in the parent's (chips are matched by CRC: an older
+ * gunwars.zip holding Ver. B works too) */
+#if GW_SET == 0
+static const char *const zips[] = { "gunwars.zip", "namco_asca5.zip" };
+#define GW_ZIP_HELP "MAME's gunwars.zip (Gunmen Wars, " GW_VERSION_TEXT ") and namco_asca5.zip"
+#else
+static const char *const zips[] = { GW_SETNAME ".zip", "gunwars.zip", "namco_asca5.zip" };
+#define GW_ZIP_HELP "MAME's " GW_SETNAME ".zip (Gunmen Wars, " GW_VERSION_TEXT ") with gunwars.zip and namco_asca5.zip"
+#endif
 
 int s23_rom_read(const char *dir, const char *name, uint8_t *dst, size_t n);   /* ../s23/src/s23_rom.c */
 
-/* the boot image (4 MB at 0x1FC00000): gm1verb.ic2 and .ic1 byte-interleaved, .ic2 first (MAME ROM_LOAD16_BYTE), as Time Crisis 2's */
+/* the boot image (4 MB at 0x1FC00000): the program's .ic2 and .ic1 byte-interleaved, .ic2 first (MAME ROM_LOAD16_BYTE), as Time Crisis 2's */
 static int rom_boot(const char *dir, uint8_t *boot)
 {
     uint8_t *a = malloc(0x200000), *b = malloc(0x200000);
-    const int ok = a && b && s23_rom_read(dir, "gm1verb.ic2", a, 0x200000) && s23_rom_read(dir, "gm1verb.ic1", b, 0x200000);
+    const int ok = a && b && s23_rom_read(dir, GW_PROG_HI, a, 0x200000) && s23_rom_read(dir, GW_PROG_LO, b, 0x200000);
     if (ok) for (uint32_t k = 0; k < 0x200000; k++) { boot[2 * k] = a[k]; boot[2 * k + 1] = b[k]; }
     free(a); free(b);
     return ok;
@@ -400,7 +409,7 @@ static void gw_notice_skip(void)
     if (skip_notice < 0) skip_notice = eng_cfg_int("skip_notice", 0) != 0;
     static int done; extern uint32_t rr_frame; extern uint8_t s23_ram[];
     if (!skip_notice || done || rr_frame > 4000) return;
-    const uint32_t o = 0x333A7A; const unsigned v = (unsigned)s23_ram[o] << 8 | s23_ram[o + 1];
+    const uint32_t o = GW_RAM(0x333A7A); const unsigned v = (unsigned)s23_ram[o] << 8 | s23_ram[o + 1];
     if (v >= 30 && v < 1400) { s23_ram[o] = 1470 >> 8; s23_ram[o + 1] = 1470 & 0xFF; done = 1; fprintf(stderr, "[GMEN] boot notice skipped\n"); }
 }
 /* ---- the menu's Options page: the NamCam source, the boot notice ---- */
@@ -499,7 +508,7 @@ static void gw_list_hook(void *lv)
     /* the build's mark (the user's choice): two white PAC-MEN -- the board's own power-on test Pac-Man -- chomping either side of the boot
      * NOTICE's countdown (x 306-330, y 402-413) while it runs (counter 0x80333A7A, see gw_notice_skip) */
     { extern uint32_t rr_frame; extern uint8_t s23_ram[]; s23_render_list *l = (s23_render_list *)lv;
-      const unsigned v = (unsigned)s23_ram[0x333A7A] << 8 | s23_ram[0x333A7B];
+      const unsigned v = (unsigned)s23_ram[GW_RAM(0x333A7A)] << 8 | s23_ram[GW_RAM(0x333A7B)];
       if (rr_frame < 4000 && v > 0 && v < 1500 && l->nmask + 2 <= S23_MASKS) {
           static const int seq[4] = { 0, 1, 2, 1 };                  /* wide, half, closed, half */
           const int k = seq[(v / 15) & 3];                          /* one chomp a countdown second (the counter: 60 a second) */
@@ -543,9 +552,9 @@ static void gw_list_hook(void *lv)
 extern const s23_link_ops gw_link_ops;
 const s23_game_t s23_game = {
     .gun_x0 = 0, .gun_xw = 0x3FF, .gun_y0 = 0, .gun_yh = 0x3FF,   /* the aim drives the gun's turn (above) */
-    .title = "Gunmen Wars", .tag = "gunwars", .window_title = "Gunmen Wars", .mame_set = "gunwars",
-    .zip_help = "MAME's gunwars.zip (Gunmen Wars, Japan GM1 Ver. B) and namco_asca5.zip",
-    .zips = zips, .nzips = 2, .chips = chips, .nchips = (int)(sizeof chips / sizeof chips[0]),
+    .title = "Gunmen Wars", .tag = "gunwars", .window_title = "Gunmen Wars", .mame_set = GW_SETNAME,
+    .zip_help = GW_ZIP_HELP,
+    .zips = zips, .nzips = (int)(sizeof zips / sizeof zips[0]), .chips = chips, .nchips = (int)(sizeof chips / sizeof chips[0]),
     .twin = 0, .evo2 = 0,
     .clock = 169344000u,                          /* BUSCLOCK * 5, as System 23 */
     .px_num = 200, .px_den = 1323,                /* 25.6 MHz / 169.344 MHz */
@@ -571,6 +580,6 @@ const s23_game_t s23_game = {
      * of the eye; "first person" clips it with this near plane (the footage, 484-553 s, never shows your fighter; the ground at the
      * screen's bottom edge starts ~1.9 away) */
     /* .znear_model = 1.5f -- the "Fighter view: first person" option, REMOVED (the user, 2026-11-06: it is broken); always behind the fighter */
-    .idle = { { 0x8000065Cu, 0x80333CB4u }, { 0x8000098Cu, 0x80333CB4u } },   /* the main loops' vblank waits: lw v0,-0x689C(gp); beqz (src/s23_cpu.c) */
+    .idle = { { 0x8000065Cu, GW_RAM(0x80333CB4u) }, { 0x8000098Cu, GW_RAM(0x80333CB4u) } },   /* the main loops' vblank waits: lw v0,-0x689C(gp); beqz (src/s23_cpu.c) */
     .link = &gw_link_ops,                         /* the cabinet link: the GMEN boards' 1394 bus between PCs (src/gw_link.c, LINK.md) */
 };
