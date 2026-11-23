@@ -121,6 +121,7 @@ static void scripted_inputs(uint32_t frame)
             g_ss22_gun_x = (uint16_t)(s23_game.gun_x0 + x * s23_game.gun_xw); g_ss22_gun_y = (uint16_t)(s23_game.gun_y0 + y * s23_game.gun_yh); }
         p += n ? n : 1; while (*p && *p != ',') p++; if (*p == ',') p++;
     }
+	if (aim && s23_game.io_asca3) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }   /* Angler King: the aim = the rod, as in the window */
     /* the ASCA-3 board's inputs (Angler King's rod / arm / reel, src/s23_h8.c): $S23_ANALOG = "ch:value@frame,..." (value hex, MAME's 16-bit
      * JVS value, held from that frame on); $S23_REEL = "counts@frame+frames,..." (the reel wound by that many counts a frame: s23_reel_wind) */
     static const char *an, *rl; static int rinit;
@@ -249,6 +250,9 @@ static void session_rec(uint32_t frame)
             s23_inputs = (uint16_t)in; g_ss22_gun_x = (uint16_t)gx; g_ss22_gun_y = (uint16_t)gy; g_ss22_gun_off = off != 0;
             have = 0;
         }
+		/* Angler King: the window turns the pointer into the rod's yaw / pitch every frame (src/s23_input.c); a replay does the same.
+         * ponytail: the reel is not recorded, so a replayed fight reels nothing -- add it to the F line when a fight must replay */
+        if (rep && s23_game.io_asca3) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }
     }
     if (rec) {
         static uint16_t pin = 0xFFFF, px, py; static int poff = -1;
@@ -262,6 +266,12 @@ static void session_rec(uint32_t frame)
 void s23_on_vblank(uint32_t frame)
 {
     scripted_inputs(frame);
+	{ static const char *sd; static int si; if (!si) { si = 1; sd = getenv("S23_SHDUMP"); }   /* $S23_SHDUMP=f1,f2,...: shared RAM (64 KB) to shdump_<f>.bin */
+      char k[16]; snprintf(k, sizeof k, ",%u,", frame);
+      if (sd) { char l[256]; snprintf(l, sizeof l, ",%s,", sd); if (strstr(l, k)) { uint8_t *s23_shared_ram(void); char p[40]; snprintf(p, sizeof p, "shdump_%u.bin", frame);
+          FILE *f = fopen(p, "wb"); if (f) { fwrite(s23_shared_ram(), 1, 0x10000, f); fclose(f); }
+          uint8_t *s23_io_ram(void); snprintf(p, sizeof p, "iodump_%u.bin", frame);   /* and the I/O board's RAM (0xC000..) */
+          f = fopen(p, "wb"); if (f) { fwrite(s23_io_ram(), 1, 0x3F80, f); fclose(f); } } } }
     { void s23_subs_frame(uint32_t); s23_subs_frame(frame); }   /* English subtitles: which caption is up (src/s23_subs.c) */
     { static int on = -1; static uint64_t t; if (on < 0) { on = getenv("S23_FRAMETIME") != NULL; t = SDL_GetPerformanceCounter(); }   /* $S23_FRAMETIME: ms per 30 frames */
       if (on && frame % 30 == 0) { const uint64_t n = SDL_GetPerformanceCounter(); fprintf(stderr, "[TIME] f%u %.0f ms / 30 frames\n", frame, (double)(n - t) * 1000.0 / (double)SDL_GetPerformanceFrequency()); t = n; } }

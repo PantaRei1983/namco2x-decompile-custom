@@ -148,7 +148,7 @@ int s23_window_open(int scale, int fullscreen)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     { static char cfg[64]; snprintf(cfg, sizeof cfg, "%s.cfg", s23_game.tag); eng_disp_load(cfg, scale, fullscreen != 0); }
-    g_eng_disp_light_gun = !s23_game.input || ((const ss22_input_game *)s23_game.input)->light_gun;   /* a light-gun game: the Display page shows the crosshair rows */
+    g_eng_disp_light_gun = s23_game.input ? ((const ss22_input_game *)s23_game.input)->light_gun : !s23_game.io_asca3;   /* a light-gun game: the Display page shows the crosshair rows (Angler King's rod: none) */
     SDL_SetHint(SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
     /* $S23_MONITOR=N (our fork, one gun a screen): full screen on the Nth monitor from the left; one monitor only = the left / right half of it */
     int mon = -1, wpos = (int)SDL_WINDOWPOS_CENTERED;

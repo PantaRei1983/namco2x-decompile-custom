@@ -37,7 +37,7 @@ The game program is ~48 MB of generated C (`gen/aking_lifted_*.c`): allow about 
 | Coin | `5` | Back |
 | Cast / select (the cabinet button; it also starts a game) | left button, `Space`, `Enter` | A, Start |
 | Reel in | `R`, `Left Shift` (held) | B, right trigger |
-| Aim the rod (and the arm) | the mouse pointer, the arrow keys | either stick |
+| Move the rod: left / right aims, up raises it, down tilts it forward | the mouse pointer, the arrow keys | either stick |
 | Menu selection up / down | `W` / `S`, `PageUp` / `PageDown` | shoulders |
 | Test switch / Service | `F2` / `9` | |
 | Menu | `Esc` | R3 |
@@ -48,8 +48,10 @@ Every key and button can be changed in Esc > Controls.
 
 Power-on, the attract (with English **subtitles** for the Japanese captions: Esc > Subtitles), coins, a whole game -- the target map,
 casting, hooking and reeling in a fish -- sound, the operator's test menu (its I/O TEST reads every control), widescreen, any internal
-resolution and the frame-rate options. Three things are better than in MAME, which flags the game NOT WORKING: the reel winds the line
-(MAME's is dead), the depth fog the game asks for is drawn (above and under the water), and the seams along the water tiles are gone.
+resolution and the frame-rate options. Several things are better than in MAME, which flags the game NOT WORKING: the reel winds the line
+(MAME's is dead); the rod and arm read as the game's own switch test calibrates them (their sensors wrap around, centred near the
+wrap; MAME's centre is past their end stops); the cast works (it is the cabinet's START switch, which the real I/O board sends as a bit
+the stand-in board has no pin for -- the cast button presses it); the depth fog the game asks for is drawn (above and under the water);
+the landed fish lies in the boat (exact depth: the arcade's order put it behind the boat); and the seams along the water tiles are gone.
 
-Not yet: the cabinet's START switch is on an undumped chip (the game starts with the cast button, as MAME's does); not tested on real
-Windows hardware or a real rod/reel controller.
+Not yet: tested only with a mouse and pads, not on a real rod/reel controller.

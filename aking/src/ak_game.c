@@ -90,7 +90,11 @@ const s23_game_t s23_game = {
     .c352_div = 1920,                             /* 88200 Hz */
     .ip = { [S23_SRC_VBLANK] = S23_IP(0), [S23_SRC_C361] = S23_IP(1), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C435] = S23_IP(2),
             [S23_SRC_C422] = S23_IP(3), [S23_SRC_TIMER] = S23_IP(5) },   /* System 23's routing, as Time Crisis 2 */
-    .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 0,
+    .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E,
+    .depth_default = 1,   /* exact depth: in the arcade's order the landed fish went BEHIND the boat (the girl sat on air) and bubbles showed through
+                           * fish; compared over a played stage and the attract, nothing else changes */
+    .no_direct_buf = 1,   /* the one direct polygon it ever sends (measured over 4000 frames of attract and play: every frame the same 40x40
+                           * square at the screen's centre, texture 0, the back-most depth) is a dummy: it showed as a grey square on the warning */
     .gun_x0 = 0, .gun_xw = 1023, .gun_y0 = 0, .gun_yh = 1023,   /* no gun: the pointer aims the ROD in 0..1023 (../s23/src/s23_input.c ak_send_inputs) */
     .data_rom = { { "ag1mtah.2j", "ag1mtal.2h" }, { "ag1mtbh.2m", "ag1mtbl.2f" } },
     .npt = 4, .pt_rom = { { "ag1pt0h.7a", "ag1pt0l.7c" }, { "ag1pt1h.5a", "ag1pt1l.5c" }, { "ag1pt2h.4a", "ag1pt2l.4c" }, { "ag1pt3h.3a", "ag1pt3l.3c" } },

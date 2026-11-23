@@ -1110,6 +1110,7 @@ void s23_render_frame_end(void)
     for (uint32_t n = 0; n < 0x8000; n++) { const uint32_t o = 2 * n + 1; snap->pens[n] = (uint32_t)pal[o] << 16 | (uint32_t)pal[0x10000 + o] << 8 | pal[0x20000 + o]; }
     memcpy(snap->text, s23_vram_ptr(0x06800000u), sizeof snap->text);
     s23_text_scroll(snap->linexscroll, &snap->yscroll);
+	{ void s23_subs_patch(uint8_t *, const uint16_t *, uint16_t); s23_subs_patch(snap->text, snap->linexscroll, snap->yscroll); }   /* Angler King: the English drawn into the captions (src/s23_subs.c) */
     memcpy(snap->sram, s23_c412_sram(), sizeof snap->sram);
     s23_render_list *l = &s23_render[!s23_render_cur];   /* MAME draws the list filled the frame BEFORE (one frame behind) */
     snap->list.count = l->count;

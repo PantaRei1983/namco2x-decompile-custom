@@ -27,6 +27,7 @@ void (*g_ss22_wram_watch)(uint32_t v, int size);
 #define IN_USR_UP    0x0040
 #define IN_USR_DOWN  0x0080
 #define IN_USR_ENTER 0x0100
+#define IN_START     0x0200                   /* Angler King's START SW = the cast (src/s23_h8.c io_reply_byte); ENTER SW = the menus' button */
 static const ss22_action actions[] = {
     { "Insert coin",   "coin",    SDL_SCANCODE_5,     SDL_SCANCODE_6,       IN_COIN,      0, SS22_PAD(SDL_CONTROLLER_BUTTON_BACK) },
     { "Gun trigger",   "trigger", SDL_SCANCODE_SPACE, SDL_SCANCODE_RETURN,  IN_TRIGGER,   0, SS22_PAD(SDL_CONTROLLER_BUTTON_A) | SS22_PAD(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER), SDL_BUTTON_LMASK },
@@ -55,27 +56,34 @@ static const ss22_action ak_actions[] = {
     { "Service",       "service", SDL_SCANCODE_9,     SDL_SCANCODE_UNKNOWN, IN_SERVICE,   0, 0 },
     { "Test",          "test",    SDL_SCANCODE_F2,    SDL_SCANCODE_UNKNOWN, IN_TEST,      0, 0 },
 };
+/* THE ROD AND ARM SENSORS (measured in the game's I/O TEST > SWITCH TEST, the same with any backup RAM): each is an angle on the A/D's 10 bits
+ * that WRAPS (0x3FF -> 0x000), all four calibrated to read 0 at raw 0x02C. Rod: 63 units a count, yaw +-0x1A4F (+-107 counts), pitch
+ * 0..0x3C71 (0..245); arm: 22.4 units a count, yaw +-0x0C16 (+-138), pitch 0..0x18E3 (0..284). A count ABOVE 0x02C turns the aim RIGHT and
+ * tilts the rod FORWARD (the cast marker nearer the boat); pitch 0 = the rod raised. (MAME's 0x8000 "centre" is raw 0x200, far past the end
+ * stops: the target select ran on its own and the aim flipped.) So: pointer x = yaw over the whole range, pointer y = pitch, top = raised. */
+static uint16_t ak_angle(int counts) { return (uint16_t)(((0x02C + counts) & 0x3FF) << 6 | 0x20); }
 static void ak_send_inputs(uint16_t pressed, unsigned wheel, unsigned reel, unsigned p2)
 {
     (void)wheel; (void)p2;
     s23_inputs = pressed;
-    const uint32_t x = g_ss22_gun_off ? 512 : g_ss22_gun_x, y = g_ss22_gun_off ? 512 : g_ss22_gun_y;   /* 0..1023 (ak_game.c's gun range) */
-    const uint16_t yaw = (uint16_t)(0x0100 + x * 0xFEFFu / 1023), pitch = (uint16_t)(0x0100 + (1023 - y) * 0xFEFFu / 1023);
-    s23_analog_in[2] = yaw; s23_analog_in[3] = pitch;                     /* Rod Yaw / Rod Pitch */
-    s23_analog_in[0] = (uint16_t)(0x10000 - yaw); s23_analog_in[1] = pitch;   /* Arm Yaw (PORT_REVERSE) / Arm Pitch */
+    const int x = g_ss22_gun_off ? 512 : g_ss22_gun_x, y = g_ss22_gun_off ? 512 : g_ss22_gun_y;   /* 0..1023 (ak_game.c's gun range) */
+    s23_analog_in[2] = ak_angle((x - 512) * 107 / 512); s23_analog_in[3] = ak_angle(y * 245 / 1023);   /* Rod Yaw / Rod Pitch */
+    s23_analog_in[0] = ak_angle((x - 512) * 138 / 512); s23_analog_in[1] = ak_angle(y * 284 / 1023);   /* Arm Yaw / Arm Pitch */
     void s23_reel_wind(int); s23_reel_wind((int)(reel / 4));            /* the reel: 0..64 -> 0..16 counts a frame (src/s23_h8.c) */
 }
+void s23_ak_replay_send(uint16_t pressed) { ak_send_inputs(pressed, 0, 0, 0); }   /* a headless replay (src/s23_main.c session_rec) */
 const ss22_input_game ak_input_game = {
     ak_actions, (int)(sizeof ak_actions / sizeof *ak_actions),
     0x001, 0x3FF, 0x1FF, 12,
     { 64, 0 }, 8,
     { "Enter, then press the new key (Esc cancels)",
-      "Mouse / arrow keys / either stick aim the ROD; left button, Space or pad A = cast / enter. Hold R (or the pad's right trigger) to REEL",
+      "Mouse / arrow keys / either stick move the ROD (up = raise it); left button, Space or pad A = cast / enter. Hold R (or the pad's right trigger) to REEL",
       "Select: PageUp / PageDown or W / S, the pad's shoulders. 5 = coin, F2 = test" },
     ak_send_inputs,
     IN_TEST, IN_SERVICE,
     false,
     true,                                     /* the pointer aims the rod */
+	.mounted_gun = true,                      /* (a rod, no light gun: no Gun shot flash / Gun border / recoil rows on the Controls page) */
 };
 
 const ss22_input_game s23_input_game = {

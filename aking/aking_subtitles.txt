@@ -1,39 +1,41 @@
 # Angler King -- English subtitles for the Japanese captions (s23/src/s23_subs.c).
-# HASH (the caption block's pixels, as S23_SUBLOG prints it)  English text;  | starts a new line.
+# HASH (the caption block's pixels, as S23_SUBLOG prints it)  English text;  | starts a new line (in the game: one line for each
+# line of the Japanese); "-" = a box that only continues another's sentence; "!" first = a picture's label, left in Japanese in the game.
 
 # --- attract: how to play
 1687C209  How to Play
-78B5F516  Casting: aim at a fish's shadow|and press the button to cast!
-700900D1  Cast right on top of a fish|and a big one will come!!
-9091859A  Lure Appeal meter
-D3029DF7  Reeling: work the lure|to tempt the fish!
-71065B9E  Move the lure so the|appeal meter reads GOOD!
-0949BD92  The closer this meter is to GOOD!,|the bigger the fish that comes!!
-F78CAF5D  Fighting: reel in|while the fish is tired!
-984F676C  Fighting: a jump is|a chance to reel in too!
-A9B49CDB  Fighting: pump the rod!!|Raise it, then reel in as you lower it!!
-734C8418  Fighting: grip it tight|and turn the reel handle!
-886F512B  Fighting: keep the rod down too long|and you'll fall in the water!
+78B5F516  When casting|aim at a fish's shadow and press the button to cast!
+700900D1  Cast right over a fish|and a big one will come!!
+9091859A  !Lure appeal meter
+D3029DF7  When reeling|work the lure to tempt the fish!
+71065B9E  Move the lure|so the appeal meter|reads GOOD!
+0949BD92  The closer this meter|is to GOOD!,|the bigger the fish!!
+F78CAF5D  In a fight|reel in while the fish is tired!
+984F676C  In a fight|a jump is a chance to reel in too!
+A9B49CDB  In a fight, pump the rod!!|Raise it, then reel in as you lower it!!
+734C8418  In a fight|grip it tight and turn the reel handle!
+886F512B  In a fight|keep the rod down too long and you'll fall in!
 CF51727D  -
 
 # --- attract: promotion and rankings
 FBB2A717  Take on the world's monster fish!!
-879B5442  Air pressure recreates|a powerful pull!!
-50E79EC4  -
-370E759F  Can you stand up to this pull?!
-D67378DC  -
+879B5442  Air pressure recreates
+50E79EC4  a powerful pull!!
+370E759F  Can you stand up
+D67378DC  to this pull?!
 EB97F854  Land the legendary fish!!
 E48D073F  Today's Marlin Ranking
 
-# --- target select (the record lines below each fish change when a record is beaten: their hash with them)
+# --- target select (the record lines below each fish change when a record is beaten: their hash with them; "!": in the game they keep
+#     their Japanese, which carries the record holder and length)
 7D57FA3D  Choose your target
 F1C58E84  Choose with the rod, confirm with the button
 C24F4AF2  Choose with the rod, confirm with the button
-BC8A767B  Marlin -- Mediterranean, Sargasso waters|(world record / record holder)
-B1A70AA0  Tarpon -- Central America, Costa Rica|(world record / record holder)
-22718A82  Great white shark -- South Pacific, Solomon Sea|(world record / record holder)
-48577976  Arapaima -- South America, Amazon River|(world record / record holder)
-2362BAF3  Coelacanth -- Indian Ocean, Comoro Islands|(world record / record holder)
+BC8A767B  !Marlin -- Mediterranean, Sargasso waters|(world record / record holder)
+B1A70AA0  !Tarpon -- Central America, Costa Rica|(world record / record holder)
+22718A82  !Great white shark -- South Pacific, Solomon Sea|(world record / record holder)
+48577976  !Arapaima -- South America, Amazon River|(world record / record holder)
+2362BAF3  !Coelacanth -- Indian Ocean, Comoro Islands|(world record / record holder)
 
 # --- stage intros
 E7D54C62  Piranha attack!
@@ -58,17 +60,47 @@ D342B7F4  Aim with the cursor and press the button to cast!
 040368FE  Now! Reel it in!
 C54C63C7  Pull the opposite way from the fish|to make it jump!
 EE4808F4  The line snapped!
-84505DA0  Keep fighting it? (Yes / No)
-B5BD31C3  -
-1A4DA026  -
-988802E3  -
-C262287C  -
+84505DA0  Keep fighting it?
+B5BD31C3  Yes
+1A4DA026  Yes
+988802E3  No
+C262287C  No
 28013255  Tilt the rod forward
 
 # --- results
 61011F32  Arapaima
-F643A785  Cast / Reeling / Hooking / Fight / Jump|Total
-A55070A3  Cast / Reeling / Hooking / Fight / Jump|Total
+F643A785  Cast|Reeling|Hooking|Fight|Jump|Total
+A55070A3  Cast|Reeling|Hooking|Fight|Jump|Total
 7F1F7510  Rank: Beginner Angler
 7DCFD3D6  Catch every fish and you can|take on the legendary fish!
 D620CDD1  -
+
+# --- added 2026-11-23 (in-game English): fishing hints, coins, stage intros
+364C6BC5  Move the lure!
+42F94D3A  Try turning the reel handle too
+864A7980  Reel in now!
+11AA62A1  Pull against the fish!
+01781AE9  Watch the line damage!!
+77812C47  Rest the line and its stamina comes back!!
+FC578A83  Hurry!! The fish is getting away!!
+90F33793  When it bites,|strike fast with the rod!
+36966139  When the fish is tired,
+9E551E6D  turn the reel handle!
+212409D6  Hook slips in
+7F212058  seconds!
+7935ECC6  Insert
+38E3CDFE  more coin(s), please
+9D4A923C  The terrifying man-eating crocodile!
+3F082C00  Deep in the Costa Rican jungle,
+BCB08ECA  hunt the fish of the gods!!
+A7C6FC50  Costa Rica, the headwaters
+
+# --- added 2026-11-23 (second pass): Sargasso and Comoro stage intros, the results' fish name
+941662B2  The devil's waters are real!
+A5D53FFF  Fight to the death in the Sargasso Sea!!
+66497AE9  Mediterranean, the ship graveyard
+DD787649  Where no one has gone before!
+70BC8C98  In a mysterious underground lake,
+88FCF596  catch the giant ancient fish!!
+3AFA24AE  Comoro Islands, the undersea cave
+FDF2CE61  Marlin
