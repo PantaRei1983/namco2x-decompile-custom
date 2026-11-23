@@ -33,9 +33,7 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   in the second attract demo (the polygon-over-text mask now stays inside each polygon's clip window).
 - **Crisis Zone:** widescreen HUD with the score bars at the screen edges; 4:3 with fading bars outside play; tank
   shadow colours fixed; HUD icons drawn over the bars; zone-select ticker scrolls on its own.
-- **Gunmen Wars:** the namco logo matched to real-cabinet footage; widescreen HUD; NamCam from a webcam or a picture. Any of MAME's
-  three sets builds: `gunwars` (World, GM2 Ver. B, MAME's parent), `gunwarsj` (Japan, GM1 Ver. B) and `gunwarsa` (Japan, GM1 Ver. A);
-  the program is translated from the one you have (`GW_SET=gunwarsj gunwars/build.sh ...` picks one when you have several).
+- **Gunmen Wars:** the namco logo matched to real-cabinet footage; widescreen HUD; NamCam from a webcam or a picture.
 - **System 23 engine:** about 4 times faster priority drawing; correct texture sampling for some polygons.
 - **Super 22 / System 22:** translucent sprites over text; priority of some polygons over the text layer; guard-band
   polygons drawn.
@@ -156,6 +154,9 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   `victlap/tools/import.sh` once with `N22TOOLS` set, then `victlap/build.sh` again; `./launch.sh vl` starts it. Its
   scripts were Windows-only, the ROMs had to be set up by hand first, and the first import built nothing; on Linux the
   link also failed (`--stack` is a Windows-only linker option).
+- **Gunmen Wars:** Added recent MAME three sets builds: `gunwars` (World, GM2 Ver. B, MAME's parent), `gunwarsj` (Japan, GM1 Ver. B)
+  and `gunwarsa` (Japan, GM1 Ver. A); the program is translated from the one you have (`GW_SET=gunwarsj gunwars/build.sh ...` picks
+  one when you have several).
 
   [![Rapid Riper Decomp longplay video](https://img.youtube.com/vi/__qW4OUsvcM/maxresdefault.jpg)](https://www.youtube.com/watch?v=__qW4OUsvcM)
 
