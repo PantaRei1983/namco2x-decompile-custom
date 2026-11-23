@@ -204,7 +204,7 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
     p->index = (uint32_t)GNPOLY;
     p->vp_size_x = e->vp_size_x; p->vp_size_y = e->vp_size_y; p->vp_offset_x = e->vp_offset_x; p->vp_offset_y = e->vp_offset_y;
     p->clip43 = e->clip43;
-    p->entry = (int)(e - FS->list.e); p->nodepth = 0; p->model = e->type == S23_RE_MODEL ? e->model : -1; p->role = p->model >= 0 && s23_game.depth_role ? s23_game.depth_role(p->model) : 0;
+    p->entry = (int)(e - FS->list.e); p->nodepth = 0; p->flat = e->type != S23_RE_MODEL; p->model = e->type == S23_RE_MODEL ? e->model : -1; p->role = p->model >= 0 && s23_game.depth_role ? s23_game.depth_role(p->model) : 0;
     return 1;
 }
 
@@ -357,6 +357,7 @@ static void render_immediate(const s23_render_entry *e)
     p->blend = (int)((h >> 10) & 1);
     if (p->n >= 3 && finish(p, e, 2, q->zbias, 16, 0xFFFF, 0xFFFE0000u)) {
         p->stencil = (int)((h >> 11) & 1); p->cmode = 0; p->tbase = 0; p->boost = boost;
+        for (int i = 1; i < ne && i < 4; i++) if (q->z[i] != q->z[0]) p->flat = 0;   /* corners at different depths: 3D (s23_poly.flat) */
         /* THE PHOTO SQUARE of an immediate (Gunmen Wars' diamond graph: u 0x8000-0x8080, v 0xF000-0xF080 -- u bit 15 set, the area starting
          * at u 0, v 0xF000): drawn from the photo page's 128 x 128 player picture, as the team select's model slot. Only that square: the
          * graph's line (u 0x8020, v 0xF080, also bit 15) reads its red from the texture ROM as before */
@@ -402,7 +403,7 @@ static void render_direct(const s23_render_entry *e)
         p->cmode = (d[2] & 0x70) >> 4;
         p->vp_size_x = e->vp_size_x; p->vp_size_y = e->vp_size_y; p->vp_offset_x = e->vp_offset_x; p->vp_offset_y = e->vp_offset_y;
         p->clip43 = 0; p->boost = 0;
-        p->entry = (int)(e - FS->list.e); p->model = -1; p->role = 0;
+        p->entry = (int)(e - FS->list.e); p->model = -1; p->role = 0; p->flat = 1;
         effects(p, (d[2] >> 8) & 0x7F, 0, 0, (d[2] >> 15) & 1);
         p->fog = 0;                                       /* MAME: a direct polygon's fog factor is 0 (screen-space panels: Crisis Zone's RULES) */
         p->blend = 0;

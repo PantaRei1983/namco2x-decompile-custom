@@ -418,7 +418,7 @@ static int fill_vertices(const s23_built *b)
         /* widescreen (Hor+): a viewport that fills the 4:3 screen fills the wide one -- same camera, more world at the sides */
         const int full = ex && cl <= 0 && cr >= 640 && !p->clip43;
         const int ccl = full ? -ex : cl, ccr = full ? 640 + ex : cr;
-        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | (p->model < 0) << 10 | p->nodepth << 11);   /* bits 8-9: s23_game.depth_role; bit 10: an immediate / direct (screen-space) polygon: the 3D texture filter leaves it sharp; bit 11: no depth of its own (s23_poly.nodepth): out of exact depth */   /* bit 7: the author's depth fog (bit 6 is our boost) */
+        const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | p->flat << 10 | p->nodepth << 11);   /* bits 8-9: s23_game.depth_role; bit 10: a screen-flat polygon (s23_poly.flat: direct, or an immediate at one depth): the 3D texture filter leaves it sharp; bit 11: no depth of its own (s23_poly.nodepth): out of exact depth */   /* bit 7: the author's depth fog (bit 6 is our boost) */
         /* the polygon's uv box for the bilinear filters (fs_poly): the first texel and the last one the board shows (texel floor(u) for u
          * inside the box: ceil(max) - 1, a hair of float slack below an exact integer) */
         float bu0 = 1e30f, bv0 = 1e30f, bu1 = -1e30f, bv1 = -1e30f;

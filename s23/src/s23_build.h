@@ -22,6 +22,9 @@ typedef struct {
     int role;                                          /* s23_game.depth_role */
 	int nodepth;                                       /* a direct quad with no depth of its own (w 1 at every corner): out of exact depth, sorted only
                                                         * (Final Furlong's flag cloth: at its dummy depth the glove beat it pixel by pixel and poked through) */
+    int flat;                                          /* the 3D texture filter leaves it sharp: a direct quad, or an immediate polygon at ONE depth (a panel facing the
+                                                        * screen: buttons, banners). An immediate whose corners differ in depth is 3D (Final Furlong's horses and their
+                                                        * saddle-cloth numbers are immediates) and is filtered as the models are */
     int entry, model;                                  /* the render-list entry it came from and its model (-1 = immediate / direct) */
     int fog;                                           /* takes the depth fog (bit 15 of its colour word clear, as Super System 22's C-fog gate) */
 } s23_poly;

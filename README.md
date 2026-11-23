@@ -146,8 +146,9 @@ Time Crisis II and Gunmen Wars have also been tested linking across three real P
   - Super 22 / System 22 and Prop Cycle: atlas pages with mip levels; the sharp modes run in a small fragment shader.
     Config: `texture_filter` = `off | bilinear | sharp | trilinear | sharp-trilinear`, `texture_aniso`. Environment:
     `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`.
-  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Rapid River): filtered per fragment in the polygon
-    shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Environment: `S23_TEX_FILTER`,
+  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Rapid River, Final Furlong): filtered per fragment in the polygon
+    shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Immediate polygons are filtered when they are 3D
+    (corners at different depths: Final Furlong's horses and saddle-cloth numbers); flat screen panels stay sharp. Environment: `S23_TEX_FILTER`,
     `S23_TEX_ANISO`.
   - Rave Racer has its own Display rows for the same filters. Cyber Sled has no textures, so no filter rows.
 - **Effects (Display > Effects):** smoothing for the 2D effect sprites of Air Combat 22 (smoke and explosions), Cyber Commando
