@@ -227,7 +227,8 @@ static void render_model(void)                    /* 8: a model of the point ROM
     e->model = b[1];
     e->model2 = size == 4 ? b[2] : 0;
     { static long why = -2; static int nw; if (why == -2) { S23_SS_ENV(why); S23_SS_ENV(nw); const char *e4 = getenv("S23_WHYMODEL"); why = e4 ? strtol(e4, NULL, 16) : -1; }   /* debug */
-      if (why == b[1] && nw++ < 6) { fprintf(stderr, "[WHYC] f%u hdr %04X size %d words:", rr_frame, b[0], size); for (int k = 0; k <= size; k++) fprintf(stderr, " %04X", b[k]); { const int16_t *mm = getm(b[size - 1]); const int32_t *vv = getv(b[size]); fprintf(stderr, " | m %d %d %d %d %d %d %d %d %d v %d %d %d", mm[0], mm[1], mm[2], mm[3], mm[4], mm[5], mm[6], mm[7], mm[8], vv[0], vv[1], vv[2]); } fprintf(stderr, "\n"); } }
+      static long wf = -2; if (wf == -2) { const char *ef = getenv("S23_WHYFROM"); wf = ef ? atol(ef) : 0; }
+      if (why == b[1] && (long)rr_frame >= wf && nw++ < 6) { fprintf(stderr, "[WHYC] f%u hdr %04X size %d words:", rr_frame, b[0], size); for (int k = 0; k <= size; k++) fprintf(stderr, " %04X", b[k]); { const int16_t *mm = getm(b[size - 1]); const int32_t *vv = getv(b[size]); fprintf(stderr, " | m %d %d %d %d %d %d %d %d %d v %d %d %d", mm[0], mm[1], mm[2], mm[3], mm[4], mm[5], mm[6], mm[7], mm[8], vv[0], vv[1], vv[2]); } fprintf(stderr, "\n"); } }
     e->scaling = (b[0] & 0x80) ? scaling / 16384.0f : 1.0f;
     e->transpose = (b[0] >> 6) & 1;
     e->mirror_x = (b[0] >> 13) & 1;

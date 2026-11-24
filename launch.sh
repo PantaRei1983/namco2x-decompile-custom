@@ -24,6 +24,7 @@
 #   ./launch.sh rapid        Rapid River (add a number for the window size: rapid 2)
 #   ./launch.sh gunmen       Gunmen Wars (add a number for the window size: gunmen 2)
 #   ./launch.sh finfurl      Final Furlong (add a number for the window size: finfurl 2)
+#   ./launch.sh panic        Panic Park (add a number for the window size: panic 2)
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
 #                   P pause, Esc menu, F12 picture.
@@ -242,6 +243,14 @@ case "$game" in
         rebuild rapidrvr rapidrvr
         cd rapidrvr
         exec ./build/rapidrvr --window "$@"
+        ;;
+    panic|panicprk|panicpark)
+        if [ ! -f panicprk/build/CMakeCache.txt ]; then
+            echo "Panic Park is not built yet. Run:  panicprk/build.sh /path/to/panicprk.zip /path/to/namco_asca3a.zip  (with N22TOOLS set, the first time)"; exit 1
+        fi
+        rebuild panicprk panicprk
+        cd panicprk
+        exec ./build/panicprk --window "$@"
         ;;
     finfurl|ff|finalfurlong)
         if [ ! -f finfurl/build/CMakeCache.txt ]; then

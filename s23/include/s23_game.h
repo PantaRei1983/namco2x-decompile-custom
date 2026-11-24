@@ -69,6 +69,13 @@ typedef struct {
     int (*depth_role)(int model);                 /* optional, with exact depth: 1 = the model owns its pixels against role 2; 2 = never in the pre-pass,
                                                    * never drawn where a role-1 model is nearest (Rapid River: the wake's foam disc runs under the raft -- above
                                                    * its sunken floor, so exact depth put water inside the raft; painter order put foam there) */
+    int direct_v_shift;                           /* texels added to a direct polygon's v (0 = MAME's). Panic Park -1: its namco logo is a black plate over a full-screen
+                                                   * direct quad that samples ONE texel of the text palette's colour swatch (tile 0x6C0, v 0x6CF0) -- row F is white,
+                                                   * the arcade's logo is red: row E (FF0000) */
+    int seg_order;                                /* 1 = the render list's STRETCHES (split by the C435-interrupt "model 0" the game sends between them) are drawn in
+                                                   * order, each over the one before, whatever their depths -- each sorted on its own. Panic Park: the title's
+                                                   * PANIC PARK letters (stretch 1, z 6656 + bias) sit behind the island picture (stretch 0, z 4352) and are seen
+                                                   * over it on the arcade; one sort for the whole list (MAME's) hid them */
     int depth_within;                             /* 2 = exact depth always, between models too (Rapid River: the pyramid's inner door, the wake's foam inside the raft);
                                                    * 1 = exact depth between one model's own polygons, always (the menu's Depth adds other models; forcing that on lost the Nile gate's roof) (Rapid River: the Nile gate's sloping
                                                    * sand, part of the wall's model, sorted over the wall's foot -- yellow wedges the arcade does not show) */
@@ -86,6 +93,7 @@ typedef struct {
     const char *data_rom[2][2];                   /* the data ROMs: [half][high, low] byte-interleaved */
     int npt; const char *pt_rom[4][2];            /* the point ROM chip pairs [high, low] */
     const char *ccrl, *ccrh, *cg[4];              /* texture tile maps and tiles */
+    int ccrl_half;                                /* 1 = the low tile map (ccrl) is a 2 MB chip, mirrored (Panic Park; GORgON always): MAME textilemapl 0x200000 */
     const char *spr[4];                           /* GORgON: the sprite tile ROMs (4 MB each, 32x32 8-bit tiles), NULL elsewhere */
 	 int spr_alpha;                                /* GORgON sprites in the C404's alpha bank: 1 = pens AT OR ABOVE the alpha pen take the sprite's alpha (Final
                                                    * Furlong: panel backgrounds are pen FD -- the race map with the alpha pen at FB went solid white by MAME's
@@ -115,6 +123,8 @@ typedef struct {
      * decodes (the 28-bit physical address); 1 = handled. NULL = none */
     int no_smooth;                                /* 1 = motion smoothing (in-between frames) off: Gunmen Wars crashed Intel's GL driver with it (cause not found yet) */
     int io_asca;                                  /* 1 = the I/O board is an ASCA (Gunmen Wars' ASCA-5): switches at 0x6000-3, controls on its A/D */
+    uint8_t (*asca_in)(int n, int test_on);       /* optional, with io_asca: the switch byte at 0x6000 + n (MAME namco_asca_1_device::in_r) from the game's own
+                                                   * buttons (Panic Park: two START buttons, the operator's Up / Down / Enter); test_on = the Test switch's state */
     int (*mem_read)(uint32_t p, int size, uint32_t *v);
     int (*mem_write)(uint32_t p, int size, uint32_t v);
     void (*list_hook)(void *list);

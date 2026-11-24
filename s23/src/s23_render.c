@@ -61,10 +61,11 @@ void s23_render_init(const char *dir)
     free(h); free(l);
     tmlrom = calloc(1, 0x400000); tmhrom = malloc(0x200000); texrom = malloc(0x2000000);
     uint8_t *raw = (uint8_t *)tmlrom;
-    if (s23_game.gorgon) ok &= load(dir, s23_game.ccrl, raw, 0x200000);   /* GORgON: a 2 MB tile map (MAME textilemapl 0x200000) */
+    const int ccrl_half = s23_game.gorgon || s23_game.ccrl_half;
+    if (ccrl_half) ok &= load(dir, s23_game.ccrl, raw, 0x200000);   /* GORgON, Panic Park: a 2 MB tile map (MAME textilemapl 0x200000) */
     else ok &= load(dir, s23_game.ccrl, raw, 0x400000);
     for (uint32_t k = 0; k < 0x200000; k++) tmlrom[k] = (uint16_t)(raw[2 * k] | raw[2 * k + 1] << 8);   /* ROM_REGION16_LE */
-    if (s23_game.gorgon) memcpy(tmlrom + 0x100000, tmlrom, 0x200000);   /* half-size map: mirror it, as MAME's tileid mask wraps */
+    if (ccrl_half) memcpy(tmlrom + 0x100000, tmlrom, 0x200000);   /* half-size map: mirror it, as MAME's tileid mask wraps */
     ok &= load(dir, s23_game.ccrh, tmhrom, 0x200000);
     const uint32_t cgsz = s23_game.cg_chip ? s23_game.cg_chip : 0x800000;
     for (int c = 0; c < 4; c++) ok &= load(dir, s23_game.cg[c], texrom + c * cgsz, cgsz);
@@ -201,6 +202,8 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
     if (zsort < 0) zsort = 0;
     if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
     p->zkey = (uint32_t)zsort | (uint32_t)ap << 21;
+    if (s23_game.seg_order) p->zkey |= (uint32_t)(7 - (e->seg > 7 ? 7 : e->seg)) << 25;   /* (s23_game.h seg_order) a later stretch of the list draws over an earlier one
+                                                   * (bits 25-27: the priority can reach 13 = bits 21-24; the band zkey >> 21 stays under 128 for the depth pass) */
     p->index = (uint32_t)GNPOLY;
     p->vp_size_x = e->vp_size_x; p->vp_size_y = e->vp_size_y; p->vp_offset_x = e->vp_offset_x; p->vp_offset_y = e->vp_offset_y;
     p->clip43 = e->clip43;
@@ -262,6 +265,8 @@ static void render_model(const s23_render_entry *e)
                 x = x * fa_ + x2 * fb_; y = y * fa_ + y2 * fb_; z = z * fa_ + z2 * fb_;
             }
             offs += 3;
+            { static long fz = -2; if (fz == -2) { const char *ef = getenv("S23_FLIPZ"); fz = ef ? strtol(ef, NULL, 16) : -1; }   /* TEST: this model's z negated */
+              if (fz == e->model) z = -z; }
             pv[i].x = x; pv[i].y = y; pv[i].p[0] = z;
             const float half = (stencil || s23_game.uv_edge) ? 0 : 0.5f;   /* MAME's half texel; uv_edge: none (the far edge stays inside the tile) */
             pv[i].p[1] = (float)(((v1 >> 20) & 0xF00) | ((v2 >> 24) & 0xFF)) + half + e->tx;
@@ -303,7 +308,7 @@ static void render_model(const s23_render_entry *e)
         poly *p = &GPOLYS[GNPOLY];
         p->n = zclip(ne, pv, p->pv, s23_first_person && e->vp_fov < 500.f && s23_game.znear_model > znear() ? s23_game.znear_model : znear());   /* first-person view (Display menu): the game's near plane for 3D-view models (not the 1:1 overlay ones) */
         { static long why = -2; static int nw; if (why == -2) { S23_SS_ENV(why); S23_SS_ENV(nw); const char *e4 = getenv("S23_WHYMODEL"); why = e4 ? strtol(e4, NULL, 16) : -1; }   /* debug */
-          if (why == e->model && nw++ < 12) fprintf(stderr, "[WHY] f%u m %04X ne %d z %g %g %g x %g y %g clip-n %d scale %g v %g %g %g vp %d %d fov %g\n", rr_frame, e->model, ne, pv[0].p[0], pv[1].p[0], pv[2].p[0], pv[0].x, pv[0].y, p->n,
+          if (why == e->model && (long)rr_frame >= s23_why_from() && nw++ < 12) fprintf(stderr, "[WHY] f%u m %04X ne %d z %g %g %g x %g y %g clip-n %d scale %g v %g %g %g vp %d %d fov %g\n", rr_frame, e->model, ne, pv[0].p[0], pv[1].p[0], pv[2].p[0], pv[0].x, pv[0].y, p->n,
               e->scaling, e->v[0], e->v[1], e->v[2], e->vp_size_x, e->vp_size_y, e->vp_fov); }
         p->blend = (int)((h >> 10) & 1);                    /* known before finish() (the S23_XYCULL_BLEND test); effects() sets it again */
         if (p->n >= 3 && finish(p, e, (int)((h & 0x300) >> 8), polyshift, 17, 0x1FFFF, 0xFFFC0000u)) {
@@ -387,7 +392,7 @@ static void render_direct(const s23_render_entry *e)
             if (mant) { w = (float)mant; while (ex < 0x2E) { w /= 2.0f; ex++; } }
             p->pv[j].p[0] = w;
             p->pv[j].p[1] = ((src[0] >> 4) + 0.5f) * w;
-            p->pv[j].p[2] = ((src[1] >> 4) + 0.5f) * w;
+            p->pv[j].p[2] = ((src[1] >> 4) + 0.5f + (float)s23_game.direct_v_shift) * w;   /* (s23_game.h direct_v_shift) */
             p->pv[j].p[3] = (float)(src[4] >> 8) * w;
             p->pv[j].x = (float)((int16_t)src[2] + 320);
             p->pv[j].y = (float)((int16_t)src[3] + 240);
@@ -398,6 +403,8 @@ static void render_direct(const s23_render_entry *e)
         if (zsort < 0) zsort = 0;
         if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
         p->zkey = (uint32_t)zsort | (uint32_t)ap << 21; p->index = (uint32_t)GNPOLY;
+        if (s23_game.seg_order) p->zkey |= 7u << 25;   /* a direct polygon (the CPU's own buffer, not the command list): with the first stretch -- Panic Park's
+                                                   * full-screen backdrop quad (priority 13) came in mid-list and covered the namco logo and the title */
         p->stencil = 0; p->color_base = d[2] & 0x7F00;
         p->tbase = (d[2] & 0xF) << 12 | ((d[2] >> 7) & 1) << 16;
         p->cmode = (d[2] & 0x70) >> 4;

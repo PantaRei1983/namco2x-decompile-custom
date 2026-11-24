@@ -355,6 +355,7 @@ static uint8_t asca_switches(int n)
     static int test_on, test_was;
     if ((in & IN_TEST) && !test_was) test_on ^= 1;
     test_was = (in & IN_TEST) != 0;
+    if (s23_game.asca_in) return s23_game.asca_in(n, test_on);   /* the game's own buttons (Panic Park) */
     switch (n) {
     case 0: return (uint8_t)~((s23_game.gorgon && (in & 0x2000)) << 5      /* GORgON p1.15: Final Furlong's right whip (Rapid River never sets 0x2000) */
                               | (s23_game.gorgon && (in & IN_TRIGGER)) << 4   /* GORgON p1.0: Rapid River's START, Final Furlong's left whip */

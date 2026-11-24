@@ -9,6 +9,8 @@
  *   scroll    the C361's per-row x scroll and y scroll (src/s23_screen.c)
  */
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "s23_frame.h"
 #include "s23_game.h"
@@ -23,6 +25,11 @@ void s23_text_layer(const s23_frame_state *fs, uint16_t *mix, uint8_t *pri)
 {
     const uint8_t *chr = fs->text, *map = fs->text + 0x1E000;
     const uint32_t palbase = ((uint32_t)c404(fs, 0x1B) << 8) & 0x7F00u;
+    { static long tf = -2; if (tf == -2) { const char *e = getenv("S23_TEXTMAP"); tf = e ? atol(e) : -1; }   /* debug: $S23_TEXTMAP=frame -- the tile map's non-blank rows */
+      extern uint32_t rr_frame;
+      if (tf >= 0 && (long)rr_frame == tf) { tf = -1; fprintf(stderr, "[TMAP] f%u palbase %04X yscroll %d xscroll(0) %d\n", rr_frame, palbase, fs->yscroll, fs->linexscroll[0]);
+          for (int r = 0; r < 64; r++) { int any = 0; for (int c = 0; c < 64; c++) if (be16p(map + 2u * (r * 64 + c))) any = 1;
+              if (!any) continue; fprintf(stderr, "[TMAP] row %2d:", r); for (int c = 0; c < 64; c++) fprintf(stderr, " %04X", be16p(map + 2u * (r * 64 + c))); fprintf(stderr, "\n"); } } }
     for (uint32_t y = 0; y < 480; y++) {
         const uint32_t sy = (y + fs->yscroll) & 0x3FF, tmy = sy >> 4, ty = sy & 0xF;
         const uint16_t sx = fs->linexscroll[sy];

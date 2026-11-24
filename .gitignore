@@ -188,6 +188,17 @@ __pycache__/
 /aquajet/*.rec
 /aquajet/*.wav
 
+# Panic Park (panicprk/): game files and the translation's working files (made from YOUR ROM), test output
+/panicprk/extracted/
+/panicprk/gen/
+/panicprk/build/
+/panicprk/roms/
+/panicprk/*.pcode
+/panicprk/*.cfg
+/panicprk/*.nv
+/panicprk/*.rec
+/panicprk/*.ppm
+
 # Gunmen Wars (gunwars/): game files, the translation's working files made by LuKa-86, test output
 /gunwars/extracted/
 /gunwars/gen/
