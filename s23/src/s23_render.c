@@ -162,8 +162,28 @@ static long s23_why_from(void)   /* debug: $S23_WHYFROM=<frame> -- the [WHYP] tr
     return f;
 }
 
+/* (s23_game.h seg_order) the stretch a render entry belongs to, for ordering: mode 1 = its own; mode 2 = a stretch drawn through a WINDOW (a
+ * viewport smaller than the screen) joins the stretch before it and sorts by depth with it */
+static int seg_mode(void) { static int m = -1; if (m < 0) { S23_SS_ENV(m); const char *e = getenv("S23_SEGMODE"); m = e ? atoi(e) : s23_game.seg_order; } return m; }
+static uint8_t seg_eff[256]; static int seg_seen = -1;
+static int eff_seg(const s23_render_entry *e)
+{
+    const int s = e->seg;
+    if (s == 0) { seg_seen = 0; seg_eff[0] = 0; }
+    else if (s > seg_seen) {                              /* the first entry of a new stretch: the list runs in order */
+        for (int k = seg_seen + 1; k <= s; k++) {
+            const int windowed = seg_mode() == 2 && k == s && e->vp_size_x > 0 && e->vp_size_x < 300;
+            seg_eff[k] = (uint8_t)(k == 0 ? 0 : windowed ? seg_eff[k - 1] : seg_eff[k - 1] + 1);
+        }
+        seg_seen = s;
+    }
+    return seg_eff[s] > 7 ? 7 : seg_eff[s];
+}
+
 static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polyshift, int shift_bit, uint32_t shift_mask_lo, uint32_t shift_sign)
 {
+    { static int vh = -1; if (vh < 0) { S23_SS_ENV(vh); const char *ev = getenv("S23_VPHIDE"); vh = ev ? atoi(ev) : s23_game.vp_hide0; }   /* (s23_game.h vp_hide0) */
+      if (vh && (e->vp_prio & 7) == 0) return 0; }
     float minz = FLT_MAX, maxz = FLT_MIN;
     for (int i = 0; i < p->n; i++) {
         float z = p->pv[i].p[0] != 0 ? p->pv[i].p[0] : 1.f;
@@ -193,17 +213,42 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
     int ap = e->absolute_priority & 7;
     if (polyshift >> 21 & 1) zsort = (int)(polyshift & 0x1FFFFF);
     else {
-        static float bsc = -2; if (bsc == -2) { S23_SS_ENV(bsc); const char *eb2 = getenv("S23_ZBIAS_SCALE"); bsc = eb2 ? (float)atof(eb2) : 0.f; }   /* TEST: $S23_ZBIAS_SCALE scales every model's z bias */
+        static float bsc = -2; if (bsc == -2) { S23_SS_ENV(bsc); const char *eb2 = getenv("S23_ZBIAS_SCALE"); bsc = eb2 ? (float)atof(eb2) : 0.f; }   /* TEST: $S23_ZBIAS_SCALE scales every model's z bias (negative: subtracted) */
         const int zsc = s23_game.zbias_scale && e->type == S23_RE_MODEL ? s23_game.zbias_scale(e->model) : 0;   /* the game's own, per model */
-        zsort += (int)((shift_bit != 17 ? 1.f : bsc > 0.f ? bsc : zsc > 0 ? (float)zsc : 1.f) * (float)((polyshift >> shift_bit & 1) ? (int)(polyshift | shift_sign) : (int)(polyshift & shift_mask_lo)));
+        zsort += (int)((shift_bit != 17 ? 1.f : bsc != 0.f ? bsc : zsc != 0 ? (float)zsc : 1.f) * (float)((polyshift >> shift_bit & 1) ? (int)(polyshift | shift_sign) : (int)(polyshift & shift_mask_lo)));
         ap += (int)((polyshift & 0x1C0000) >> 18);
 		if (s23_game.ap_wrap && e->type == S23_RE_MODEL) ap &= 7;   /* models only (include/s23_game.h ap_wrap) */
     }
+    { static int zm = -1; if (zm < 0) { S23_SS_ENV(zm); const char *ez = getenv("S23_ZOFFMODE"); zm = ez ? atoi(ez) : s23_game.zoff_state; }   /* (s23_game.h
+       * zoff_state) the C435's state 9 depth: 3 scales (Panic Park); tests: 1 subtracts, 2 adds, 4 maps 0..0x1FFFFF onto it..0x1FFFFF */
+      if (zm == 1) zsort -= e->zoff; else if (zm == 2) zsort += e->zoff;
+      else if (zm == 3 && e->zoff) zsort = (int)((int64_t)zsort * e->zoff / 0x1FFFFF);
+      else if (zm == 4) zsort = e->zoff + (int)((int64_t)zsort * (0x1FFFFF - e->zoff) / 0x1FFFFF); }
+    { static float zr = -1.f; if (zr < 0.f) { S23_SS_ENV(zr); const char *er = getenv("S23_WINZREF"); zr = er ? (float)atof(er) : s23_game.win_zref; }   /* (s23_game.h win_zref) */
+      if (zr > 0.f && e->seg >= s23_game.win_zref_from && e->vp_fov > 0.f && e->vp_fov < zr) zsort = (int)((float)zsort * e->vp_fov / zr); }
     if (zsort < 0) zsort = 0;
     if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
     p->zkey = (uint32_t)zsort | (uint32_t)ap << 21;
-    if (s23_game.seg_order) p->zkey |= (uint32_t)(7 - (e->seg > 7 ? 7 : e->seg)) << 25;   /* (s23_game.h seg_order) a later stretch of the list draws over an earlier one
-                                                   * (bits 25-27: the priority can reach 13 = bits 21-24; the band zkey >> 21 stays under 128 for the depth pass) */
+    if (seg_mode()) p->zkey |= (uint32_t)(7 - eff_seg(e)) << 25;   /* (s23_game.h seg_order) a later stretch of the list draws over an earlier one
+                                                   * (bits 25-27: the priority can reach 13 = bits 21-24; the band zkey >> 21 stays under 128) */
+    { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 5 : 0; }
+      /* (s23_game.h vp_front0) $S23_VPPRIO: 4 = the viewport word's low 3 bits as the first key (lower in front: wrong for Panic Park's Bomb
+       * Panic HUD), 5 = only 0 in front */
+      static int wl = -1; if (wl < 0) { S23_SS_ENV(wl); const char *ew = getenv("S23_WINLAYER"); wl = ew ? atoi(ew) : s23_game.win_layer; }
+      int layer = 0;                                    /* higher = in front (bits 25-27 hold 7 - layer) */
+      if (wl) {                                         /* (s23_game.h win_layer) */
+          static const void *wl_fs; static int wl_idx, wl_seg, wl_nwin, wl_segwin;
+          const int idx = (int)(e - FS->list.e);
+          if ((const void *)FS != wl_fs || idx < wl_idx) { wl_fs = FS; wl_seg = -1; wl_nwin = 0; wl_segwin = 0; }
+          wl_idx = idx;
+          const int win = e->vp_size_x != 320 || e->vp_size_y != 240 || e->vp_offset_x || e->vp_offset_y;
+          if (e->seg != wl_seg) { if (wl_seg >= 0 && wl_segwin) wl_nwin++; wl_seg = e->seg; wl_segwin = 0; }
+          if (win) wl_segwin = 1;
+          layer = wl_nwin + win; if (layer > 5) layer = 5;
+      }
+      if (vm == 4) p->zkey |= (uint32_t)(e->vp_prio & 7) << 25;
+      else if (vm == 5 && (e->vp_prio & 7) == 0) layer = 6;
+      if (vm != 4 && (wl || vm == 5)) p->zkey |= (uint32_t)(7 - layer) << 25; }
     p->index = (uint32_t)GNPOLY;
     p->vp_size_x = e->vp_size_x; p->vp_size_y = e->vp_size_y; p->vp_offset_x = e->vp_offset_x; p->vp_offset_y = e->vp_offset_y;
     p->clip43 = e->clip43;
@@ -403,7 +448,8 @@ static void render_direct(const s23_render_entry *e)
         if (zsort < 0) zsort = 0;
         if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
         p->zkey = (uint32_t)zsort | (uint32_t)ap << 21; p->index = (uint32_t)GNPOLY;
-        if (s23_game.seg_order) p->zkey |= 7u << 25;   /* a direct polygon (the CPU's own buffer, not the command list): with the first stretch -- Panic Park's
+        if (seg_mode()) p->zkey |= 7u << 25;
+        { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 5 : 0; } if (vm == 4) p->zkey |= (uint32_t)(e->vp_prio & 7) << 25; else if (vm == 5 || s23_game.win_layer) p->zkey |= 7u << 25; }   /* a direct polygon (the CPU's own buffer, not the command list): with the first stretch -- Panic Park's
                                                    * full-screen backdrop quad (priority 13) came in mid-list and covered the namco logo and the title */
         p->stencil = 0; p->color_base = d[2] & 0x7F00;
         p->tbase = (d[2] & 0xF) << 12 | ((d[2] >> 7) & 1) << 16;
@@ -476,8 +522,8 @@ static void span(const poly *p, int y, int x0, int x1, const float *s, const flo
         uint32_t tx = (uint32_t)(int32_t)(u * ooz), ty = (uint32_t)(int32_t)(v * ooz);
         const int vx = x + clip_left;
         if (vx < clip_left || vx >= clip_right || vx < 0 || vx >= 640) continue;
-        { static int hide = -2; if (hide == -2) { const char *e = getenv("S23_HIDEMODEL"); hide = e ? atoi(e) : -3; } if (p->model == hide) continue; }   /* TEST: leave one model out (-3: none -- -1 is every immediate and direct polygon) */
-        { static int only = -2; if (only == -2) { const char *e = getenv("S23_ONLYMODEL"); only = e ? atoi(e) : -1; } if (only >= 0 && p->model != only) continue; }   /* TEST: one model only */
+        { static int hide = -2; if (hide == -2) { S23_SS_ENV(hide); const char *e = getenv("S23_HIDEMODEL"); hide = e ? atoi(e) : -3; } if (p->model == hide) continue; }   /* TEST: leave one model out (-3: none -- -1 is every immediate and direct polygon) */
+        { static int only = -2; if (only == -2) { S23_SS_ENV(only); const char *e = getenv("S23_ONLYMODEL"); only = e ? atoi(e) : -1; } if (only >= 0 && p->model != only) continue; }   /* TEST: one model only */
         if (seamtest == 3) {                              /* 3: OVERDRAW of translucent polygons (blend / alpha) -- 0x20 a layer; opaque ones not drawn */
             static int only = -2; if (only == -2) { const char *e = getenv("S23_SEAMMODEL"); only = e ? atoi(e) : -1; }   /* only this model */
             if ((only < 0 ? (p->blend || p->alpha_enabled) : p->model == only)) { if (!(p->stencil && stencil_lookup(tx, ty))) { const uint32_t c = dest[vx] == 0xFF00FF ? 0 : dest[vx] & 0xFF; dest[vx] = (c + 0x20 > 0xFF ? 0xFF : c + 0x20) * 0x010101u; } }
@@ -693,8 +739,8 @@ static void build(s23_built *b)
       if (by_frame ? (long)rr_frame == want : built == want) {   /* $S23_POLYDUMP=n: every polygon of the n-th built frame in draw order (f<n>: of game frame n) */
           fprintf(stderr, "[C404] alpha_color %02X alpha_pen %02X alpha %02X\n", GFX.alpha_color, GFX.alpha_pen, GFX.alpha);
           for (int k = 0; k < fs->list.count; k++) { const s23_render_entry *e = &fs->list.e[k];
-              fprintf(stderr, "[ENTRY] %4d type %d model %5d model2 %5d ap %d v %d %d %d  m %d %d %d / %d %d %d / %d %d %d  scale %.3f  blend %d fov %.1f seg %d\n", k, e->type, e->model, e->model2,
-                      e->absolute_priority, e->v[0], e->v[1], e->v[2], e->m[0], e->m[1], e->m[2], e->m[3], e->m[4], e->m[5], e->m[6], e->m[7], e->m[8], e->scaling, e->model_blend_factor, e->vp_fov, e->seg); }
+              fprintf(stderr, "[ENTRY] %4d type %d model %5d model2 %5d ap %d v %d %d %d  m %d %d %d / %d %d %d / %d %d %d  scale %.3f  blend %d fov %.1f seg %d zoff %X vpp %X vp %d,%d\n", k, e->type, e->model, e->model2,
+                      e->absolute_priority, e->v[0], e->v[1], e->v[2], e->m[0], e->m[1], e->m[2], e->m[3], e->m[4], e->m[5], e->m[6], e->m[7], e->m[8], e->scaling, e->model_blend_factor, e->vp_fov, e->seg, e->zoff, e->vp_prio, e->vp_size_x, e->vp_size_y); }
           for (int k = 0; k < GNPOLY; k++) {
               const poly *q = &GPOLYS[b->order[k]]; float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
               for (int j = 0; j < q->n; j++) { if (q->pv[j].x < x0) x0 = q->pv[j].x; if (q->pv[j].x > x1) x1 = q->pv[j].x; if (q->pv[j].y < y0) y0 = q->pv[j].y; if (q->pv[j].y > y1) y1 = q->pv[j].y; }
@@ -918,6 +964,9 @@ static int mid_n[2];                                   /* how many MIDS[slot] ho
 static s23_built *MIDS[2][2];                             /* motion smoothing: MIDS[front] = halfway from the frame before B[front] to B[front] (the
                                                         * worker builds MIDS[!front] while the window may still draw MIDS[front]); [k] = fraction k */
 static s23_built *MID;                                 /* the one being built */
+__attribute__((constructor)) static void worker_keep(void)   /* the worker thread's own state is this process's: a capture taken while it was busy
+                                                   * (Panic Park's) restored busy = 1 and the first frame waited for it for ever */
+{ S23_SS_KEEP(B); S23_SS_KEEP(front); S23_SS_KEEP(worker); S23_SS_KEEP(mu); S23_SS_KEEP(cv); S23_SS_KEEP(busy); S23_SS_KEEP(started); S23_SS_KEEP(have_frame); S23_SS_KEEP(have_mid); S23_SS_KEEP(mid_n); S23_SS_KEEP(MIDS); }
 
 /* ---- MOTION SMOOTHING (Display > Motion smoothing, off by default; motion_smooth in the cfg, $S23_SMOOTH=0/1 for tests) -------------------
  * The board makes 59.906 pictures a second; at 120 Hz and up the window can show one MORE picture between two of them. It is made here, not

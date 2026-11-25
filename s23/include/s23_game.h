@@ -72,10 +72,30 @@ typedef struct {
     int direct_v_shift;                           /* texels added to a direct polygon's v (0 = MAME's). Panic Park -1: its namco logo is a black plate over a full-screen
                                                    * direct quad that samples ONE texel of the text palette's colour swatch (tile 0x6C0, v 0x6CF0) -- row F is white,
                                                    * the arcade's logo is red: row E (FF0000) */
+    int zoff_state;                               /* the C435's state type 9 (MAME: unknown; six 1.0s, then a depth and 0x1FFFFF), sent after a "model 0" break:
+                                                   * 3 = its depth SCALES what follows (z * d / 0x1FFFFF). Panic Park: the title's PANIC PARK letters
+                                                   * (z 18656-26675, d 0x3A628) come out at 2100-3000, over the island picture (z 4352), their own layers in
+                                                   * order (subtracting it clamped them all to 0 -- the black outlines over the colours) ($S23_ZOFFMODE) */
+    int vp_front0;                                /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is drawn over every other (Panic Park: the PANIC
+                                                   * PARK plate, 0x20, swinging in over the monitor's NEEDED picture, 0x27, which is nearer by depth -- the plate
+                                                   * covers it in TeknoParrot and on the arcade) ($S23_VPPRIO=5) */
+    int vp_hide0;                                 /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is not drawn ($S23_VPHIDE) */
+    int win_layer;                                /* 1 = what is drawn through a window (a viewport smaller than the screen) goes over every full-screen polygon of
+                                                   * the stretches of the list before it (Panic Park: the NEEDED picture's ball, z 4500, behind the monitor's
+                                                   * face, z 3000, by depth; the window sits in that face) ($S23_WINLAYER) */
+    float win_zref;                               /* > 0: a model drawn through a narrower projection (a window's) sorts at z * its scale / win_zref -- its depth
+                                                   * in the main view's terms. Panic Park 555.375: the NEEDED picture's ball (z 4500 in the monitor's own view,
+                                                   * scale 276) went behind the monitor's face (z 3000) it is shown in ($S23_WINZREF) */
+    int win_zref_from;                            /* ... only from this stretch of the list on (Panic Park 2: its monitor pictures come after the machine, the eyes and
+                                                   * the monitor itself; the INTERACTIVE CONTROLS demo's window, stretches 0-1, came over the blue player) */
+    int window_memory;                            /* 1 = a model drawn through a window (a viewport smaller than the screen) keeps that window while it is drawn
+                                                   * frame after frame and the game sends no window (Panic Park's RULE and NEEDED monitor pictures: the window
+                                                   * comes every other frame, then not at all for seconds -- drawn full size in between, twice as large, off the
+                                                   * monitor) */
+    int null_model;                               /* window_memory: a model the game sends as a marker, in every stretch, with no polygons (Panic Park 0x6EF) --
+                                                   * left out of it, or one window spread to the whole list (the monitor itself drawn shrunk) */
     int seg_order;                                /* 1 = the render list's STRETCHES (split by the C435-interrupt "model 0" the game sends between them) are drawn in
-                                                   * order, each over the one before, whatever their depths -- each sorted on its own. Panic Park: the title's
-                                                   * PANIC PARK letters (stretch 1, z 6656 + bias) sit behind the island picture (stretch 0, z 4352) and are seen
-                                                   * over it on the arcade; one sort for the whole list (MAME's) hid them */
+                                                   * order, each over the one before, whatever their depths -- each sorted on its own ($S23_SEGMODE; no game) */
     int depth_within;                             /* 2 = exact depth always, between models too (Rapid River: the pyramid's inner door, the wake's foam inside the raft);
                                                    * 1 = exact depth between one model's own polygons, always (the menu's Depth adds other models; forcing that on lost the Nile gate's roof) (Rapid River: the Nile gate's sloping
                                                    * sand, part of the wall's model, sorted over the wall's foot -- yellow wedges the arcade does not show) */

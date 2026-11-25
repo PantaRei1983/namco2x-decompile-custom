@@ -12,6 +12,7 @@ typedef struct {
     float vp_fov;
     uint8_t clip43;                        /* widescreen: a flat screen-plane piece kept inside the 4:3 picture (set in the list snapshot) */
     uint8_t seg;                           /* which stretch of the list: the C435-interrupt models (model 0) divide it */
+    int32_t zoff; uint16_t vp_prio;                          /* s23_game.zoff_state: the depth offset (C435 state type 9) in force when the entry came */
     /* a model */
     uint16_t model, model2; float scaling; int transpose, mirror_x;
     int16_t m[9]; int32_t v[3], light_vector[3];

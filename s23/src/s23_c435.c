@@ -39,6 +39,8 @@ static int16_t matrices[256][9];
 static int32_t vectors[256][3], light_vector[3], spv[3];
 static int16_t spm[9];
 static uint16_t absolute_priority, model_blend_factor, light_power, light_ambient, scaling;
+static uint32_t vp_set_at, null_at;             /* window_memory: (frame + 1) * 256 + stretch of the last viewport state sent before any null model, of the last null model */
+static int32_t zoff; static uint16_t vp_prio;     /* state type 9's depth (words 15-16, s23_game.zoff_state); the viewport state's word 3 (s23_game.vp_front0) */
 static int16_t tx, ty;
 static int16_t vp_offset_x, vp_offset_y, vp_size_x, vp_size_y;
 static float clip_data[24]; static int clip_line;
@@ -77,6 +79,7 @@ static s23_render_entry *new_entry(int type)
     e->vp_size_x = vp_size_x; e->vp_size_y = vp_size_y; e->vp_offset_x = vp_offset_x; e->vp_offset_y = vp_offset_y;
     e->vp_fov = clip_data[23];
     e->seg = (uint8_t)(s23_c435_seg < 255 ? s23_c435_seg : 255);
+    e->zoff = zoff; e->vp_prio = vp_prio;
     return e;
 }
 
@@ -187,25 +190,40 @@ static void state_set(uint16_t type, const uint16_t *p, uint16_t header)
     switch (type) {
     case 0x0000: case 0x0002: case 0x000A: immediate(type, p, header); break;
     case 0x0001: s23_irq_set(S23_SRC_C435, p[0] & 1); break;
+    case 0x0009: zoff = (int32_t)(L(p, 15) & 0x1FFFFF); break;   /* (MAME: unknown) a word, six 1.0s, 0, a depth, 0x1FFFFF. Panic Park sends it after
+                                                   * each "model 0" stretch break: 0 for the title's island picture, 0x3A628 for its PANIC PARK letters
+                                                   * (behind the island by depth, over it on the arcade) -- how it is used: s23_game.zoff_state */
     case 0x0046: {
         const uint32_t d = L(p, 7);
         vp_offset_x = (int16_t)((int16_t)((d & 0xFFF) << 4) >> 4);
         vp_offset_y = (int16_t)-((int16_t)(((d >> 12) & 0xFFF) << 4) >> 4);
-        { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_VPLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: viewport offsets in frames a..b */
+        { const uint32_t here = (rr_frame + 1) * 256u + (uint32_t)(s23_c435_seg & 255); if (null_at != here) vp_set_at = here; }
+        vp_prio = p[3];                                   /* (MAME: unused) word 3: 0x27 normally, 0x20 for Panic Park's plate (s23_game.vp_front0) */
+        { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_VPLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: viewport offsets in frames a..b */
           if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) fprintf(stderr, "[VP] f%u offset %d %d size %d %d\n", rr_frame, vp_offset_x, vp_offset_y, vp_size_x, vp_size_y); }
         break; }
     case 0x00C8:
         for (int i = 0; i < 8; i++) clip_data[clip_line * 8 + i] = s23_f24(L(p, 2 * i + 1));
         clip_line = (clip_line + 1) % 3;
-        { static int lg = -1; if (lg < 0) lg = getenv("S23_CLIPLOG") != NULL;   /* $S23_CLIPLOG: every complete clip-data set (3 lines of 8 floats) */
+        { static int lg = -1; if (lg < 0) { S23_SS_ENV(lg); lg = getenv("S23_CLIPLOG") != NULL; }   /* $S23_CLIPLOG: every complete clip-data set (3 lines of 8 floats) */
           extern uint32_t rr_frame;
           if (lg && clip_line == 0) { static float prevc[24]; if (memcmp(prevc, clip_data, sizeof prevc)) { memcpy(prevc, clip_data, sizeof prevc);
               fprintf(stderr, "[CLIP] f%u", rr_frame); for (int i = 0; i < 24; i++) fprintf(stderr, "%s%g", i % 8 ? " " : " | ", clip_data[i]); fprintf(stderr, "\n"); } } }
         if (clip_line == 0 && clip_data[10] != 0.f) {
             const float a10 = clip_data[10] < 0 ? -clip_data[10] : clip_data[10], a23 = clip_data[23] < 0 ? -clip_data[23] : clip_data[23];
             const float a2 = clip_data[2] < 0 ? -clip_data[2] : clip_data[2];
-            vp_size_y = (int16_t)(a10 * a23 + 0.5f);
-            vp_size_x = (int16_t)((float)vp_size_y * a2 / a10 + 0.5f);
+            /* MAME's formula takes the clip planes as unit-normal (|c0| = |c9| = 1, all games' full-screen sets). Panic Park's RULE monitor
+             * sends a window's planes unnormalised -- left (208, -40, -146.2), top (0, 429, -161.7), fov 276 -- and MAME's |c10| * fov
+             * overflowed to a 44617-pixel viewport (its little screen drawn nowhere). The edge at the centre line is -c / normal: dividing by
+             * the normal is the same for unit planes and gives this window's 194 x 104 */
+            const float a0 = clip_data[0] < 0 ? -clip_data[0] : clip_data[0], a9 = clip_data[9] < 0 ? -clip_data[9] : clip_data[9];
+            const float ny = a9 > 0.f ? a10 / a9 : a10, nx = a0 > 0.f ? a2 / a0 : a2;
+            vp_size_y = (int16_t)(ny * a23 + 0.5f);
+            vp_size_x = (int16_t)(nx * a23 + 0.5f);
+        } else if (clip_line == 0 && (clip_data[9] > 1.5f || clip_data[9] < -1.5f)) {
+            /* a CLOSED window: unnormalised planes with no depth term (Panic Park's RULE monitor shutting: top y <= 0, bottom y >= 0, fov 1) --
+             * nothing of it shows. MAME keeps the last viewport, and the monitor's chick animation filled the screen over the roulette */
+            vp_size_x = vp_size_y = 0;
         }
         /* the frame's MODEL view (s23_game.model_fov_max): the largest projection scale among its clip sets, leaving out the plain 90-degree
          * one (scale 320) whenever there is another -- with its viewport size: Gunmen Wars' match end shrinks that set (scale and size
@@ -237,6 +255,28 @@ static void render_model(void)                    /* 8: a model of the point ROM
     memcpy(e->m, getm(b[size - 1]), sizeof e->m);
     memcpy(e->v, getv(b[size]), sizeof e->v);
     memcpy(e->light_vector, light_vector, sizeof e->light_vector);
+    if (s23_game.null_model && e->model == s23_game.null_model) null_at = (rr_frame + 1) * 256u + (uint32_t)(s23_c435_seg & 255);
+    if (s23_game.window_memory && !(s23_game.null_model && e->model == s23_game.null_model)) {   /* (s23_game.h window_memory) */
+        static struct { uint32_t last, real, real_last; int16_t sx, sy, ox, oy; float fov; uint16_t prio; } wm[0x1000];
+        const int full = e->vp_size_x == 320 && e->vp_size_y == 240 && !e->vp_offset_x && !e->vp_offset_y;
+        typeof(&wm[0]) w = &wm[e->model & 0xFFF];
+        static uint32_t sf; static int ss = -1; static int16_t sx, sy, ox, oy; static float sfov; static uint16_t sprio;   /* the window this stretch of the list last used */
+        const int same = ss == s23_c435_seg && sf == rr_frame + 1;
+        const int kept = w->last && rr_frame + 1 - w->last <= 2 && w->real != rr_frame + 1 && rr_frame + 1 - w->real_last <= 180;   /* (not when this
+                                                   * frame drew it through a window already; not 3 s after the game last sent that window) */
+        const int real = !full;
+        const int told = vp_set_at == (rr_frame + 1) * 256u + (uint32_t)(s23_c435_seg & 255);   /* the game set the viewport in this stretch, before its
+                                                   * null model: full screen meant (the INTERACTIVE CONTROLS demo's blue player, out of the window) */
+        if (full && s23_c435_seg >= 1 && !told && (kept || same)) {
+            if (kept) { e->vp_size_x = w->sx; e->vp_size_y = w->sy; e->vp_offset_x = w->ox; e->vp_offset_y = w->oy; e->vp_fov = w->fov; e->vp_prio = w->prio; }
+            else { e->vp_size_x = sx; e->vp_size_y = sy; e->vp_offset_x = ox; e->vp_offset_y = oy; e->vp_fov = sfov; e->vp_prio = sprio; }   /* (the NEEDED count's digits, new in a remembered stretch) */
+        }
+        if (e->vp_size_x != 320 || e->vp_size_y != 240 || e->vp_offset_x || e->vp_offset_y) {
+            if (real) w->real = w->real_last = rr_frame + 1;
+            w->last = rr_frame + 1; w->sx = e->vp_size_x; w->sy = e->vp_size_y; w->ox = e->vp_offset_x; w->oy = e->vp_offset_y; w->fov = e->vp_fov; w->prio = e->vp_prio;
+            sf = rr_frame + 1; ss = s23_c435_seg; sx = e->vp_size_x; sy = e->vp_size_y; ox = e->vp_offset_x; oy = e->vp_offset_y; sfov = e->vp_fov; sprio = e->vp_prio;
+        }
+    }
 }
 
 void s23_c435_pio(uint16_t w)
@@ -256,7 +296,7 @@ void s23_c435_pio(uint16_t w)
             if ((op == 1 || op == 3) && (h & 0xBB00) && rr_frame > 6000 && n2++ < 16) { const int16_t *ms = getm(c435.buffer[2]);
                 fprintf(stderr, "[MATID] f%u op %d hdr %04X target %04X src %04X %04X w4.. %04X %04X %04X %04X | src m %d %d %d %d\n", rr_frame, op, h, t, c435.buffer[2], c435.buffer[3],
                         c435.buffer[4], c435.buffer[5], c435.buffer[8], c435.buffer[12], ms[0], ms[1], ms[4], ms[8]); } } }
-        { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: matrix ops too */
+        { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: matrix ops too */
           if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) { fprintf(stderr, "[ST] f%u X @%08X %04X", rr_frame, dma_at, h); for (int i = 1; i <= (h & 0xF) && i < 16; i++) fprintf(stderr, " %04X", c435.buffer[i]); fprintf(stderr, "\n"); } }
         switch (h & 0xF0) {
         case 0x00: mat_mat(); break; case 0x10: mat_vec(); break; case 0x20: mat_mat_immed(); break; case 0x30: mat_vec_immed(); break;
@@ -264,7 +304,7 @@ void s23_c435_pio(uint16_t w)
         }
         break;
     case 0x4000:
-        { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: every state command in frames a..b */
+        { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug: every state command in frames a..b */
           if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) { fprintf(stderr, "[ST] f%u %04X", rr_frame, h); for (int i = 1; i <= (h & 0xFF) && i < 64; i++) fprintf(stderr, " %04X", c435.buffer[i]); fprintf(stderr, "\n"); } }
         switch (h & 0x3F00) {
         case 0x0000: case 0x0600:                  /* MAME: unknown state-set types 4.0 / 4.6 */
@@ -286,7 +326,7 @@ void s23_c435_pio(uint16_t w)
         default: known = 0;
         }
         break;
-    case 0x8000: { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); } if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) fprintf(stderr, "[ST] f%u M %04X h %04X %04X %04X %04X %04X\n", rr_frame, c435.buffer[1], h, c435.buffer[2], c435.buffer[3], c435.buffer[4], c435.buffer[5]); } render_model(); break;
+    case 0x8000: { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); } if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) fprintf(stderr, "[ST] f%u M %04X h %04X %04X %04X %04X %04X\n", rr_frame, c435.buffer[1], h, c435.buffer[2], c435.buffer[3], c435.buffer[4], c435.buffer[5]); } render_model(); break;
     case 0xC000:                                  /* FLUSH (MAME c435_flush): with a zero length, header bit 13 raises the C451 interrupt, clear lowers it.
                                                    * Wired on Evolution 2 (IRQ3, status 0x100000B0 bit 0); on System 23 the game table maps it to no pin */
         if ((h & 0xF) == 0) s23_irq_set(S23_SRC_C451, (h >> 13) & 1);
@@ -300,7 +340,7 @@ void s23_c435_pio(uint16_t w)
 /* MAME c435_state_pio_w: a state entry written word by word through 0x0C800016 (its type first) */
 static void state_pio(uint16_t w)
 {
-    { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug */
+    { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug */
       if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) fprintf(stderr, "[SP] f%u %u %04X pc %08X\n", rr_frame, c435.state_pos, w, rr_pc); }
     c435.state_buf[c435.state_pos++ & 255] = w;
     const int n = state_size(c435.state_buf[0]);
@@ -320,7 +360,7 @@ static void direct_entry(void)
 /* the command DMA from main RAM (MAME c435_dma): the length is the game's; a garbage one must not hang the frame -- main RAM is 16 MB */
 static void dma(void)
 {
-    { static long a = -2, b; if (a == -2) { const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug */
+    { static long a = -2, b; if (a == -2) { S23_SS_ENV(a); S23_SS_ENV(b); const char *e = getenv("S23_STLOG"); a = -1; if (e) sscanf(e, "%ld:%ld", &a, &b); }   /* debug */
       if (a >= 0 && (long)rr_frame >= a && (long)rr_frame <= b) fprintf(stderr, "[DMA] f%u adr %08X size %X pc %08X\n", rr_frame, c435.address, c435.size, rr_pc); }
     const int spr = s23_game.gorgon && s23_game.gorgon->sprite_mode();   /* GORgON: PIO mode bit 0 = this DMA is sprite data (MAME c435_dma) */
     for (uint32_t pos = 0; pos < c435.size && pos < 0x1000000u; pos += 2) {

@@ -70,7 +70,7 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   - Super 22 / System 22 and Prop Cycle: atlas pages with mip levels; the sharp modes run in a small fragment shader.
     Config: `texture_filter` = `off | bilinear | sharp | trilinear | sharp-trilinear`, `texture_aniso`. Environment:
     `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`.
-  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Rapid River, Final Furlong): filtered per fragment in the polygon
+  - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Panic Park, Rapid River, Final Furlong): filtered per fragment in the polygon
     shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Immediate polygons are filtered when they are 3D
     (corners at different depths: Final Furlong's horses and saddle-cloth numbers); flat screen panels stay sharp. Environment: `S23_TEX_FILTER`,
     `S23_TEX_ANISO`.
@@ -121,6 +121,16 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,
   Alpine Racer, Aqua Jet, Dirt Dash) draw exactly as before. `SS22_NO_POSIRQ=1` turns it off for a comparison.
+- **Panic Park (new, System 23):** decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
+  `namco_asca3a.zip`) the same way as Rapid River: `panicprk/build.sh panicprk.zip namco_asca3a.zip` translates the program
+  from your ROM with Ghidra (`N22TOOLS`) and builds it, `./launch.sh panic` starts it. Two players: the joystick on Left / Right
+  (player 2 on A / D), START on 1 / 2, coin on 5; pads work (a second pad is player 2). No light gun, so no crosshair options.
+  Fixed against the arcade footage and the TeknoParrot longplay (MAME draws all of these wrongly): the title's big PANIC PARK
+  letters (the C435's state 9, unknown to MAME, scales their depth in front of the island picture), the red namco logo, the
+  monitor's RULE and NEEDED pictures (an unnormalised clip window that overflowed MAME's viewport; the window comes only every
+  other frame, then not for seconds, and is now kept while the picture stays; the NEEDED ball no longer sinks behind the
+  monitor's face), the PANIC PARK plate swinging in over the monitor's picture instead of under it (first game), and exact
+  depth inside a model (the close-ups).
 - **Rapid River and Gunmen Wars build on Linux in one step:** `rapidrvr/build.sh` and `gunwars/build.sh` (new) unpack the ROM
   zips, translate the program with Ghidra when `N22TOOLS` is set, and build; `./launch.sh rapid` / `./launch.sh gunmen` start
   them. Their import / regen scripts were Windows-only. Every `.sh` in the repository is now executable (several were not, so
@@ -173,7 +183,7 @@ cmake -S launcher -B launcher/build -G Ninja && ninja -C launcher/build
 ```
 
 Game folders: `tokyowar raverace acedriver victlap cybrcomm adillor airco22 alpiner alpines alpinr2 aquajet cybrcycc
-dirtdash timecris cybsled crszone gunwars tc2 ridgerac`.
+dirtdash timecris cybsled crszone gunwars panicprk tc2 ridgerac`.
 
 On Linux (any distribution: `./install-deps.sh` installs the compiler, CMake, SDL2, zlib and OpenGL headers), the games
 with their own `build.sh` build in one step from the ROM zips, e.g. Rapid River and Gunmen Wars:
@@ -182,7 +192,8 @@ with their own `build.sh` build in one step from the ROM zips, e.g. Rapid River 
 export N22TOOLS=~/n22tools       # Ghidra 12.1.4 (ghidra_12.1.4_PUBLIC/), an empty work/ folder; Java 21 from your distribution
 rapidrvr/build.sh rapidrvr.zip namco_asca1.zip     # the first time: unpacks the ROMs, translates the program, builds
 gunwars/build.sh gunwars.zip namco_asca5.zip       # or a clone: gunwarsj.zip / gunwarsa.zip with gunwars.zip
-./launch.sh rapid                                  # or: ./launch.sh gunmen   (a number for the window size, --fullscreen)
+panicprk/build.sh panicprk.zip namco_asca3a.zip    # Panic Park
+./launch.sh rapid                                  # or: ./launch.sh gunmen / panic   (a number for the window size, --fullscreen)
 ```
 
 The new 68020 ports are translated from each game's own program with Ghidra and this fork's translator
@@ -198,7 +209,7 @@ licence.
 
 This project is not affiliated with or endorsed by Bandai Namco. Tokyo Wars, Ridge Racer, Rave Racer, Ace Driver, 
 Ace Driver: Victory Lap, Time Crisis, Cyber Cycles, Cyber Commando, Cyber Sled, Armadillo Racing, Alpine Racer, 
-Alpine Surfer, Aqua Jet, Air Combat, Rapid River, Final Furlong, Angler King, Gunmen Wars, Crisis Zone, Prop Cycle and Dirt Dash are trademarks 
+Alpine Surfer, Aqua Jet, Air Combat, Rapid River, Final Furlong, Angler King, Gunmen Wars, Panic Park, Crisis Zone, Prop Cycle and Dirt Dash are trademarks 
 of Bandai Namco Entertainment Inc. You need your own legally obtained copy of each game.
 
 ## Credits

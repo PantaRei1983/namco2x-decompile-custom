@@ -173,7 +173,11 @@ const s23_game_t s23_game = {
     .zip_help = "MAME's panicprk.zip (Panic Park, World PNP2 Ver. A) and namco_asca3a.zip",
     .zips = zips, .nzips = 2, .chips = chips, .nchips = (int)(sizeof chips / sizeof chips[0]),
     .io_asca = 1, .asca_in = pp_asca_in, .input = &pp_input,
-    .seg_order = 1,                               /* the title's letters over the island picture (include/s23_game.h) */
+    .zoff_state = 3,                              /* the title's letters over the island picture (include/s23_game.h) */
+    .vp_front0 = 1,                               /* the PANIC PARK plate over the monitor's NEEDED picture, as TeknoParrot shows it (include/s23_game.h) */
+    .window_memory = 1,                           /* the RULE and NEEDED pictures kept inside the monitor (include/s23_game.h) */
+    .null_model = 0x6EF,
+    .win_zref = 555.375f, .win_zref_from = 2,     /* the NEEDED picture's ball in front of the monitor's face (include/s23_game.h) */
     .direct_v_shift = -1,                         /* the namco logo red, as the arcade's (include/s23_game.h) */
     .depth_within = 1,                            /* exact depth inside one model always: the INTERACTIVE CONTROLS close-up's red player showed his inside
                                                    * (the back of his head over the front) -- painter order within a model */
@@ -186,7 +190,7 @@ const s23_game_t s23_game = {
     /* MAME namcos23_state::machine_start: IRQ0 vblank, IRQ1 C361 + sub-CPU, IRQ2 C435, IRQ3 C422, IRQ5 RS-232 */
     .ip = { [S23_SRC_VBLANK] = S23_IP(0), [S23_SRC_C361] = S23_IP(1), [S23_SRC_SUB] = S23_IP(1), [S23_SRC_C435] = S23_IP(2),
             [S23_SRC_C422] = S23_IP(3), [S23_SRC_TIMER] = S23_IP(5) },
-    .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 1,
+    .boot_size = 0x400000, .rom_boot = rom_boot, .rom_sub = rom_sub, .rom_io = rom_io, .io_rom_size = 0x4000, .c417_status = 0x008E, .depth_default = 0,
     .data_rom = { { "pnp1mtah.2j", "pnp1mtal.2h" }, { NULL, NULL } },
     .npt = 2, .pt_rom = { { "pnp1pt0h.7a", "pnp1pt0l.7c" }, { "pnp1pt1h.5a", "pnp1pt1l.5c" } },
     .ccrl = "pnp1ccrl.7f", .ccrh = "pnp1ccrh.7e", .ccrl_half = 1, .cg = { "pnp1cgll.4m", "pnp1cglm.5k", "pnp1cgum.4j", "pnp1cguu.5f" },

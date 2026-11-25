@@ -229,6 +229,7 @@ extern _Bool g_ss22_gun_off;
 static void session_rec(uint32_t frame)
 {
     static FILE *rec, *rep; static int init; static char line[128]; static int have;
+    { static int kept; if (!kept) { kept = 1; S23_SS_KEEP(kept); S23_SS_KEEP(rec); S23_SS_KEEP(rep); S23_SS_KEEP(init); S23_SS_KEEP(line); S23_SS_KEEP(have); } }   /* this process's files: a load restored the saver's FILE pointers */
     if (!init) {
         init = 1;
         const char *r = getenv("S23_REPLAY");
