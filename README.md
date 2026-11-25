@@ -121,8 +121,10 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,
   Alpine Racer, Aqua Jet, Dirt Dash) draw exactly as before. `SS22_NO_POSIRQ=1` turns it off for a comparison.
-- **Panic Park (new, System 23) -- WORK IN PROGRESS, not officially playable yet:** it runs to the end, but graphics bugs
-  remain (draw order and flicker in some scenes) and the controls are still being tuned. Decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
+- **Panic Park (new, System 23) -- fully playable:** every mini-game runs to the end with the arcade's picture and sound;
+  only a few very minor graphics glitches remain. **Before the first game, calibrate both players' levers:** press F2 to enter
+  the service mode and run the lever calibration there (uncalibrated, the centred lever puts the character off to one side).
+  Decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
   `namco_asca3a.zip`) the same way as Rapid River: `panicprk/build.sh panicprk.zip namco_asca3a.zip` translates the program
   from your ROM with Ghidra (`N22TOOLS`) and builds it, `./launch.sh panic` starts it. Two players: the joystick on Left / Right
   (player 2 on A / D), START on 1 / 2, coin on 5; pads work (a second pad is player 2). No light gun, so no crosshair options.
