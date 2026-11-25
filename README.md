@@ -41,7 +41,7 @@ grown into a way to **keep other Namco machines of that era running** with a mod
 
 ### New game, Texture filters and fixes from my namco22-decompile fork
 
-- **Ridge Racer (new port):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
+- **Ridge Racer (new port, System 22):** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
   master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
   - The translator (`tools/gen/lift68k.py`) rewrites `cmp2` / `chk2`: Ghidra reads the bounds through a pointer it loads from
     the effective address (they are AT it), compares the whole data register, and reads a PC-relative pair 2 bytes early.
@@ -63,6 +63,21 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   <img width="80%" alt="Ridge Racer Start" src="docs/images/ridgeracer-start-race-widescreen.png" />
   <img width="80%" alt="Ridge Racer Ingame" src="docs/images/ridgeracer-ingame-race-widescreen.png" />
   </p>
+- **Panic Park (new, System 23) -- fully playable:** every mini-game runs to the end with the arcade's picture and sound;
+  only a few very minor graphics glitches remain. **Before the first game, calibrate both players' levers:** press F2 to enter
+  the service mode and run the lever calibration there (uncalibrated, the centred lever puts the character off to one side).
+  Decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
+  `namco_asca3a.zip`) the same way as Rapid River: `panicprk/build.sh panicprk.zip namco_asca3a.zip` translates the program
+  from your ROM with Ghidra (`N22TOOLS`) and builds it, `./launch.sh panic` starts it. Two players: the joystick on Left / Right
+  (player 2 on A / D), START on 1 / 2, coin on 5; pads work (a second pad is player 2). No light gun, so no crosshair options.
+  The lever is analogue: a pad's stick gives every position, a key moves it steadily and lets it come back to the centre.
+  Fixed against the arcade footage and the TeknoParrot longplay: the C435 interrupt is now taken at once, as on the board
+  (its handler sends the next part of the frame's state, which came late every few frames: heavy polygon flicker after the
+  coins / START); the C435's state 9 (unknown to MAME) read as a signed depth offset for its part of the list (the practice's
+  castle gate, the title's big PANIC PARK letters over the island, the Panic King's scores in their cans); Display > Depth
+  "exact" is not offered here (it undid the game's own order); the red namco logo; the monitor's RULE and NEEDED
+  pictures (an unnormalised clip window that overflowed MAME's viewport); the PANIC PARK plate swinging in over the monitor;
+  exact depth inside a model (the close-ups).
 - **3D texture filter (Display > 3D texture filter)** for every textured game: **Off, Bilinear, Sharp bilinear, Trilinear,
   Sharp trilinear**, with **anisotropic filtering 2x / 4x / 8x / 16x** in the trilinear modes. Only the 3D polygons are
   filtered: the HUD, the text layer and the 2D sprites stay sharp. It replaces the Texture smoothing switch: Alpine
@@ -121,21 +136,6 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,
   Alpine Racer, Aqua Jet, Dirt Dash) draw exactly as before. `SS22_NO_POSIRQ=1` turns it off for a comparison.
-- **Panic Park (new, System 23) -- fully playable:** every mini-game runs to the end with the arcade's picture and sound;
-  only a few very minor graphics glitches remain. **Before the first game, calibrate both players' levers:** press F2 to enter
-  the service mode and run the lever calibration there (uncalibrated, the centred lever puts the character off to one side).
-  Decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
-  `namco_asca3a.zip`) the same way as Rapid River: `panicprk/build.sh panicprk.zip namco_asca3a.zip` translates the program
-  from your ROM with Ghidra (`N22TOOLS`) and builds it, `./launch.sh panic` starts it. Two players: the joystick on Left / Right
-  (player 2 on A / D), START on 1 / 2, coin on 5; pads work (a second pad is player 2). No light gun, so no crosshair options.
-  The lever is analogue: a pad's stick gives every position, a key moves it steadily and lets it come back to the centre.
-  Fixed against the arcade footage and the TeknoParrot longplay: the C435 interrupt is now taken at once, as on the board
-  (its handler sends the next part of the frame's state, which came late every few frames: heavy polygon flicker after the
-  coins / START); the C435's state 9 (unknown to MAME) read as a signed depth offset for its part of the list (the practice's
-  castle gate, the title's big PANIC PARK letters over the island, the Panic King's scores in their cans); Display > Depth
-  "exact" is not offered here (it undid the game's own order); the red namco logo; the monitor's RULE and NEEDED
-  pictures (an unnormalised clip window that overflowed MAME's viewport); the PANIC PARK plate swinging in over the monitor;
-  exact depth inside a model (the close-ups).
 - **Rapid River and Gunmen Wars build on Linux in one step:** `rapidrvr/build.sh` and `gunwars/build.sh` (new) unpack the ROM
   zips, translate the program with Ghidra when `N22TOOLS` is set, and build; `./launch.sh rapid` / `./launch.sh gunmen` start
   them. Their import / regen scripts were Windows-only. Every `.sh` in the repository is now executable (several were not, so
