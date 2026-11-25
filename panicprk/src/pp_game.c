@@ -171,7 +171,10 @@ static const ss22_input_game pp_input = {
     .light_gun = false,                            /* no gun: the Display page leaves out the crosshair rows */
 };
 
-static int pp_wide_stretch(int model) { return model == 2457; }   /* UFO Panic's night sky, a flat 4:3 picture (include/s23_game.h wide_stretch) */
+/* Models widened to the full 16:9 width (widescreen only, include/s23_game.h wide_stretch):
+   2457 = UFO Panic's night sky, a flat 4:3 picture;
+   1543..1546 = the stone frame of the Panic King attract screens (the PANIC KING logo is carved in it). */
+static int pp_wide_stretch(int model) { return model == 2457 || (model >= 1543 && model <= 1546); }
 
 const s23_game_t s23_game = {
     .title = "Panic Park", .tag = "panicprk", .window_title = "Panic Park", .mame_set = "panicprk",
