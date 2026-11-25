@@ -173,8 +173,9 @@ static const ss22_input_game pp_input = {
 
 /* Models widened to the full 16:9 width (widescreen only, include/s23_game.h wide_stretch):
    2457 = UFO Panic's night sky, a flat 4:3 picture;
-   1543..1546 = the stone frame of the Panic King attract screens (the PANIC KING logo is carved in it). */
-static int pp_wide_stretch(int model) { return model == 2457 || (model >= 1543 && model <= 1546); }
+   1541..1548 = the stone frame of the Panic King attract screens (the PANIC KING logo is carved in it): an 8-step animation,
+   one model every 4 frames, so all eight are needed or the frame flips between 16:9 and 4:3 ($S23_MODELSEEN lists them). */
+static int pp_wide_stretch(int model) { return model == 2457 || (model >= 1541 && model <= 1548); }
 
 const s23_game_t s23_game = {
     .title = "Panic Park", .tag = "panicprk", .window_title = "Panic Park", .mame_set = "panicprk",

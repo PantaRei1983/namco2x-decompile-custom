@@ -736,6 +736,12 @@ static void build(s23_built *b)
     for (int i = 0; i < GNPOLY; i++) b->order[i] = (uint32_t)i;
     SORTB = b; qsort(b->order, (size_t)GNPOLY, sizeof b->order[0], cmp_poly);
     if (!building_mid) zfight_report(b);
+    static int modelseen = -1; if (modelseen < 0) modelseen = getenv("S23_MODELSEEN") != NULL;
+    if (!building_mid && modelseen) { static uint8_t seen[8192];   /* $S23_MODELSEEN: each model number the first time it is drawn, with its entry */
+      extern uint32_t rr_frame;
+      for (int k = 0; k < fs->list.count; k++) { const s23_render_entry *e = &fs->list.e[k];
+          if (e->type == S23_RE_MODEL && e->model >= 0 && e->model < 8192 && !seen[e->model]) { seen[e->model] = 1;
+              fprintf(stderr, "[SEEN] frame %u entry %d model %d ap %d v %d %d %d m0 %d vp %d,%d\n", rr_frame, k, e->model, e->absolute_priority, e->v[0], e->v[1], e->v[2], e->m[0], e->vp_size_x, e->vp_size_y); } } }
     if (!building_mid) { static long want = -2, built; static int by_frame; if (want == -2) { S23_SS_ENV(want); S23_SS_ENV(by_frame); const char *e = getenv("S23_POLYDUMP"); by_frame = e && *e == 'f'; want = e ? atol(e + by_frame) : -1; }
       extern uint32_t rr_frame; ++built;
       if (by_frame ? (long)rr_frame == want : built == want) {   /* $S23_POLYDUMP=n: every polygon of the n-th built frame in draw order (f<n>: of game frame n) */
