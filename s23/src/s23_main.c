@@ -281,6 +281,9 @@ void s23_on_vblank(uint32_t frame)
       if (rt < 0) { const char *e = getenv("S23_REALTIME"); rt = e != NULL; hz = 59.906 * (e && atof(e) > 0.5 ? atof(e) : 1.0); t0 = SDL_GetPerformanceCounter(); }
       if (rt) { const uint64_t f = SDL_GetPerformanceFrequency(), due = t0 + (uint64_t)((double)frame * (double)f / hz);
                 for (uint64_t now; (now = SDL_GetPerformanceCounter()) < due; ) if (due - now > f / 500) SDL_Delay(1); } }
+    { static int pk = -2; static unsigned pa, pv, pf, pt;   /* $S23_POKE=addr:value@from-to (tests): a 32-bit word of main RAM set every frame in the range */
+      if (pk == -2) { S23_SS_ENV(pk); pk = -1; const char *e = getenv("S23_POKE"); if (e && sscanf(e, "%x:%x@%u-%u", &pa, &pv, &pf, &pt) == 4) pk = 1; }
+      if (pk > 0 && frame >= pf && frame <= pt) { const unsigned o = pa & 0xFFFFFC; s23_ram[o] = (uint8_t)(pv >> 24); s23_ram[o + 1] = (uint8_t)(pv >> 16); s23_ram[o + 2] = (uint8_t)(pv >> 8); s23_ram[o + 3] = (uint8_t)pv; } }
     { static int rf = -2, rt, re; static char rd[512];        /* $S23_RAMDUMP=dir:from-to:every (tests, our fork): the first 4 MB of RAM, r<frame>.bin */
       if (rf == -2) { S23_SS_ENV(rf); rf = -1; const char *e = getenv("S23_RAMDUMP"); if (e) { snprintf(rd, sizeof rd, "%s", e); char *c = strrchr(rd, ':'); char *c2 = c ? (*c = 0, strrchr(rd, ':')) : NULL;
                       if (c && c2) { *c2 = 0; re = atoi(c + 1); if (sscanf(c2 + 1, "%d-%d", &rf, &rt) != 2) rf = -1; } } }

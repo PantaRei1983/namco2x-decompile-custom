@@ -100,6 +100,9 @@ typedef struct {
     int depth_within;                             /* 2 = exact depth always, between models too (Rapid River: the pyramid's inner door, the wake's foam inside the raft);
                                                    * 1 = exact depth between one model's own polygons, always (the menu's Depth adds other models; forcing that on lost the Nile gate's roof) (Rapid River: the Nile gate's sloping
                                                    * sand, part of the wall's model, sorted over the wall's foot -- yellow wedges the arcade does not show) */
+    int (*wide_stretch)(int model);              /* widescreen: 1 = this model is a flat backdrop painted for the 4:3 screen -- stretched sideways to fill the wide
+                                                   * one instead of leaving black bars (Panic Park: UFO Panic's night sky). Only such pictures: a 3D scene gets
+                                                   * Hor+ (more world at the sides), never stretched */
     int no_depth;                                 /* 1 = Display > Depth "exact" is not offered and stays off (Panic Park: the game orders its pictures itself --
                                                    * the title letters, the Panic King scores, the RULE pictures -- and exact depth undid it) */
     int depth_default;                            /* Display > Depth when tc2.cfg has no choice yet: 1 = "exact" (Time Crisis 2), 0 = the arcade's order.

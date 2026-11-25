@@ -417,6 +417,10 @@ static int fill_vertices(const s23_built *b)
         const int ct = (240 - p->vp_size_y) - p->vp_offset_y, cb = (240 + p->vp_size_y) - p->vp_offset_y;
         /* widescreen (Hor+): a viewport that fills the 4:3 screen fills the wide one -- same camera, more world at the sides */
         const int full = ex && cl <= 0 && cr >= 640 && !p->clip43;
+        static int wsl[16], wsn = -1; if (wsn < 0) { wsn = 0; const char *ew = getenv("S23_WIDESTRETCH"); while (ew && *ew && wsn < 16) { wsl[wsn++] = atoi(ew); ew = strchr(ew, ','); if (ew) ew++; } }   /* tests: model numbers */
+        int wst = full && p->model >= 0 && s23_game.wide_stretch && s23_game.wide_stretch(p->model);
+        for (int q = 0; q < wsn && full && !wst; q++) if (p->model == wsl[q]) wst = 1;
+        const float stretch = wst ? (320.0f + (float)ex) / 320.0f : 1.0f;   /* (s23_game.h wide_stretch) */
         const int ccl = full ? -ex : cl, ccr = full ? 640 + ex : cr;
         const float flags = (float)(p->stencil | p->blend << 1 | p->alpha_enabled << 2 | (p->prioverchar & 7) << 3 | (p->boost != 0) << 6 | p->fog << 7 | p->role << 8 | p->flat << 10 | p->nodepth << 11);   /* bits 8-9: s23_game.depth_role; bit 10: a screen-flat polygon (s23_poly.flat: direct, or an immediate at one depth): the 3D texture filter leaves it sharp; bit 11: no depth of its own (s23_poly.nodepth): out of exact depth */   /* bit 7: the author's depth fog (bit 6 is our boost) */
         /* the polygon's uv box for the bilinear filters (fs_poly): the first texel and the last one the board shows (texel floor(u) for u
@@ -446,7 +450,7 @@ static int fill_vertices(const s23_built *b)
             for (int j = 0; j < 3; j++) {
                 const s23_pvert *v = &p->pv[tri[j]];
                 const float ooz = v->p[0] != 0 ? v->p[0] : 1e-30f, w = 1.0f / ooz;
-                const float sx = v->x + (float)cl, sy = v->y + (float)ct;
+                const float sx = 320.0f + (v->x + (float)cl - 320.0f) * stretch, sy = v->y + (float)ct;
                 *o++ = ((sx + (float)ex) / (320.0f + (float)ex) - 1.0f) * w; *o++ = (sy / 240.0f - 1.0f) * w; *o++ = 0; *o++ = w;
                 *o++ = v->p[1] * w; *o++ = v->p[2] * w; *o++ = v->p[3] * w;
                 *o++ = (float)p->color_base; *o++ = (float)p->cmode; *o++ = (float)p->tbase; *o++ = flags;

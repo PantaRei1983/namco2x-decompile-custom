@@ -171,6 +171,8 @@ static const ss22_input_game pp_input = {
     .light_gun = false,                            /* no gun: the Display page leaves out the crosshair rows */
 };
 
+static int pp_wide_stretch(int model) { return model == 2457; }   /* UFO Panic's night sky, a flat 4:3 picture (include/s23_game.h wide_stretch) */
+
 const s23_game_t s23_game = {
     .title = "Panic Park", .tag = "panicprk", .window_title = "Panic Park", .mame_set = "panicprk",
     .zip_help = "MAME's panicprk.zip (Panic Park, World PNP2 Ver. A) and namco_asca3a.zip",
@@ -181,7 +183,7 @@ const s23_game_t s23_game = {
                                                    * the background objects flickered in front of / behind each other) */
     .zoff_state = 6,                              /* state 9: a signed depth offset (title letters, Panic King scores, the practice's castle) (include/s23_game.h) */
     .vp_front0 = 1,                               /* the PANIC PARK plate over the monitor's NEEDED picture, as TeknoParrot shows it (include/s23_game.h) */
-    .null_model = 0x6EF,
+    .null_model = 0x6EF, .wide_stretch = pp_wide_stretch,
     .direct_v_shift = -1,                         /* the namco logo red, as the arcade's (include/s23_game.h) */
     .no_depth = 1,                                /* Display > Depth not offered: exact depth hid the title letters (include/s23_game.h) */
     .depth_within = 1,                            /* exact depth inside one model always: the INTERACTIVE CONTROLS close-up's red player showed his inside
