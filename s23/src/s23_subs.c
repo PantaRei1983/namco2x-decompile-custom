@@ -38,7 +38,8 @@ static int ntab, loaded, mode = 2;                      /* "subtitles" in the cf
 
 typedef struct { uint32_t hash; int r0, c0, r1, c1; } blk;
 static blk cur[MAXBLK], prev[MAXBLK]; static int ncur, nprev;
-static int stable;                                       /* frames the block set has been the same */
+static int age[MAXBLK], prev_age[MAXBLK];               /* frames each block has stayed the same (per block: a counter changing
+                                                           elsewhere on screen, e.g. the line length in a fight, must not hold it back) */
 static SDL_mutex *lock;
 static blk shown[MAXBLK]; static const char *shown_text[MAXBLK]; static int nshown;   /* what the layer draws (under lock) */
 
@@ -399,13 +400,12 @@ void s23_subs_frame(uint32_t frame)
     if (ld < 0) { logdir = getenv("S23_SUBLOG"); ld = 1; }
     const uint8_t *cg = s23_vram_ptr(0x06800000u), *tm = s23_vram_ptr(0x0681E000u);
     ncur = find_blocks(cg, tm, cur, MAXBLK);
-    int same = ncur == nprev;
-    for (int i = 0; same && i < ncur; i++) same = cur[i].hash == prev[i].hash;
-    stable = same ? stable + 1 : 0;
-    memcpy(prev, cur, sizeof cur); nprev = ncur;
-    if (stable == 10 && logdir) {                       /* a caption that stays: log it if the table does not have it */
+    for (int i = 0; i < ncur; i++) { age[i] = 0; for (int k = 0; k < nprev; k++) if (prev[k].hash == cur[i].hash) { age[i] = prev_age[k] + 1; break; } }
+    memcpy(prev, cur, sizeof cur); memcpy(prev_age, age, sizeof age); nprev = ncur;
+    if (logdir) {                       /* a caption that stays: log it if the table does not have it */
         static uint32_t logged[1024]; static int nlog;
         for (int i = 0; i < ncur; i++) {
+			if (age[i] != 10) continue;
             int had = find(cur[i].hash) != NULL;
             for (int k = 0; k < nlog && !had; k++) had = logged[k] == cur[i].hash;
             if (had) continue;
@@ -417,7 +417,7 @@ void s23_subs_frame(uint32_t frame)
     if (lock) {
         SDL_LockMutex(lock);
         nshown = 0;
-        if (stable >= 2) for (int i = 0; i < ncur; i++) { const char *t = find(cur[i].hash); if (t) { shown[nshown] = cur[i]; shown_text[nshown] = t; nshown++; } }
+        for (int i = 0; i < ncur; i++) { const char *t = age[i] >= 2 ? find(cur[i].hash) : NULL; if (t) { shown[nshown] = cur[i]; shown_text[nshown] = t; nshown++; } }
         SDL_UnlockMutex(lock);
     }
 }
