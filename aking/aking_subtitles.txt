@@ -46,7 +46,7 @@ E936EDA5  Hunt the giant monster fish|in the ancient ruins of the Amazon!!
 196000FA  Death match in the southern seas!
 699619EB  Catch the man-eating shark by the giant|battleship sleeping on the sea floor!!
 7483DF1C  -
-E6F6D77E  South Atlantic, Solomon Sea
+E6F6D77E  South Pacific, Solomon Sea
 0D5A365A  -
 489FD620  Here's your next target!
 7E504AA3  Just 5 more fish to conquer the world!!
@@ -104,3 +104,11 @@ DD787649  Where no one has gone before!
 88FCF596  catch the giant ancient fish!!
 3AFA24AE  Comoro Islands, the undersea cave
 FDF2CE61  Marlin
+
+# --- added 2026-11-24: fight hints (logged once captions were timed one by one), stage 2 HUD, world rank on the results
+86D584B2  Now's your chance to reel in!
+90156CFF  You pulled too early!
+F3F05315  The line's running out!|Raise the rod!
+30D03D23  !Stage 2 + lure appeal meter
+89B34FB8  World rank
+F947BCB1  -
