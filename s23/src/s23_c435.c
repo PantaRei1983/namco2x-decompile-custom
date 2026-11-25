@@ -190,7 +190,7 @@ static void state_set(uint16_t type, const uint16_t *p, uint16_t header)
     switch (type) {
     case 0x0000: case 0x0002: case 0x000A: immediate(type, p, header); break;
     case 0x0001: s23_irq_set(S23_SRC_C435, p[0] & 1); break;
-    case 0x0009: zoff = (int32_t)(L(p, 15) & 0x1FFFFF); break;   /* (MAME: unknown) a word, six 1.0s, 0, a depth, 0x1FFFFF. Panic Park sends it after
+    case 0x0009: zoff = (int32_t)(L(p, 15) & 0x1FFFFF); if (s23_c435_seg >= 1 && s23_c435_seg <= 64) s23_render[s23_render_cur].seg_zoff[s23_c435_seg - 1] = zoff; break;   /* (MAME: unknown) a word, six 1.0s, 0, a depth, 0x1FFFFF. Panic Park sends it after
                                                    * each "model 0" stretch break: 0 for the title's island picture, 0x3A628 for its PANIC PARK letters
                                                    * (behind the island by depth, over it on the arcade) -- how it is used: s23_game.zoff_state */
     case 0x0046: {
@@ -256,7 +256,8 @@ static void render_model(void)                    /* 8: a model of the point ROM
     memcpy(e->v, getv(b[size]), sizeof e->v);
     memcpy(e->light_vector, light_vector, sizeof e->light_vector);
     if (s23_game.null_model && e->model == s23_game.null_model) null_at = (rr_frame + 1) * 256u + (uint32_t)(s23_c435_seg & 255);
-    if (s23_game.window_memory && !(s23_game.null_model && e->model == s23_game.null_model)) {   /* (s23_game.h window_memory) */
+    static int wmem = -1; if (wmem < 0) { S23_SS_ENV(wmem); const char *ew = getenv("S23_WINMEM"); wmem = ew ? atoi(ew) : s23_game.window_memory; }
+    if (wmem && !(s23_game.null_model && e->model == s23_game.null_model)) {   /* (s23_game.h window_memory) */
         static struct { uint32_t last, real, real_last; int16_t sx, sy, ox, oy; float fov; uint16_t prio; } wm[0x1000];
         const int full = e->vp_size_x == 320 && e->vp_size_y == 240 && !e->vp_offset_x && !e->vp_offset_y;
         typeof(&wm[0]) w = &wm[e->model & 0xFFF];

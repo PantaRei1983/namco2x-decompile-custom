@@ -32,6 +32,7 @@ typedef struct { int16_t x, y, w, h; uint32_t rgb; const uint8_t *a; } s23_mask;
 /* and up to 2 TEXT-LAYER SHIFTS (widescreen HUD, the GPU picture): text pixels in x0..x1, y0..y1 (the 640 x 480 layer) are drawn dx board pixels
  * over -- a game's HUD counters slide out with their 3D panels (Gunmen Wars' list hook) */
 typedef struct { int count; int nrect; s23_rect rect[S23_RECTS]; int nmask; s23_mask mask[S23_MASKS]; int ntshift; int16_t tshift[2][5]; int ntstretch; int16_t tstretch[2][4]; uint8_t pillar_fade; int img_on; int16_t img_x0, img_y0, img_x1, img_y1; uint32_t img[128 * 128];
+                 int32_t seg_zoff[64];   /* state type 9's depth, written when stretch k + 1 began: stretch k's (s23_game.zoff_state 5) */
                  s23_render_entry e[S23_RENDER_MAX]; } s23_render_list;
 extern s23_render_list s23_render[2];
 extern int s23_render_cur;

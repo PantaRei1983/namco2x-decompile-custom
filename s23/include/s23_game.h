@@ -73,9 +73,9 @@ typedef struct {
                                                    * direct quad that samples ONE texel of the text palette's colour swatch (tile 0x6C0, v 0x6CF0) -- row F is white,
                                                    * the arcade's logo is red: row E (FF0000) */
     int zoff_state;                               /* the C435's state type 9 (MAME: unknown; six 1.0s, then a depth and 0x1FFFFF), sent after a "model 0" break:
-                                                   * 3 = its depth SCALES what follows (z * d / 0x1FFFFF). Panic Park: the title's PANIC PARK letters
-                                                   * (z 18656-26675, d 0x3A628) come out at 2100-3000, over the island picture (z 4352), their own layers in
-                                                   * order (subtracting it clamped them all to 0 -- the black outlines over the colours) ($S23_ZOFFMODE) */
+                                                   * 2 = its depth is ADDED to what follows (Panic Park: the practice road's castle gate in front of the
+                                                   * volcano and the ferris wheel, as TeknoParrot shows it). Tried and wrong there: 3 scales (z * d /
+                                                   * 0x1FFFFF), 5 adds it to the stretch BEFORE the block ($S23_ZOFFMODE) */
     int vp_front0;                                /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is drawn over every other (Panic Park: the PANIC
                                                    * PARK plate, 0x20, swinging in over the monitor's NEEDED picture, 0x27, which is nearer by depth -- the plate
                                                    * covers it in TeknoParrot and on the arcade) ($S23_VPPRIO=5) */
@@ -92,6 +92,8 @@ typedef struct {
                                                    * frame after frame and the game sends no window (Panic Park's RULE and NEEDED monitor pictures: the window
                                                    * comes every other frame, then not at all for seconds -- drawn full size in between, twice as large, off the
                                                    * monitor) */
+    int (*model_far)(int model);                  /* 1 = this model is a picture drawn behind everything (zsort 0x1FFFFF): Panic Park's title island, a flat
+                                                   * quad at z 4352 that the PANIC PARK letters (pushed back by state 9) must cover, as on the arcade */
     int null_model;                               /* window_memory: a model the game sends as a marker, in every stretch, with no polygons (Panic Park 0x6EF) --
                                                    * left out of it, or one window spread to the whole list (the monitor itself drawn shrunk) */
     int seg_order;                                /* 1 = the render list's STRETCHES (split by the C435-interrupt "model 0" the game sends between them) are drawn in

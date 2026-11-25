@@ -83,8 +83,9 @@ static uint8_t pp_asca_in(int n, int test_on)
     }
 }
 
-/* the two joysticks: a pad's stick as it is; a key drives the stick to that side (MAME's PORT_KEYDELTA 2560 a frame would take 13 frames
- * to the stop -- a sprung arcade stick snaps, so 4) and it springs back to the centre when let go */
+/* the two levers (analogue, 10-bit A/D): a pad's stick as it is, from just outside a small dead zone (the whole travel, every point of it);
+ * a key moves the lever steadily towards that side -- about a third of a second to the stop -- and it comes back to the centre at the
+ * same pace when let go, so a tap gives a small step (it jumped from stop to stop in 4 frames: no positions in between) */
 static SDL_GameController *pads[2];
 static int pad_x[2];                               /* the sticks read with the keys: [0] player 1, [1] player 2 (-32768..32767, 0 = none) */
 static uint16_t stick[2] = { 0x8000, 0x8000 };
@@ -98,7 +99,9 @@ static int pp_pad_axis(int i, SDL_GameControllerAxis ax)
         if (!pads[i]) return 0;
     }
     const int v = SDL_GameControllerGetAxis(pads[i], ax);
-    return v > -8000 && v < 8000 ? 0 : v;
+    const int dz = 2500;                           /* the dead zone, then the rest of the travel spread over the whole range */
+    if (v > -dz && v < dz) return 0;
+    return v > 0 ? (int)((long)(v - dz) * 32767 / (32767 - dz)) : -(int)((long)(-v - dz) * 32767 / (32768 - dz));
 }
 static void pp_stick_frame(void)
 {
@@ -115,7 +118,7 @@ static void pp_stick_frame(void)
         if (target > 0xFFFF) target = 0xFFFF;
         if (pad_x[p] && l == r) { stick[p] = (uint16_t)target; continue; }   /* a stick: where it is */
         int v = stick[p];
-        const int step = 0x2000;
+        const int step = 0x0C00;
         v += target > v ? (target - v < step ? target - v : step) : -(v - target < step ? v - target : step);
         stick[p] = (uint16_t)v;
     }
@@ -168,16 +171,19 @@ static const ss22_input_game pp_input = {
     .light_gun = false,                            /* no gun: the Display page leaves out the crosshair rows */
 };
 
+static int pp_model_far(int model) { return model == 0x6C9; }   /* the title's island picture (include/s23_game.h model_far) */
+
 const s23_game_t s23_game = {
     .title = "Panic Park", .tag = "panicprk", .window_title = "Panic Park", .mame_set = "panicprk",
     .zip_help = "MAME's panicprk.zip (Panic Park, World PNP2 Ver. A) and namco_asca3a.zip",
     .zips = zips, .nzips = 2, .chips = chips, .nchips = (int)(sizeof chips / sizeof chips[0]),
     .io_asca = 1, .asca_in = pp_asca_in, .input = &pp_input,
-    .zoff_state = 3,                              /* the title's letters over the island picture (include/s23_game.h) */
+    .irq_prompt = 1,                              /* the C435's "model 0" interrupt taken at once, as on the board: its handler writes the next stretch's
+                                                   * state before the main loop sends that stretch's models (it came a model or two late, every few frames:
+                                                   * the background objects flickered in front of / behind each other) */
+    .zoff_state = 2,                              /* state 9's depth pushes its stretch back: the practice's castle gate in front of the volcano (include/s23_game.h) */
     .vp_front0 = 1,                               /* the PANIC PARK plate over the monitor's NEEDED picture, as TeknoParrot shows it (include/s23_game.h) */
-    .window_memory = 1,                           /* the RULE and NEEDED pictures kept inside the monitor (include/s23_game.h) */
-    .null_model = 0x6EF,
-    .win_zref = 555.375f, .win_zref_from = 2,     /* the NEEDED picture's ball in front of the monitor's face (include/s23_game.h) */
+    .null_model = 0x6EF, .model_far = pp_model_far,
     .direct_v_shift = -1,                         /* the namco logo red, as the arcade's (include/s23_game.h) */
     .depth_within = 1,                            /* exact depth inside one model always: the INTERACTIVE CONTROLS close-up's red player showed his inside
                                                    * (the back of his head over the front) -- painter order within a model */

@@ -220,10 +220,12 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
 		if (s23_game.ap_wrap && e->type == S23_RE_MODEL) ap &= 7;   /* models only (include/s23_game.h ap_wrap) */
     }
     { static int zm = -1; if (zm < 0) { S23_SS_ENV(zm); const char *ez = getenv("S23_ZOFFMODE"); zm = ez ? atoi(ez) : s23_game.zoff_state; }   /* (s23_game.h
-       * zoff_state) the C435's state 9 depth: 3 scales (Panic Park); tests: 1 subtracts, 2 adds, 4 maps 0..0x1FFFFF onto it..0x1FFFFF */
+       * zoff_state) the C435's state 9 depth: 2 adds (Panic Park); tests: 1 subtracts, 3 scales, 4 maps 0..0x1FFFFF onto it..0x1FFFFF, 5 adds it to the stretch before */
       if (zm == 1) zsort -= e->zoff; else if (zm == 2) zsort += e->zoff;
       else if (zm == 3 && e->zoff) zsort = (int)((int64_t)zsort * e->zoff / 0x1FFFFF);
-      else if (zm == 4) zsort = e->zoff + (int)((int64_t)zsort * (0x1FFFFF - e->zoff) / 0x1FFFFF); }
+      else if (zm == 4) zsort = e->zoff + (int)((int64_t)zsort * (0x1FFFFF - e->zoff) / 0x1FFFFF);
+      else if (zm == 5 && e->seg < 64) zsort += FS->list.seg_zoff[e->seg]; }
+    if (s23_game.model_far && e->type == S23_RE_MODEL && s23_game.model_far(e->model)) zsort = 0x1FFFFF;   /* (s23_game.h model_far) */
     { static float zr = -1.f; if (zr < 0.f) { S23_SS_ENV(zr); const char *er = getenv("S23_WINZREF"); zr = er ? (float)atof(er) : s23_game.win_zref; }   /* (s23_game.h win_zref) */
       if (zr > 0.f && e->seg >= s23_game.win_zref_from && e->vp_fov > 0.f && e->vp_fov < zr) zsort = (int)((float)zsort * e->vp_fov / zr); }
     if (zsort < 0) zsort = 0;
@@ -1171,6 +1173,7 @@ void s23_render_frame_end(void)
     s23_render_list *l = &s23_render[!s23_render_cur];   /* MAME draws the list filled the frame BEFORE (one frame behind) */
     snap->list.count = l->count;
     memcpy(snap->list.e, l->e, sizeof l->e[0] * (size_t)l->count);
+    memcpy(snap->list.seg_zoff, l->seg_zoff, sizeof l->seg_zoff);
     snap->list.nrect = 0; snap->list.img_on = 0; snap->list.nmask = 0; snap->list.ntshift = 0; snap->list.ntstretch = 0; snap->list.pillar_fade = 0;
     snap->nspr = s23_game.gorgon && sprrom && (snap->c404[2 * 0x1F + 1] & 2) ? s23_game.gorgon->sprites(snap->spr, 0x280) : 0;   /* C404 layer bit 1: sprites */
     { /* WIDESCREEN SPRITES (Rapid River): a picture covering the 4:3 screen (title, route map) -> s23_spr_fullpic, the game's hud_wide_ok
@@ -1247,6 +1250,7 @@ void s23_render_frame_end(void)
     s23_render_frames++;
     s23_render_cur = !s23_render_cur;
     s23_render[s23_render_cur].count = 0;
+    memset(s23_render[s23_render_cur].seg_zoff, 0, sizeof s23_render[s23_render_cur].seg_zoff);
     s23_c435_seg = 0; s23_c435_fov_max = 0.f; s23_c435_fov_plain = 0;
     pthread_mutex_lock(&mu); busy = 1; pthread_cond_broadcast(&cv); pthread_mutex_unlock(&mu);
 }
