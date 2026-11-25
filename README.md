@@ -129,8 +129,9 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   The lever is analogue: a pad's stick gives every position, a key moves it steadily and lets it come back to the centre.
   Fixed against the arcade footage and the TeknoParrot longplay: the C435 interrupt is now taken at once, as on the board
   (its handler sends the next part of the frame's state, which came late every few frames: heavy polygon flicker after the
-  coins / START); the C435's state 9 (unknown to MAME) read as a depth that pushes its part of the list back (the practice's
-  castle gate, the title's big PANIC PARK letters over the island picture); the red namco logo; the monitor's RULE and NEEDED
+  coins / START); the C435's state 9 (unknown to MAME) read as a signed depth offset for its part of the list (the practice's
+  castle gate, the title's big PANIC PARK letters over the island, the Panic King's scores in their cans); Display > Depth
+  "exact" is not offered here (it undid the game's own order); the red namco logo; the monitor's RULE and NEEDED
   pictures (an unnormalised clip window that overflowed MAME's viewport); the PANIC PARK plate swinging in over the monitor;
   exact depth inside a model (the close-ups).
 - **Rapid River and Gunmen Wars build on Linux in one step:** `rapidrvr/build.sh` and `gunwars/build.sh` (new) unpack the ROM

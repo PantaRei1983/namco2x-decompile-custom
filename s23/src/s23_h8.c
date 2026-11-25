@@ -93,6 +93,7 @@ static uint8_t bcd(int v) { return (uint8_t)((v / 10) << 4 | v % 10); }
 static void rtc_latch(void)
 {
     const time_t t = time(NULL); struct tm tm; localtime_r(&t, &tm);
+    { const char *em = getenv("S23_RTC_MONTH"); if (em && atoi(em) >= 1 && atoi(em) <= 12) tm.tm_mon = atoi(em) - 1; }   /* tests: the month (Panic Park's king stage of the month) */
     static const int wd[7] = { 7, 1, 2, 3, 4, 5, 6 };
     rtc_bits = (uint64_t)bcd(tm.tm_sec) | (uint64_t)bcd(tm.tm_min) << 8 | (uint64_t)bcd(tm.tm_hour) << 16 | (uint64_t)(wd[tm.tm_wday] & 15) << 24
              | (uint64_t)bcd(tm.tm_mday) << 28 | (uint64_t)bcd(tm.tm_mon + 1) << 36 | (uint64_t)bcd(tm.tm_year % 100) << 44;

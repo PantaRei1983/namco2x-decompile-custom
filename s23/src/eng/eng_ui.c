@@ -71,7 +71,7 @@ int s23_smooth_on(void); void s23_smooth_set(int on);   /* src/s23_render.c: mot
 extern int s23_out_net, s23_out_rumble, s23_out_lamps;                  /* src/s23_out.c: the recoil outputs */
 void s23_out_set_net(int on), s23_out_set_rumble(int on), s23_out_set_lamps(int on);
 extern int s23_pic_c404, s23_pic_gamma, s23_pic_bright;   /* src/s23_render.c: the picture adjustments */
-extern int s23_first_person; int s23_game_has_view(void); int s23_game_mounted_gun(void); int s23_game_no_smooth(void); int s23_game_has_fx(void);   /* src/s23_render.c: Gunmen Wars' fighter view */
+extern int s23_first_person; int s23_game_has_view(void); int s23_game_mounted_gun(void); int s23_game_no_smooth(void); int s23_game_no_depth(void); int s23_game_has_fx(void);   /* src/s23_render.c: Gunmen Wars' fighter view */
 static void bar(char *v, size_t vn, int val, int lo, int hi, const char *txt)   /* "[######----] txt": where val sits in lo..hi */
 {
     char b[11]; const int k = (val - lo) * 10 / (hi - lo);
@@ -89,6 +89,7 @@ static int disp_n(void)
     for (int d = 0; d < D_N; d++) {
         if (d == D_VIEW && !s23_game_has_view()) continue;
         if (d == D_SMOOTH && s23_game_no_smooth()) continue;
+        if (d == D_DEPTH && s23_game_no_depth()) continue;
         if (d == D_FX && !s23_game_has_fx()) continue;                 /* (only a game that names its effect sprites: Rapid River) */          /* (off for good in this game) */
         if (d >= D_CROSS && !g_eng_disp_light_gun) continue;
         if (d >= D_FLASH && s23_game_mounted_gun()) continue;

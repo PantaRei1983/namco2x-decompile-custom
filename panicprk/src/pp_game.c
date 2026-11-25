@@ -171,8 +171,6 @@ static const ss22_input_game pp_input = {
     .light_gun = false,                            /* no gun: the Display page leaves out the crosshair rows */
 };
 
-static int pp_model_far(int model) { return model == 0x6C9; }   /* the title's island picture (include/s23_game.h model_far) */
-
 const s23_game_t s23_game = {
     .title = "Panic Park", .tag = "panicprk", .window_title = "Panic Park", .mame_set = "panicprk",
     .zip_help = "MAME's panicprk.zip (Panic Park, World PNP2 Ver. A) and namco_asca3a.zip",
@@ -181,10 +179,11 @@ const s23_game_t s23_game = {
     .irq_prompt = 1,                              /* the C435's "model 0" interrupt taken at once, as on the board: its handler writes the next stretch's
                                                    * state before the main loop sends that stretch's models (it came a model or two late, every few frames:
                                                    * the background objects flickered in front of / behind each other) */
-    .zoff_state = 2,                              /* state 9's depth pushes its stretch back: the practice's castle gate in front of the volcano (include/s23_game.h) */
+    .zoff_state = 6,                              /* state 9: a signed depth offset (title letters, Panic King scores, the practice's castle) (include/s23_game.h) */
     .vp_front0 = 1,                               /* the PANIC PARK plate over the monitor's NEEDED picture, as TeknoParrot shows it (include/s23_game.h) */
-    .null_model = 0x6EF, .model_far = pp_model_far,
+    .null_model = 0x6EF,
     .direct_v_shift = -1,                         /* the namco logo red, as the arcade's (include/s23_game.h) */
+    .no_depth = 1,                                /* Display > Depth not offered: exact depth hid the title letters (include/s23_game.h) */
     .depth_within = 1,                            /* exact depth inside one model always: the INTERACTIVE CONTROLS close-up's red player showed his inside
                                                    * (the back of his head over the front) -- painter order within a model */
     .twin = 0, .evo2 = 0,

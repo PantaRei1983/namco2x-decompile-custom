@@ -73,9 +73,10 @@ typedef struct {
                                                    * direct quad that samples ONE texel of the text palette's colour swatch (tile 0x6C0, v 0x6CF0) -- row F is white,
                                                    * the arcade's logo is red: row E (FF0000) */
     int zoff_state;                               /* the C435's state type 9 (MAME: unknown; six 1.0s, then a depth and 0x1FFFFF), sent after a "model 0" break:
-                                                   * 2 = its depth is ADDED to what follows (Panic Park: the practice road's castle gate in front of the
-                                                   * volcano and the ferris wheel, as TeknoParrot shows it). Tried and wrong there: 3 scales (z * d /
-                                                   * 0x1FFFFF), 5 adds it to the stretch BEFORE the block ($S23_ZOFFMODE) */
+                                                   * 6 = an 18-bit SIGNED depth offset, added to what follows. Panic Park's are round numbers: +20000 (the
+                                                   * practice road's volcano, behind the castle gate as in TeknoParrot), -500 (the Panic King cans' score
+                                                   * digits, in front of the can), -5000 (the gate's sign), -23000 (the title's PANIC PARK letters, in front
+                                                   * of the island). Read unsigned (add, scale) each got one scene wrong ($S23_ZOFFMODE) */
     int vp_front0;                                /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is drawn over every other (Panic Park: the PANIC
                                                    * PARK plate, 0x20, swinging in over the monitor's NEEDED picture, 0x27, which is nearer by depth -- the plate
                                                    * covers it in TeknoParrot and on the arcade) ($S23_VPPRIO=5) */
@@ -92,8 +93,6 @@ typedef struct {
                                                    * frame after frame and the game sends no window (Panic Park's RULE and NEEDED monitor pictures: the window
                                                    * comes every other frame, then not at all for seconds -- drawn full size in between, twice as large, off the
                                                    * monitor) */
-    int (*model_far)(int model);                  /* 1 = this model is a picture drawn behind everything (zsort 0x1FFFFF): Panic Park's title island, a flat
-                                                   * quad at z 4352 that the PANIC PARK letters (pushed back by state 9) must cover, as on the arcade */
     int null_model;                               /* window_memory: a model the game sends as a marker, in every stretch, with no polygons (Panic Park 0x6EF) --
                                                    * left out of it, or one window spread to the whole list (the monitor itself drawn shrunk) */
     int seg_order;                                /* 1 = the render list's STRETCHES (split by the C435-interrupt "model 0" the game sends between them) are drawn in
@@ -101,6 +100,8 @@ typedef struct {
     int depth_within;                             /* 2 = exact depth always, between models too (Rapid River: the pyramid's inner door, the wake's foam inside the raft);
                                                    * 1 = exact depth between one model's own polygons, always (the menu's Depth adds other models; forcing that on lost the Nile gate's roof) (Rapid River: the Nile gate's sloping
                                                    * sand, part of the wall's model, sorted over the wall's foot -- yellow wedges the arcade does not show) */
+    int no_depth;                                 /* 1 = Display > Depth "exact" is not offered and stays off (Panic Park: the game orders its pictures itself --
+                                                   * the title letters, the Panic King scores, the RULE pictures -- and exact depth undid it) */
     int depth_default;                            /* Display > Depth when tc2.cfg has no choice yet: 1 = "exact" (Time Crisis 2), 0 = the arcade's order.
                                                    * Crisis Zone 0: with "exact" its hotel scene (frame 2280) loses the sky (the background colour shows where
                                                    * coverage proves the sky polygons drawn) and gains black bands top and bottom -- cause not found yet (NOT

@@ -220,12 +220,13 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
 		if (s23_game.ap_wrap && e->type == S23_RE_MODEL) ap &= 7;   /* models only (include/s23_game.h ap_wrap) */
     }
     { static int zm = -1; if (zm < 0) { S23_SS_ENV(zm); const char *ez = getenv("S23_ZOFFMODE"); zm = ez ? atoi(ez) : s23_game.zoff_state; }   /* (s23_game.h
-       * zoff_state) the C435's state 9 depth: 2 adds (Panic Park); tests: 1 subtracts, 3 scales, 4 maps 0..0x1FFFFF onto it..0x1FFFFF, 5 adds it to the stretch before */
+       * zoff_state) the C435's state 9 depth: 6 = signed, added (Panic Park); tests: 1 subtracts, 2 adds unsigned, 3 scales, 4 maps 0..0x1FFFFF onto it..0x1FFFFF, 5 adds to the stretch before */
       if (zm == 1) zsort -= e->zoff; else if (zm == 2) zsort += e->zoff;
       else if (zm == 3 && e->zoff) zsort = (int)((int64_t)zsort * e->zoff / 0x1FFFFF);
       else if (zm == 4) zsort = e->zoff + (int)((int64_t)zsort * (0x1FFFFF - e->zoff) / 0x1FFFFF);
-      else if (zm == 5 && e->seg < 64) zsort += FS->list.seg_zoff[e->seg]; }
-    if (s23_game.model_far && e->type == S23_RE_MODEL && s23_game.model_far(e->model)) zsort = 0x1FFFFF;   /* (s23_game.h model_far) */
+      else if (zm == 5 && e->seg < 64) zsort += FS->list.seg_zoff[e->seg];
+      else if (zm == 6) zsort += 0x8000 + ((e->zoff & 0x3FFFF) ^ 0x20000) - 0x20000; }   /* 6: an 18-bit SIGNED offset (+20000, -500 ...), added;
+                                                   * everything moved back 0x8000 so a negative one keeps its layers' order instead of all clamping at 0 */
     { static float zr = -1.f; if (zr < 0.f) { S23_SS_ENV(zr); const char *er = getenv("S23_WINZREF"); zr = er ? (float)atof(er) : s23_game.win_zref; }   /* (s23_game.h win_zref) */
       if (zr > 0.f && e->seg >= s23_game.win_zref_from && e->vp_fov > 0.f && e->vp_fov < zr) zsort = (int)((float)zsort * e->vp_fov / zr); }
     if (zsort < 0) zsort = 0;
@@ -503,7 +504,7 @@ int s23_depth_on(void)                                   /* the setting (Display
     if (s23_depth_mode < 0) { const char *e = getenv("S23_DEPTH"); s23_depth_mode = e ? *e == '1' : s23_game.depth_default;
                               e = getenv("S23_DEPTH_TOL"); if (e) depth_keep = 1.0f - (float)atof(e) / 100.0f;
                               if (getenv("S23_DEPTH")) fprintf(stderr, "[S23] depth mode %d, keep %.4f\n", s23_depth_mode, depth_keep); }
-    return s23_depth_mode;
+    return s23_game.no_depth ? 0 : s23_depth_mode;
 }
 float s23_depth_keep(void) { s23_depth_on(); return depth_keep; }
 void s23_depth_set(int on) { s23_depth_on(); if (!getenv("S23_DEPTH")) s23_depth_mode = on != 0; }   /* the menu / tc2.cfg; $S23_DEPTH wins for tests */
@@ -1128,6 +1129,7 @@ static void picture_adjust(uint8_t g[3][256])
 int s23_game_has_view(void) { return s23_game.znear_model > 0.f; }
 int s23_game_mounted_gun(void) { return s23_game.mounted_gun; }
 int s23_game_no_smooth(void) { return s23_game.no_smooth; }
+int s23_game_no_depth(void) { return s23_game.no_depth; }
 int s23_game_has_fx(void) { return s23_game.n_spr_fx > 0; }
 int s23_fx_smooth(void)
 {
