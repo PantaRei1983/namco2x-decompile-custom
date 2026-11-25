@@ -40,7 +40,7 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   polygons drawn.
 - **Menus:** quick clicks and touchpad taps are no longer lost; a controller's D-pad moves one row, not two.
 
-### New game, Texture filters and fixes from my namco22-decompile fork
+### New games, Texture filters and fixes from my namco22-decompile fork
 
 - **Ridge Racer (new port, System 22) -- fully playable:** MAME's `ridgerac` set (World, RR2 Ver.B), on the Ridge Racer 2 / Rave Racer runtime, with the
   master DSP and sound MCU interpreted (as Victory Lap). Two fixes it needed, shared by every 68020 port:
