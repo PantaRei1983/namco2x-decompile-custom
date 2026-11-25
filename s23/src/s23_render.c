@@ -234,9 +234,8 @@ static int finish(poly *p, const s23_render_entry *e, int hsort, uint32_t polysh
     p->zkey = (uint32_t)zsort | (uint32_t)ap << 21;
     if (seg_mode()) p->zkey |= (uint32_t)(7 - eff_seg(e)) << 25;   /* (s23_game.h seg_order) a later stretch of the list draws over an earlier one
                                                    * (bits 25-27: the priority can reach 13 = bits 21-24; the band zkey >> 21 stays under 128) */
-    { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 5 : 0; }
-      /* (s23_game.h vp_front0) $S23_VPPRIO: 4 = the viewport word's low 3 bits as the first key (lower in front: wrong for Panic Park's Bomb
-       * Panic HUD), 5 = only 0 in front */
+    { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 4 : 0; }
+      /* (s23_game.h vp_front0) $S23_VPPRIO: 4 = the viewport word's low 3 bits as the first key, lower in front (Panic Park), 5 = only 0 in front */
       static int wl = -1; if (wl < 0) { S23_SS_ENV(wl); const char *ew = getenv("S23_WINLAYER"); wl = ew ? atoi(ew) : s23_game.win_layer; }
       int layer = 0;                                    /* higher = in front (bits 25-27 hold 7 - layer) */
       if (wl) {                                         /* (s23_game.h win_layer) */
@@ -452,7 +451,7 @@ static void render_direct(const s23_render_entry *e)
         if (zsort > 0x1FFFFF) zsort = 0x1FFFFF;
         p->zkey = (uint32_t)zsort | (uint32_t)ap << 21; p->index = (uint32_t)GNPOLY;
         if (seg_mode()) p->zkey |= 7u << 25;
-        { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 5 : 0; } if (vm == 4) p->zkey |= (uint32_t)(e->vp_prio & 7) << 25; else if (vm == 5 || s23_game.win_layer) p->zkey |= 7u << 25; }   /* a direct polygon (the CPU's own buffer, not the command list): with the first stretch -- Panic Park's
+        { static int vm = -1; if (vm < 0) { S23_SS_ENV(vm); const char *ev = getenv("S23_VPPRIO"); vm = ev ? atoi(ev) : s23_game.vp_front0 ? 4 : 0; } if (vm == 4 || vm == 5 || s23_game.win_layer) p->zkey |= 7u << 25; }   /* (the direct buffer: behind every model, as before)   /* a direct polygon (the CPU's own buffer, not the command list): with the first stretch -- Panic Park's
                                                    * full-screen backdrop quad (priority 13) came in mid-list and covered the namco logo and the title */
         p->stencil = 0; p->color_base = d[2] & 0x7F00;
         p->tbase = (d[2] & 0xF) << 12 | ((d[2] >> 7) & 1) << 16;

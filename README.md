@@ -65,7 +65,9 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   </p>
 - **Panic Park (new port, System 23) -- fully playable:** every mini-game runs to the end with the arcade's picture and sound;
   only a few very minor graphics glitches remain. In widescreen, UFO Panic's night sky (a flat picture painted for 4:3)
-  is stretched to fill the wide screen instead of leaving black bars at the sides. **Before the first game, calibrate both players' levers:** press F2 to enter
+  is stretched to fill the wide screen instead of leaving black bars at the sides. The HUD (score / lives cans, timers), the Panic King
+  intro's START button and the PANIC PARK plate are drawn over the scene, as on the arcade (a priority the game sets per
+  viewport, unknown to MAME). **Before the first game, calibrate both players' levers:** press F2 to enter
   the service mode and run the lever calibration there (uncalibrated, the centred lever puts the character off to one side).
   Decompiled from MAME's `panicprk` set (World, PNP2 Ver. A, with the ASCA-3A I/O board in
   `namco_asca3a.zip`) the same way as Rapid River: `panicprk/build.sh panicprk.zip namco_asca3a.zip` translates the program

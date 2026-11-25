@@ -77,9 +77,10 @@ typedef struct {
                                                    * practice road's volcano, behind the castle gate as in TeknoParrot), -500 (the Panic King cans' score
                                                    * digits, in front of the can), -5000 (the gate's sign), -23000 (the title's PANIC PARK letters, in front
                                                    * of the island). Read unsigned (add, scale) each got one scene wrong ($S23_ZOFFMODE) */
-    int vp_front0;                                /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is drawn over every other (Panic Park: the PANIC
-                                                   * PARK plate, 0x20, swinging in over the monitor's NEEDED picture, 0x27, which is nearer by depth -- the plate
-                                                   * covers it in TeknoParrot and on the arcade) ($S23_VPPRIO=5) */
+    int vp_front0;                                /* 1 = the viewport state's (0x46) word 3, low 3 bits, is a PRIORITY above depth: lower draws in front (MAME: unused).
+                                                   * Panic Park: 7 the scene, 5 the Panic King intro's START button (over the torch statue), 3 a mini-game's timer,
+                                                   * 1 its score / lives can (over the flames of Fire Panic), 0 the PANIC PARK plate (over the monitor's NEEDED
+                                                   * picture) -- as the arcade footage and TeknoParrot show them ($S23_VPPRIO=4; 5 = only 0 in front) */
     int vp_hide0;                                 /* 1 = an entry whose viewport state (0x46) word 3 ends in 0 is not drawn ($S23_VPHIDE) */
     int win_layer;                                /* 1 = what is drawn through a window (a viewport smaller than the screen) goes over every full-screen polygon of
                                                    * the stretches of the list before it (Panic Park: the NEEDED picture's ball, z 4500, behind the monitor's

@@ -182,7 +182,7 @@ const s23_game_t s23_game = {
                                                    * state before the main loop sends that stretch's models (it came a model or two late, every few frames:
                                                    * the background objects flickered in front of / behind each other) */
     .zoff_state = 6,                              /* state 9: a signed depth offset (title letters, Panic King scores, the practice's castle) (include/s23_game.h) */
-    .vp_front0 = 1,                               /* the PANIC PARK plate over the monitor's NEEDED picture, as TeknoParrot shows it (include/s23_game.h) */
+    .vp_front0 = 1,                               /* the viewport word as a priority: HUD, START button, plate in front (include/s23_game.h) */
     .null_model = 0x6EF, .wide_stretch = pp_wide_stretch,
     .direct_v_shift = -1,                         /* the namco logo red, as the arcade's (include/s23_game.h) */
     .no_depth = 1,                                /* Display > Depth not offered: exact depth hid the title letters (include/s23_game.h) */
