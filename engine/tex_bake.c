@@ -878,6 +878,7 @@ static void box_fetch_row(const uint8_t *tmap, const uint8_t *tdata, int tv, int
     }
 }
 
+static int g_bake_last_cap;                /* the cap of the last bake_impl call (ENG_TEX_DROPLOG) */
 static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
                         int texbank, int pal_group, int cmode,
                         float *out_su, float *out_sv, float *out_ou, float *out_ov,
@@ -902,6 +903,7 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
         }
     }
     if (force_cap > 0 && force_cap < cap) cap = force_cap;
+    g_bake_last_cap = cap;
     uint32_t h = tex_cache_hash(min_u, min_v, range_u, range_v, texbank, pal_group, cmode);
     h ^= (uint32_t)cap; h *= 16777619u;
     for (int probe = 0; probe < TEX_CACHE_PROBES; probe++) {
@@ -1500,7 +1502,29 @@ static void budget_pump(void)                               /* the previous fram
     in_pump = 0;
 }
 
-GLuint bake_quad_texture(int min_u, int min_v, int range_u, int range_v,
+static GLuint bake_quad_texture_(int min_u, int min_v, int range_u, int range_v, int texbank, int pal_group, int cmode,
+                                 float *out_su, float *out_sv, float *out_ou, float *out_ov);
+/* $ENG_TEX_DROPLOG=file (tests): each texture drawn at a SMALLER cap than the last time it was drawn, the frame before or the same frame
+ * -- the signature of a texture that goes blurry for a moment */
+GLuint bake_quad_texture(int min_u, int min_v, int range_u, int range_v, int texbank, int pal_group, int cmode,
+                         float *out_su, float *out_sv, float *out_ou, float *out_ov) {
+    static FILE *dl; static int dl_ini;
+    if (!dl_ini) { dl_ini = 1; const char *e = getenv("ENG_TEX_DROPLOG"); if (e) dl = fopen(e, "w"); }
+    const int req = g_tex_bake_cap_req;
+    GLuint t = bake_quad_texture_(min_u, min_v, range_u, range_v, texbank, pal_group, cmode, out_su, out_sv, out_ou, out_ov);
+    if (dl) {
+        enum { DN = 1 << 16 };
+        static struct { uint16_t u, v, ru, rv; uint8_t b, p; int cap; unsigned f; } tab[DN];
+        uint32_t h = tex_cache_hash(min_u, min_v, range_u, range_v, texbank, pal_group, cmode) & (DN - 1);
+        const int cap = g_bake_last_cap;
+        if (tab[h].u == min_u && tab[h].v == min_v && tab[h].ru == range_u && tab[h].rv == range_v && tab[h].b == texbank && tab[h].p == pal_group
+            && g_eng_frame - tab[h].f <= 1 && cap < tab[h].cap)
+            fprintf(dl, "f%u drop uv %d,%d %dx%d bank %d pal %d cap %d -> %d req %d\n", g_eng_frame, min_u, min_v, range_u, range_v, texbank, pal_group, tab[h].cap, cap, req);
+        tab[h].u = min_u; tab[h].v = min_v; tab[h].ru = range_u; tab[h].rv = range_v; tab[h].b = texbank; tab[h].p = pal_group; tab[h].cap = cap; tab[h].f = g_eng_frame;
+    }
+    return t;
+}
+static GLuint bake_quad_texture_(int min_u, int min_v, int range_u, int range_v,
                          int texbank, int pal_group, int cmode,
                          float *out_su, float *out_sv, float *out_ou, float *out_ov) {
     if (!budget_env_done) budget_env();
