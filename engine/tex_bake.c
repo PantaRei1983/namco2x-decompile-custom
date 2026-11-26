@@ -573,6 +573,7 @@ void tex_bake_set_filter(GLuint tex, int mode)
 
 /* evict every cache entry living on page p (a page reset) */
 static void atlas_page_reset(int p);
+static void atlas_page_compact(int p);   /* a reset that keeps what is on screen */
 
 /* WHICH PAGE A RESET TAKES (2026-11-26, Rave Racer's City with the trilinear filter: "skyscraper textures go very blurry for a
  * moment"). It was strictly round robin, so the page taken could be one the scene was drawing from right now: dozens of textures
@@ -582,6 +583,7 @@ static void atlas_page_reset(int p);
  * 273 such drops in 750 race frames against 65 with the bilinear filter. Now the page with the fewest bytes drawn this frame or the
  * last is taken (ties in the old round-robin order), so a reset takes stale textures. A host whose g_eng_frame never advances keeps
  * the plain round robin. ENG_TEX_RESETPICK=0 restores it for A/B. */
+static FILE *evlog(void) { static FILE *rl; static int rl_ini; if (!rl_ini) { rl_ini = 1; const char *e = getenv("ENG_TEX_RESETLOG"); if (e) rl = fopen(e, "w"); } return rl; }   /* $ENG_TEX_RESETLOG=file (tests): resets and evictions of textures in use */
 static int atlas_reset_pick(void)
 {
     static int on = -1; static uint32_t f0; static int f0_set;
@@ -595,6 +597,8 @@ static int atlas_reset_pick(void)
     }
     int best = ap_reset_hand;
     for (int k = 1; k < ap_n; k++) { const int p = (ap_reset_hand + k) % ap_n; if (live[p] < live[best]) best = p; }
+    { FILE *rl = evlog();
+      if (rl) { fprintf(rl, "f%u reset page %d of %d, live MB per page:", g_eng_frame, best, ap_n); for (int q = 0; q < ap_n; q++) fprintf(rl, " %.1f", live[q] / 1048576.0); fprintf(rl, "\n"); fflush(rl); } }
     return best;
 }
 
@@ -622,7 +626,7 @@ static int atlas_alloc(int w, int h, int *out_page, int *out_x, int *out_y)
         }
         if (ap_n < atlas_maxp) { atlas_page_init(ap_n++); continue; }
         { const int victim = atlas_reset_pick();                  /* all pages full: take a page's space */
-          atlas_page_reset(victim);
+          atlas_page_compact(victim);
           ap_reset_hand = (victim + 1) % ap_n; }
     }
     return 0;                                    /* unreachable, but never loop forever */
@@ -717,6 +721,7 @@ static int tex_cache_total = 0;
 
 /* (atlas) a page reset evicts every entry whose slot is on it */
 long g_tex_page_resets;
+long g_tex_reset_kept;                     /* entries a page reset kept and moved (atlas_page_compact) */
 static void atlas_page_reset(int p)
 {
     g_tex_page_resets++;
@@ -740,6 +745,66 @@ static void atlas_page_reset(int p)
     apages[p].nfr = 0;
     apages[p].ndr = 0; apages[p].dirty_x0 = apages[p].dirty_y0 = ATLAS_DIM; apages[p].dirty_x1 = apages[p].dirty_y1 = 0;
     if (atlas_mips()) page_dirty(p, 0, 0, TEX_MIPM, TEX_MIPM); else page_dirty(p, 0, 0, 1, 1);   /* keep the white slot uploaded */
+}
+
+/* A PAGE RESET THAT KEEPS WHAT IS ON SCREEN (2026-11-26, same bug as atlas_reset_pick). The textures scattered over every page,
+ * so even the page with the fewest in use held some the scene was drawing: they were evicted and came back blurry for a frame.
+ * Now the entries drawn this frame or the last are kept: their blocks (margins included) are copied out of the page's shadow, the
+ * page is emptied of everything else, and they are packed back from its top-left corner (tallest first, on shelves; in the mip
+ * layout every block is a multiple of TEX_MIPM, so the packing keeps the alignment the mips need), with their texture-coordinate
+ * origin moved along. Only the moved blocks are uploaded again (few, since the page with the fewest in use was picked). A block
+ * that does not fit back (never seen) is evicted as before. ENG_TEX_RESETKEEP=1 turns it on (off by default while it is tested). */
+static void atlas_page_compact(int p)
+{
+    static int on = -1; if (on < 0) { const char *e = getenv("ENG_TEX_RESETKEEP"); on = e && *e == '1'; }   /* (opt-in while it is tested) */
+    static uint32_t f0; static int f0_set; if (!f0_set) { f0 = g_eng_frame; f0_set = 1; }
+    if (!on || g_eng_frame == f0) { atlas_page_reset(p); return; }
+    static int *keep; static int keep_cap;
+    int n = 0; size_t tot = 0;
+    for (int i = 0; i < TEX_CACHE_SIZE; i++) {
+        const TexCacheEntry *e = &tex_cache[i];
+        if (!e->occupied || e->a_page != p || g_eng_frame - e->last_f > 1) continue;
+        if (n == keep_cap) { keep_cap = keep_cap ? keep_cap * 2 : 1024; keep = realloc(keep, (size_t)keep_cap * sizeof *keep); }
+        keep[n++] = i; tot += (size_t)tex_cache[i].alloc_w * tex_cache[i].alloc_h * 4;
+    }
+    uint8_t *buf = n ? malloc(tot) : NULL;
+    if (!buf) { atlas_page_reset(p); return; }
+    for (int a = 1; a < n; a++) {                                 /* tallest first (insertion sort: a few hundred at most) */
+        const int k = keep[a]; int b = a - 1;
+        while (b >= 0 && tex_cache[keep[b]].alloc_h < tex_cache[k].alloc_h) { keep[b + 1] = keep[b]; b--; }
+        keep[b + 1] = k;
+    }
+    apage *ap = &apages[p];
+    size_t off = 0;
+    for (int a = 0; a < n; a++) {                                 /* copy the kept blocks out */
+        const TexCacheEntry *e = &tex_cache[keep[a]];
+        for (int y = 0; y < e->alloc_h; y++)
+            memcpy(buf + off + (size_t)y * e->alloc_w * 4, ap->shadow + ((size_t)(e->a_y + y) * ATLAS_DIM + e->a_x) * 4, (size_t)e->alloc_w * 4);
+        off += (size_t)e->alloc_w * e->alloc_h * 4;
+    }
+    for (int a = 0; a < n; a++) { tex_cache_bytes -= tex_cache[keep[a]].bytes; tex_cache_total--; }   /* the reset's own accounting skips them: */
+    for (int a = 0; a < n; a++) tex_cache[keep[a]].occupied = 0;
+    atlas_page_reset(p);                                          /* commit + flush, evict the rest, empty the shelves */
+    off = 0;
+    int kept = 0;
+    for (int a = 0; a < n; a++) {
+        TexCacheEntry *e = &tex_cache[keep[a]];
+        const int w = e->alloc_w, h = e->alloc_h;
+        const uint8_t *src = buf + off; off += (size_t)w * h * 4;
+        if (ap->cx + w > ATLAS_DIM) { ap->cy += ap->row_h; ap->cx = 0; ap->row_h = 0; }
+        if (ap->cy + h > ATLAS_DIM || w > ATLAS_DIM) { tex_cache_evictions++; continue; }   /* does not fit back: evicted (stays unoccupied) */
+        const int x = ap->cx, y = ap->cy;
+        ap->cx += w; if (h > ap->row_h) ap->row_h = h;
+        for (int r = 0; r < h; r++) memcpy(ap->shadow + ((size_t)(y + r) * ATLAS_DIM + x) * 4, src + (size_t)r * w * 4, (size_t)w * 4);
+        const int mx = (int)lroundf(e->ou * ATLAS_DIM) - e->a_x, my = (int)lroundf(e->ov * ATLAS_DIM) - e->a_y;   /* the block's texel origin offset */
+        e->a_x = (uint16_t)x; e->a_y = (uint16_t)y;
+        e->ou = (float)(x + mx) / ATLAS_DIM; e->ov = (float)(y + my) / ATLAS_DIM;
+        e->occupied = 1; tex_cache_bytes += e->bytes; tex_cache_total++;
+        page_dirty(p, x, y, w, h);
+        kept++;
+    }
+    free(buf);
+    g_tex_reset_kept += kept;
 }
 
 /* Switch the atlas between the plain slots (filter off / bilinear) and the block-aligned mip layout (trilinear). Every page is dropped
@@ -1328,6 +1393,7 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
     }
     if (!slotp) {
         slotp = &tex_cache[h & TEX_CACHE_MASK];
+        if (evlog() && g_eng_frame - slotp->last_f <= 1) fprintf(evlog(), "f%u probe-evict live %dx%d cap %d (total %d)\n", g_eng_frame, slotp->range_u, slotp->range_v, slotp->cap, tex_cache_total);
         if (atlas_on()) atlas_free(slotp->a_page, slotp->a_x, slotp->a_y, slotp->alloc_w, slotp->alloc_h);
         else tex = slotp->gl_texture;         /* reuse, do NOT delete */
         tex_cache_bytes -= slotp->bytes;
@@ -1424,6 +1490,7 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
             tex_evict_hand = (tex_evict_hand + 1) & TEX_CACHE_MASK;
             if (!e->occupied || e == slotp) continue;
             if (e->ref && !g_tex_fifo) { e->ref = 0; continue; }
+            if (evlog() && g_eng_frame - e->last_f <= 1) fprintf(evlog(), "f%u budget-evict live %dx%d cap %d (bytes %.0f MB, incoming %.1f MB)\n", g_eng_frame, e->range_u, e->range_v, e->cap, tex_cache_bytes / 1048576.0, incoming / 1048576.0);
             if (atlas_on()) atlas_free(e->a_page, e->a_x, e->a_y, e->alloc_w, e->alloc_h);
             else tex_free_push(e->gl_texture, e->alloc_w, e->alloc_h);
             tex_cache_bytes -= e->bytes;
