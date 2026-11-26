@@ -14,6 +14,14 @@ typedef struct { const char *file; uint32_t at; } rr_wave_t;
  * switch ON (these screens loop while it is on); the main loop then starts the screen, and turning the Test switch OFF is the
  * screen's own exit back into the game (rr_main.c rr_debug_launch). */
 typedef struct { const char *name; uint32_t entry; const char *help; } rr_debug_t;
+/* EXTRA CAMERAS (our fork: Ridge Racer 2). Views the cabinet never had, from MAME's cheat file: each is a few 32-bit work-RAM words
+ * written at every frame while it is chosen. The View button cycles the original view -> cams[0] -> cams[1] ... -> the original
+ * (the game itself never sees that button then). cam_restore: words written once when the original view comes back (val
+ * RR_CAM_SAVED = the word as it was when an extra view started). cam_allowed: the extra view only while it says so (the race),
+ * the original's words put back outside it. */
+typedef struct { uint32_t addr, val; } rr_cam_word_t;
+typedef struct { const char *name; int n; rr_cam_word_t w[4]; } rr_cam_t;
+#define RR_CAM_SAVED 0xFFFFFFFFu
 #define DEBUG_DSW_LEAVE 0xFFFFFFFFu
 
 typedef struct {
@@ -122,6 +130,9 @@ typedef struct {
     uint32_t ram_code_at, ram_code_rom, ram_code_size;
     int (*supp_jump)(uint32_t t, uint32_t at);
     int link_max_cabinets;                            /* our fork: the most cabinets its own numbering allows (Cyber Commando: 2); 0 = 8 */
+    const rr_cam_t *cams; int ncams;                  /* our fork: extra camera views (rr_cam_t above); 0 = none, the View button goes to the game */
+    const rr_cam_word_t *cam_restore; int ncam_restore;
+    bool (*cam_allowed)(void);
 } rr_game_t;
 
 extern const rr_game_t *g_rr_game;

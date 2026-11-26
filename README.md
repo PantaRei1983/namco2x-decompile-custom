@@ -146,6 +146,11 @@ grown into a way to **keep other Namco machines of that era running** with a mod
 - **Ridge Racer 2:** the test menu's GAME OPTIONS and COIN OPTIONS change again (gas held, wheel left / right) and are saved when the
   Test switch goes off: the four `cmp2.b` of the lifted code read their bounds from a wrong address, so every step "wrapped" and the
   value flickered between two settings (namco22-decompile issue #101). `ridgera2/tools/gen/fix_cmp2b.py` rewrites them.
+- **Ridge Racer 2: two extra camera views (chase near / chase far), not on the original cabinet.** The **View** button (default
+  key **V**, gamepad **Y**; Controls > "Camera (extra views)") cycles cockpit -> chase (near) -> chase (far) -> cockpit, with a
+  hint at the bottom of the window. They are MAME's "Camera 1" / "Camera 2" cheats, applied only during a race (the attract demos
+  and menus keep their own cameras); in a chase view the game hides the rear-view mirror and the start's fly-by is skipped. The
+  choice is remembered (`camera = 0 | 1 | 2` in `r2_controls.cfg`).
 - **Alpine Surfer: READY slides in and GO! slides out, row by row, as on the board.** The Super System 22 engine now has the
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,

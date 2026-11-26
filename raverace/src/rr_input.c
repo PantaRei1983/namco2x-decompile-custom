@@ -123,6 +123,7 @@ static void load_kv(const char *path, char *k, char *v)
     if (!strcmp(k, "stick_steering")) { int x = atoi(v); g_cfg_stick_steer = x < 0 || x >= RR_STICK_N ? 0 : x; return; }
     if (!strcmp(k, "free_play")) { g_cfg_freeplay = atoi(v) ? 1 : 0; return; }
     if (!strcmp(k, "car")) { g_cfg_car = atoi(v); return; }
+    if (!strcmp(k, "camera")) { extern int g_cfg_camera; g_cfg_camera = atoi(v) < 0 ? 0 : atoi(v); return; }   /* rr_game_t.cams: the extra view chosen */
     if (!strcmp(k, "ffb_strength")) { int x = atoi(v); g_cfg_ffb_strength = x < 0 ? 0 : x > 100 ? 100 : x; return; }
     if (!strcmp(k, "ffb_invert")) { g_cfg_ffb_invert = atoi(v) ? 1 : 0; return; }
     if (!strcmp(k, "ffb_restart")) { eng_ffb_set_restart(atoi(v) != 0); return; }   /* GitHub #73 */

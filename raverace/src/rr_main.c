@@ -100,6 +100,35 @@ static int32_t  polls_per_frame = 83000;   /* 68K instructions per frame (MAME: 
 static uint32_t max_frames = 600;
 #define frame rr_frame              /* the shared runtime names the frame in its traps */
 static const char *dump_dir;
+/* EXTRA CAMERAS (rr_game_t.cams; Ridge Racer 2): g_cfg_camera 0 = the game's own view, 1..ncams = an extra one. Its words are written
+ * at every frame while it is chosen and allowed (the race); when it ends (the original chosen again, or the race over) cam_restore puts
+ * the original's words back once. The choice is kept in the game's cfg ("camera") and shown as a hint when it changes. */
+int g_cfg_camera;
+void rr_cam_cycle(void)
+{
+    const rr_game_t *g = g_rr_game;
+    if (!g->ncams) return;
+    g_cfg_camera = (g_cfg_camera + 1) % (g->ncams + 1);
+    char v[16]; snprintf(v, sizeof v, "%d", g_cfg_camera);
+    rr_input_set_option(g->cfg_file, "camera", v);
+    char h[96]; snprintf(h, sizeof h, "Camera: %s", g_cfg_camera ? g->cams[g_cfg_camera - 1].name : "original (cockpit)");
+    rr_ui_set_hint(h, 120);
+    fprintf(stderr, "[CAM] %s\n", h);
+}
+static void rr_cam_frame(void)
+{
+    const rr_game_t *g = g_rr_game;
+    if (!g->ncams) return;
+    static int applied; static uint32_t saved[8];
+    { static int env = -1; if (env < 0) { const char *e = getenv("RR_CAMERA"); env = e ? atoi(e) : 0; if (e) g_cfg_camera = env; } }   /* RR_CAMERA=n: a run's camera (tests; headless reads no cfg) */
+    int want = g_cfg_camera >= 0 && g_cfg_camera <= g->ncams ? g_cfg_camera : 0;
+    if (want && g->cam_allowed && !g->cam_allowed()) want = 0;
+    if (want && !applied) for (int i = 0; i < g->ncam_restore && i < 8; i++) saved[i] = rr_read(g->cam_restore[i].addr, 4);
+    if (!want && applied) for (int i = 0; i < g->ncam_restore && i < 8; i++)
+        rr_write(g->cam_restore[i].addr, 4, g->cam_restore[i].val == RR_CAM_SAVED ? saved[i] : g->cam_restore[i].val);
+    applied = want;
+    if (want) { const rr_cam_t *c = &g->cams[want - 1]; for (int i = 0; i < c->n; i++) rr_write(c->w[i].addr, 4, c->w[i].val); }
+}
 static const char *shot_dir;          /* --shots DIR EVERY: a PPM every EVERY frames */
 static uint32_t shot_every;
 
@@ -336,6 +365,11 @@ void rr_tick(void)
               unsigned a, v; int s, n = 0; if (sscanf(q, ":%x:%d:%x%n", &a, &s, &v, &n) != 3 || !n) break;
               pa[np] = a; ps[np] = s; pv[np] = v; np++; e = q + n; if (*e == ',') e++; else break; } }
       for (int i = 0; i < np; i++) if (frame >= pf[i] && frame <= pt[i]) rr_write(pa[i], ps[i], pv[i]); }
+    rr_cam_frame();
+    { static long every = -2; static uint32_t la[8]; static int nla;   /* RR_LOGWORDS=every:addr,addr,...: 32-bit words, every N frames (tests) */
+      if (every == -2) { every = -1; const char *e = getenv("RR_LOGWORDS");
+          if (e) { char *q; every = strtol(e, &q, 0); while (*q == ':' || *q == ',') { if (nla < 8) la[nla++] = (uint32_t)strtoul(q + 1, &q, 16); else break; } } }
+      if (every > 0 && frame % (uint32_t)every == 0) { fprintf(stderr, "[WORDS] f%u", frame); for (int i = 0; i < nla; i++) fprintf(stderr, " %08X=%08X", la[i], rr_read(la[i], 4)); fprintf(stderr, "\n"); } }
     for (int i = 0; i < n_steer; i++) if (frame >= (uint32_t)test_steer[i].at) g_hw.steer = (uint16_t)test_steer[i].value;
     { static FILE *sf; static int init; static long nf = -1; static char ln[256];   /* RR_INSCRIPT=<file>: headless inputs per frame, lines
       * "<frame> steer=V gas=V brake=V test=0|1 in=MASK:BITS ...", each applied at its frame and kept (test-menu and select-screen checks) */

@@ -873,7 +873,12 @@ bool rr_host_frame(void)
         const bool tw = g_rr_game->twin_stick;           /* the twin-stick cabinet's buttons are its own Controls rows (twin_stick.c) */
         set_bit(0x0001, tw ? ts_held(TW_GUN) : held(RR_SHIFT_DOWN));
         set_bit(0x0002, tw ? ts_held(TW_MISSILE) : held(RR_SHIFT_UP));
-        set_bit(0x0040, tw ? ts_held(TW_VIEW) : held(RR_VIEW));
+        if (!tw && g_rr_game->ncams) {                     /* our fork: the View button cycles the game's extra cameras (rr_cam_cycle) */
+            extern void rr_cam_cycle(void);
+            static bool was; const bool v = held(RR_VIEW);
+            if (v && !was) rr_cam_cycle();
+            was = v;
+        } else set_bit(0x0040, tw ? ts_held(TW_VIEW) : held(RR_VIEW));
 
         if (g_rr_game->twin_stick) { twin_stick_inputs(); goto inputs_done; }
         /* an analog source out of its deadzone wins; keys/buttons ramp like MAME's KEYDELTA */
