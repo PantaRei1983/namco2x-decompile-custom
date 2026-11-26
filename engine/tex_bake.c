@@ -243,6 +243,7 @@ typedef struct {
     uint8_t  cmode;
     uint8_t  occupied;
     uint8_t  ref;              /* used since the eviction hand last passed (second chance) */
+    uint32_t last_f;           /* g_eng_frame when last drawn (a page reset spares the pages in use: atlas_reset_pick) */
     uint16_t cap;              /* the bake cap this entry was made at */
     GLuint   gl_texture;       /* per-quad path (PROPCYCL_TEXATLAS=0) */
     uint16_t a_page, a_x, a_y; /* atlas: the slot's page and position */
@@ -573,6 +574,30 @@ void tex_bake_set_filter(GLuint tex, int mode)
 /* evict every cache entry living on page p (a page reset) */
 static void atlas_page_reset(int p);
 
+/* WHICH PAGE A RESET TAKES (2026-11-26, Rave Racer's City with the trilinear filter: "skyscraper textures go very blurry for a
+ * moment"). It was strictly round robin, so the page taken could be one the scene was drawing from right now: dozens of textures
+ * drawn sharp the frame before were evicted at once, re-baked over the frame's bake budget as 32-texel placeholders (or, without a
+ * budget, at a lower size tier than the sticky one they had) and sharpened again a frame later -- a visible blur flash. The
+ * trilinear layout fills the pages several times faster (2048 tier, 8-texel mip margins), so there it came every second or so:
+ * 273 such drops in 750 race frames against 65 with the bilinear filter. Now the page with the fewest bytes drawn this frame or the
+ * last is taken (ties in the old round-robin order), so a reset takes stale textures. A host whose g_eng_frame never advances keeps
+ * the plain round robin. ENG_TEX_RESETPICK=0 restores it for A/B. */
+static int atlas_reset_pick(void)
+{
+    static int on = -1; static uint32_t f0; static int f0_set;
+    if (on < 0) { const char *e = getenv("ENG_TEX_RESETPICK"); on = !(e && *e == '0'); }
+    if (!f0_set) { f0 = g_eng_frame; f0_set = 1; }
+    if (!on || g_eng_frame == f0) return ap_reset_hand;
+    uint64_t live[ATLAS_MAXP] = { 0 };
+    for (int i = 0; i < TEX_CACHE_SIZE; i++) {
+        const TexCacheEntry *e = &tex_cache[i];
+        if (e->occupied && e->a_page < ap_n && g_eng_frame - e->last_f <= 1) live[e->a_page] += e->bytes;
+    }
+    int best = ap_reset_hand;
+    for (int k = 1; k < ap_n; k++) { const int p = (ap_reset_hand + k) % ap_n; if (live[p] < live[best]) best = p; }
+    return best;
+}
+
 static int atlas_alloc(int w, int h, int *out_page, int *out_x, int *out_y)
 {
     for (int tries = 0; tries < atlas_maxp + 1; tries++) {
@@ -596,8 +621,9 @@ static int atlas_alloc(int w, int h, int *out_page, int *out_x, int *out_y)
             }
         }
         if (ap_n < atlas_maxp) { atlas_page_init(ap_n++); continue; }
-        atlas_page_reset(ap_reset_hand);                          /* all pages full: take the oldest's space */
-        ap_reset_hand = (ap_reset_hand + 1) % ap_n;
+        { const int victim = atlas_reset_pick();                  /* all pages full: take a page's space */
+          atlas_page_reset(victim);
+          ap_reset_hand = (victim + 1) % ap_n; }
     }
     return 0;                                    /* unreachable, but never loop forever */
 }
@@ -916,7 +942,7 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
             e->cmode == cmode && e->cap == cap &&
             e->pal_gen == g_eng_pal_gen[pal_group & 0x7F]) {
             tex_frame_hits++;
-            e->ref = 1;
+            e->ref = 1; e->last_f = g_eng_frame;
             if (g_caplog && cap != TEX_BAKE_MAX) fprintf(g_caplog, "%d %d %d %d %d %d %d\n", min_u, min_v, range_u, range_v, texbank, pal_group, cap);
             if (out_su) *out_su = e->su;
             if (out_sv) *out_sv = e->sv;
@@ -1427,7 +1453,7 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
     tex_cache_bytes += slotp->bytes;
     if (!slotp->occupied) tex_cache_total++;
     slotp->occupied = 1;
-    slotp->ref = 1;
+    slotp->ref = 1; slotp->last_f = g_eng_frame;
     return tex;
 }
 
