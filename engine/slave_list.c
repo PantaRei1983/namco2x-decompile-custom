@@ -91,10 +91,13 @@ int eng_walk_list(eng_word_fn pw, const eng_list_cfg *cfg, geo_quad_cb cb, void 
             for (int k = 0; k < 3; k++) light_fx[k] = q15v(pw(p + 2 + k));
             {   /* scene clip window, and the reflection swaps that go with it */
                 float zf = dspfloatf(z);
-                cl = dspfloatf(pw(p + 8)) * zf - 0.5f;   /* vl = src[8] */
-                cr = dspfloatf(pw(p + 7)) * zf - 0.5f;   /* vr = src[7] */
-                cu = dspfloatf(pw(p + 9)) * zf - 0.5f;
-                cd = dspfloatf(pw(p + 10)) * zf - 0.5f;
+                /* WHOLE PIXELS, as MAME (namcos22.h: int m_camera_vl/vr/vu/vd; rr_video.c does the same): the half-pixel offset is
+                 * truncated here, not after adding the centre. Kept as floats, cx + vl truncated a pixel lower on the left and top --
+                 * a sub-window (Ridge Racer 2's / Rave Racer's rear-view mirror) spilled one pixel past its frame on those sides. */
+                cl = (float)(int32_t)(dspfloatf(pw(p + 8)) * zf - 0.5f);   /* vl = src[8] */
+                cr = (float)(int32_t)(dspfloatf(pw(p + 7)) * zf - 0.5f);   /* vr = src[7] */
+                cu = (float)(int32_t)(dspfloatf(pw(p + 9)) * zf - 0.5f);
+                cd = (float)(int32_t)(dspfloatf(pw(p + 10)) * zf - 0.5f);
             }
             reflection = (int)((pw(p + 2) >> 16) & 0x30);
             cullflip   = (reflection == 0x10 || reflection == 0x20);

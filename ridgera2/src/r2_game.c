@@ -123,17 +123,17 @@ static const rr_debug_t r2_debug[] = {
 
 /* EXTRA CAMERAS (rr_game_t.cams): the two chase views of MAME's cheat file ("Camera 1" / "Camera 2"), on the View button. The cabinet
  * only has the cockpit view. Measured over a coined race (2026-11-26): 0x10008570 / 0x10008574 are the camera's offset (0 in the
- * cockpit; the start's fly-by animates them). The cheats also write 0 to 0x10000C28, but that word (0x00070000 from boot on) is the
- * WORLD's priority band: at 0 the whole scene drew in band 0, the band the widescreen HUD and the texture filter take for HUD pieces
- * -- in 16:9 the car and the track were cut into pieces pushed to the sides, and no 3D texture filter applied at all (4:3 lost the
- * filter too). Only the offset is written here: the chase view is the same, the world stays in band 7, and the rear-view mirror
- * stays up (it shows what is behind). Putting back 0 / 0 returns the cockpit at once. Only while the race HUD is up, so the attract
- * demos and the menus keep their own cameras. */
+ * cockpit; the start's fly-by animates them), and the word 0x10000C28 (0x0007 from boot on) is the WORLD's priority band -- the
+ * rear-view mirror is drawn only while it is 6 or 7. The cheats write 0 there, which hides the mirror but puts the whole scene in
+ * band 0, the band the widescreen HUD and the texture filter take for HUD pieces: in 16:9 the car and the track broke into pieces
+ * pushed to the sides, and the 3D texture filter switched off (in 4:3 too). Band 5 hides the mirror and keeps the world out of the
+ * HUD's band (bands 1..5 measured: the same picture, mirror gone). Leaving a chase view puts back 0 / 0 and the saved band (the
+ * cockpit and its mirror at once). Only while the race HUD is up, so the attract demos and the menus keep their own cameras. */
 static const rr_cam_t r2_cams[] = {
-    { "chase (near)", 2, { { 0x10008570, 0x013700F0 }, { 0x10008574, 0x0000FFFD } } },
-    { "chase (far)",  2, { { 0x10008570, 0x000901A0 }, { 0x10008574, 0x07C0FFBE } } },
+    { "chase (near)", 3, { { 0x10008570, 0x013700F0 }, { 0x10008574, 0x0000FFFD }, { 0x10000C28, 0x00050000 } } },
+    { "chase (far)",  3, { { 0x10008570, 0x000901A0 }, { 0x10008574, 0x07C0FFBE }, { 0x10000C28, 0x00050000 } } },
 };
-static const rr_cam_word_t r2_cam_restore[] = { { 0x10008570, 0 }, { 0x10008574, 0 } };
+static const rr_cam_word_t r2_cam_restore[] = { { 0x10008570, 0 }, { 0x10008574, 0 }, { 0x10000C28, RR_CAM_SAVED } };
 static bool r2_racing(void) { return (g_rr.text[(1 * 64 + 3) * 2] << 8 | g_rr.text[(1 * 64 + 3) * 2 + 1]) == 0x5331; }   /* the TIME label (r2_hud_marks) */
 static const char *const r2_act_label[RR_ACT_N] = { [RR_VIEW] = "Camera (extra views)" };
 
@@ -167,7 +167,7 @@ static const rr_game_t r2 = {
     .debug_dsw = 0x80000000u,                         /* the byte at 0x50000000, bit 7 */
     .debug_mode_addr = 0x10000804, .debug_state_addr = 0x10000806, .debug_cursor_addr = 0x10000808,
     .debug_mode = 2, .debug_menu_state = 2,
-    .cams = r2_cams, .ncams = 2, .cam_restore = r2_cam_restore, .ncam_restore = 2, .cam_allowed = r2_racing,
+    .cams = r2_cams, .ncams = 2, .cam_restore = r2_cam_restore, .ncam_restore = 3, .cam_allowed = r2_racing,
     .act_label = r2_act_label,
 };
 const rr_game_t *g_rr_game = &r2;
