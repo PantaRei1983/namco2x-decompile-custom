@@ -756,10 +756,13 @@ static void atlas_page_reset(int p)
  * page is emptied of everything else, and they are packed back from its top-left corner (tallest first, on shelves; in the mip
  * layout every block is a multiple of TEX_MIPM, so the packing keeps the alignment the mips need), with their texture-coordinate
  * origin moved along. Only the moved blocks are uploaded again (few, since the page with the fewest in use was picked). A block
- * that does not fit back (never seen) is evicted as before. ENG_TEX_RESETKEEP=0 restores the plain reset. */
+ * that does not fit back (never seen) is evicted as before. Measured on Rave Racer's City at 1080p with the trilinear filter
+ * (raverace/tools/link_race.rep, frames 2150-2900, the bake budget on): textures drawn sharp one frame and blurry the next went
+ * 273 -> 0 (with the reset pick and the whole-window lookup); a compaction keeps 7-89 entries (0.2-3.8 MB) in 1-4 ms on a slow
+ * software-GL container. ENG_TEX_RESETKEEP=0 restores the plain reset. */
 static void atlas_page_compact(int p)
 {
-    static int on = -1; if (on < 0) { const char *e = getenv("ENG_TEX_RESETKEEP"); on = e && *e == '1'; }   /* (opt-in while it is tested) */
+    static int on = -1; if (on < 0) { const char *e = getenv("ENG_TEX_RESETKEEP"); on = !(e && *e == '0'); }
     if (!on || !frames_advance()) { atlas_page_reset(p); return; }
     struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     static int *keep; static int keep_cap;

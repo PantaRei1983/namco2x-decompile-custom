@@ -96,7 +96,9 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   Racer 2 and Alpine Surfer still start with Bilinear, and an older `texture_smoothing` line in a game's cfg is still read.
   - Super 22 / System 22 and Prop Cycle: atlas pages with mip levels; the sharp modes run in a small fragment shader.
     Config: `texture_filter` = `off | bilinear | sharp | trilinear | sharp-trilinear`, `texture_aniso`. Environment:
-    `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`.
+    `ENG_TEX_FILTER` = 0..4, `ENG_TEX_ANISO`. Fixed: with the trilinear filter, textures that were already sharp
+    (Rave Racer's City skyscrapers, above all) could flash very blurry for a frame when the texture memory filled up. The
+    textures on screen are now kept, and a texture already in memory is always found again.
   - System 23 / Gorgon (Time Crisis II, Crisis Zone, Angler King, Gunmen Wars, Panic Park, Rapid River, Final Furlong): filtered per fragment in the polygon
     shader, kept inside each polygon's own texels; never Gunmen Wars' photo page. Immediate polygons are filtered when they are 3D
     (corners at different depths: Final Furlong's horses and saddle-cloth numbers); flat screen panels stay sharp. Environment: `S23_TEX_FILTER`,
