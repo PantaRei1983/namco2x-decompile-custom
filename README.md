@@ -148,9 +148,12 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   value flickered between two settings (namco22-decompile issue #101). `ridgera2/tools/gen/fix_cmp2b.py` rewrites them.
 - **Ridge Racer 2: two extra camera views (chase near / chase far), not on the original cabinet.** The **View** button (default
   key **V**, gamepad **Y**; Controls > "Camera (extra views)") cycles cockpit -> chase (near) -> chase (far) -> cockpit, with a
-  hint at the bottom of the window. They are MAME's "Camera 1" / "Camera 2" cheats, applied only during a race (the attract demos
-  and menus keep their own cameras); in a chase view the game hides the rear-view mirror and the start's fly-by is skipped. The
-  choice is remembered (`camera = 0 | 1 | 2` in `r2_controls.cfg`).
+  hint at the bottom of the window. They are the camera offsets of MAME's "Camera 1" / "Camera 2" cheats, applied only during a
+  race (the attract demos and menus keep their own cameras). The cheats' third word (0x10000C28 = 0) is left out: it is the
+  world's priority band, and at 0 the whole scene was taken for HUD pieces -- in 16:9 the car and the track broke into pieces at
+  the sides, and the 3D texture filter switched off. So the rear-view mirror stays up in the chase views (showing what is behind),
+  and the widescreen and texture filters work as in the cockpit. The choice is remembered (`camera = 0 | 1 | 2` in
+  `r2_controls.cfg`).
 - **Alpine Surfer: READY slides in and GO! slides out, row by row, as on the board.** The Super System 22 engine now has the
   scanline interrupt (posirq) and a text layer scrolled line by line: the game moves each pixel row of the word in its
   interrupt handler (MAME: "alpines changes x scroll mid-screen"). Other games that enable the interrupt (Air Combat 22,
