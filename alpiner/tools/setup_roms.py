@@ -71,6 +71,13 @@ def good(found, name, size, crc, cache):
             cache[n] = d
             if len(d) == size and (zlib.crc32(d) & 0xffffffff) == crc:
                 return d
+    # not under MAME's name: the same dump under another one (a newer MAME names alpinerc's program ar2ver-c.1 .. .4 for ar2verc.1 ..)
+    # -- any file of the right size and CRC
+    for n in found:
+        d = cache.get(n) or found[n]()
+        cache[n] = d
+        if len(d) == size and (zlib.crc32(d) & 0xffffffff) == crc:
+            return d
     return None
 
 
