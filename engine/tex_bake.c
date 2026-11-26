@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 /* ========== Texture Lookup Pipeline ========== */
 
@@ -760,6 +761,7 @@ static void atlas_page_compact(int p)
 {
     static int on = -1; if (on < 0) { const char *e = getenv("ENG_TEX_RESETKEEP"); on = e && *e == '1'; }   /* (opt-in while it is tested) */
     if (!on || !frames_advance()) { atlas_page_reset(p); return; }
+    struct timespec t0; clock_gettime(CLOCK_MONOTONIC, &t0);
     static int *keep; static int keep_cap;
     int n = 0; size_t tot = 0;
     for (int i = 0; i < TEX_CACHE_SIZE; i++) {
@@ -806,6 +808,7 @@ static void atlas_page_compact(int p)
     }
     free(buf);
     g_tex_reset_kept += kept;
+    if (evlog()) { struct timespec t1; clock_gettime(CLOCK_MONOTONIC, &t1); fprintf(evlog(), "f%u compact page %d: kept %d of %d (%.1f MB), %.2f ms\n", g_eng_frame, p, kept, n, tot / 1048576.0, (t1.tv_sec - t0.tv_sec) * 1e3 + (t1.tv_nsec - t0.tv_nsec) / 1e6); }
 }
 
 /* Switch the atlas between the plain slots (filter off / bilinear) and the block-aligned mip layout (trilinear). Every page is dropped
@@ -1001,7 +1004,10 @@ static GLuint bake_impl(int min_u, int min_v, int range_u, int range_v,
     for (int probe = 0; probe < TEX_CACHE_PROBES; probe++) {
         int slot = (h + probe) & TEX_CACHE_MASK;
         TexCacheEntry *e = &tex_cache[slot];
-        if (!e->occupied) break;
+        /* an empty slot does NOT end the search (2026-11-26): evictions leave holes in the probe runs, and an entry stored past a hole
+         * was missed -- re-baked, over the bake budget as a 32-texel placeholder, while the sharp bake sat in the table (the last of
+         * Rave Racer's City blur flashes). The window is 32 slots, so a miss reads at most 32. */
+        if (!e->occupied) continue;
         if (e->min_u == min_u && e->min_v == min_v &&
             e->range_u == range_u && e->range_v == range_v &&
             e->texbank == texbank && e->pal_group == pal_group &&
