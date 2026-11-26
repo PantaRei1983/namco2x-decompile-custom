@@ -1572,6 +1572,8 @@ GLuint bake_quad_texture(int min_u, int min_v, int range_u, int range_v,
       t = bake_impl(min_u, min_v, range_u, range_v, texbank, pal_group, cmode, out_su, out_sv, out_ou, out_ov, COARSE_CAP, 0);
       frame_spent += g_bake_texels - t0; }
     tex_placeholders++;
+    { static FILE *phl; static int phl_ini; if (!phl_ini) { phl_ini = 1; const char *e = getenv("ENG_TEX_PHLOG"); if (e) phl = fopen(e, "w"); }   /* $ENG_TEX_PHLOG=file: each placeholder served */
+      if (phl) fprintf(phl, "f%u ph uv %d,%d %dx%d bank %d pal %d req %d spent %.0f\n", g_eng_frame, min_u, min_v, range_u, range_v, texbank, pal_group, g_tex_bake_cap_req, frame_spent), fflush(phl); }
     if (pend_n < PEND_MAX) {                               /* (a full queue is fine: a quad drawn again with budget to spare bakes itself) */
         const PendingBake pb = { (uint16_t)min_u, (uint16_t)min_v, (uint16_t)range_u, (uint16_t)range_v, (uint8_t)texbank, (uint8_t)pal_group,
                                  (uint8_t)cmode, g_tex_bake_cap_req, g_tex_opaque };

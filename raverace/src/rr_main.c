@@ -303,8 +303,9 @@ void rr_tick(void)
         /* headless: draw every frame (RR_GL_DRAWALL=1) so --perf counts the GL
          * cost too; glFinish so it is the GPU's time, not just the submission */
         static int drawall = -1;
-        if (drawall < 0) { const char *e = getenv("RR_GL_DRAWALL"); drawall = e && *e == '1'; }
-        if (drawall && !windowed) { rr_gl_draw(gl_w, gl_h); glFinish(); }
+        static long drawfrom = -1;   /* RR_GL_DRAWFROM=F (with RR_GL_DRAWALL=1): draw only from frame F on -- a slow software GL reaches a late scene sooner */
+        if (drawall < 0) { const char *e = getenv("RR_GL_DRAWALL"); drawall = e && *e == '1'; e = getenv("RR_GL_DRAWFROM"); drawfrom = e ? atol(e) : 0; }
+        if (drawall && !windowed && (long)frame >= drawfrom) { rr_gl_draw(gl_w, gl_h); glFinish(); }
     }
 #ifdef RR_ORACLE
     else if (!g_rr_gl) rr_video_frame(rr_dsp_slave_active());
@@ -389,7 +390,7 @@ void rr_tick(void)
     rr_input_frame(frame);                         /* replay overrides, recorder logs */
     if (perf_on) t_frame_start = now_ms();
     if (windowed && shot_dir && shot_every && frame % shot_every == 0) rr_host_screenshot(shot_dir);
-    else if (shot_dir && shot_every && frame % shot_every == 0) {
+    else if (shot_dir && shot_every && frame % shot_every == 0 && (!getenv("RR_GL_DRAWFROM") || (long)frame >= atol(getenv("RR_GL_DRAWFROM")))) {
         char p[1024]; snprintf(p, sizeof p, "%s/f%05u.ppm", shot_dir, frame);
         if (g_rr_gl && gl_ok && !windowed) { rr_gl_draw(gl_w, gl_h); rr_gl_write_ppm(p, gl_w, gl_h); }
 #ifdef RR_ORACLE
