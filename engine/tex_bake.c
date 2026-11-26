@@ -583,13 +583,15 @@ static void atlas_page_compact(int p);   /* a reset that keeps what is on screen
  * 273 such drops in 750 race frames against 65 with the bilinear filter. Now the page with the fewest bytes drawn this frame or the
  * last is taken (ties in the old round-robin order), so a reset takes stale textures. A host whose g_eng_frame never advances keeps
  * the plain round robin. ENG_TEX_RESETPICK=0 restores it for A/B. */
+/* does this host advance g_eng_frame? (the first frame a bake saw, compared with now; Prop Cycle's renderer never advances it) */
+static uint32_t g_bake_first_f; static int g_bake_first_set;
+static int frames_advance(void) { return g_bake_first_set && g_eng_frame != g_bake_first_f; }
 static FILE *evlog(void) { static FILE *rl; static int rl_ini; if (!rl_ini) { rl_ini = 1; const char *e = getenv("ENG_TEX_RESETLOG"); if (e) rl = fopen(e, "w"); } return rl; }   /* $ENG_TEX_RESETLOG=file (tests): resets and evictions of textures in use */
 static int atlas_reset_pick(void)
 {
-    static int on = -1; static uint32_t f0; static int f0_set;
+    static int on = -1;
     if (on < 0) { const char *e = getenv("ENG_TEX_RESETPICK"); on = !(e && *e == '0'); }
-    if (!f0_set) { f0 = g_eng_frame; f0_set = 1; }
-    if (!on || g_eng_frame == f0) return ap_reset_hand;
+    if (!on || !frames_advance()) return ap_reset_hand;
     uint64_t live[ATLAS_MAXP] = { 0 };
     for (int i = 0; i < TEX_CACHE_SIZE; i++) {
         const TexCacheEntry *e = &tex_cache[i];
@@ -753,12 +755,11 @@ static void atlas_page_reset(int p)
  * page is emptied of everything else, and they are packed back from its top-left corner (tallest first, on shelves; in the mip
  * layout every block is a multiple of TEX_MIPM, so the packing keeps the alignment the mips need), with their texture-coordinate
  * origin moved along. Only the moved blocks are uploaded again (few, since the page with the fewest in use was picked). A block
- * that does not fit back (never seen) is evicted as before. ENG_TEX_RESETKEEP=1 turns it on (off by default while it is tested). */
+ * that does not fit back (never seen) is evicted as before. ENG_TEX_RESETKEEP=0 restores the plain reset. */
 static void atlas_page_compact(int p)
 {
     static int on = -1; if (on < 0) { const char *e = getenv("ENG_TEX_RESETKEEP"); on = e && *e == '1'; }   /* (opt-in while it is tested) */
-    static uint32_t f0; static int f0_set; if (!f0_set) { f0 = g_eng_frame; f0_set = 1; }
-    if (!on || g_eng_frame == f0) { atlas_page_reset(p); return; }
+    if (!on || !frames_advance()) { atlas_page_reset(p); return; }
     static int *keep; static int keep_cap;
     int n = 0; size_t tot = 0;
     for (int i = 0; i < TEX_CACHE_SIZE; i++) {
@@ -1601,18 +1602,26 @@ static GLuint bake_quad_texture_(int min_u, int min_v, int range_u, int range_v,
  * -- the signature of a texture that goes blurry for a moment */
 GLuint bake_quad_texture(int min_u, int min_v, int range_u, int range_v, int texbank, int pal_group, int cmode,
                          float *out_su, float *out_sv, float *out_ou, float *out_ov) {
+    if (!g_bake_first_set) { g_bake_first_f = g_eng_frame; g_bake_first_set = 1; }
     static FILE *dl; static int dl_ini;
     if (!dl_ini) { dl_ini = 1; const char *e = getenv("ENG_TEX_DROPLOG"); if (e) dl = fopen(e, "w"); }
     const int req = g_tex_bake_cap_req;
     GLuint t = bake_quad_texture_(min_u, min_v, range_u, range_v, texbank, pal_group, cmode, out_su, out_sv, out_ou, out_ov);
     if (dl) {
+        static unsigned lf = ~0u; static int ev_prev, ev_cur, tot_prev, tot_cur;   /* the cache's entry count and evictions, this frame and the last */
+        if (g_eng_frame != lf) { lf = g_eng_frame; ev_prev = ev_cur; tot_prev = tot_cur; fprintf(dl, "F %u entries %d evictions %d resets %ld\n", g_eng_frame, tex_cache_total, tex_cache_evictions, g_tex_page_resets); }
+        ev_cur = tex_cache_evictions; tot_cur = tex_cache_total; (void)ev_prev; (void)tot_prev;
         enum { DN = 1 << 16 };
         static struct { uint16_t u, v, ru, rv; uint8_t b, p; int cap; unsigned f; } tab[DN];
         uint32_t h = tex_cache_hash(min_u, min_v, range_u, range_v, texbank, pal_group, cmode) & (DN - 1);
         const int cap = g_bake_last_cap;
         if (tab[h].u == min_u && tab[h].v == min_v && tab[h].ru == range_u && tab[h].rv == range_v && tab[h].b == texbank && tab[h].p == pal_group
             && g_eng_frame - tab[h].f <= 1 && cap < tab[h].cap)
-            fprintf(dl, "f%u drop uv %d,%d %dx%d bank %d pal %d cap %d -> %d req %d\n", g_eng_frame, min_u, min_v, range_u, range_v, texbank, pal_group, tab[h].cap, cap, req);
+        { int still = 0;   /* is the sharper bake still in the table (a lookup that missed it)? */
+          for (int i = 0; i < TEX_CACHE_SIZE && !still; i++) { const TexCacheEntry *e = &tex_cache[i];
+              if (e->occupied && e->min_u == min_u && e->min_v == min_v && e->range_u == range_u && e->range_v == range_v && e->texbank == texbank
+                  && e->pal_group == pal_group && e->cap == tab[h].cap) still = 1; }
+            fprintf(dl, "f%u drop uv %d,%d %dx%d bank %d pal %d cap %d -> %d req %d%s\n", g_eng_frame, min_u, min_v, range_u, range_v, texbank, pal_group, tab[h].cap, cap, req, still ? "  STILL CACHED" : ""); }
         tab[h].u = min_u; tab[h].v = min_v; tab[h].ru = range_u; tab[h].rv = range_v; tab[h].b = texbank; tab[h].p = pal_group; tab[h].cap = cap; tab[h].f = g_eng_frame;
     }
     return t;

@@ -78,6 +78,8 @@ void eng_texture_tilemap_sys22_fixup(void)
 
 void eng_palette_from_planar(const uint8_t *planar, size_t plane_stride)
 {
+    static FILE *pl; static int pl_ini; if (!pl_ini) { pl_ini = 1; const char *e = getenv("ENG_PALLOG"); if (e) pl = fopen(e, "w"); }   /* $ENG_PALLOG=file (tests): the groups whose colours changed, per update */
+    int nchg = 0; char chg[ENG_PAL_GROUPS * 4 + 1]; chg[0] = 0;
     for (int g = 0; g < ENG_PAL_GROUPS; g++) {
         uint8_t grp[ENG_PAL_ENTRIES][3];
         for (int p = 0; p < ENG_PAL_ENTRIES; p++) {
@@ -89,7 +91,9 @@ void eng_palette_from_planar(const uint8_t *planar, size_t plane_stride)
         if (memcmp(grp, direct_palette[g], sizeof grp)) {
             memcpy(direct_palette[g], grp, sizeof grp);
             g_eng_pal_gen[g]++;
+            if (pl && nchg < ENG_PAL_GROUPS) { snprintf(chg + strlen(chg), 5, " %d", g); nchg++; }
         }
     }
+    if (pl && nchg) { extern unsigned g_eng_frame; fprintf(pl, "f%u %d groups:%s\n", g_eng_frame, nchg, chg); fflush(pl); }
     direct_palette_loaded = 1;
 }
