@@ -216,7 +216,7 @@ static void disp_notes(void (*line)(const char *fmt, ...))
         nk_group_end(ctx);
     }
 }
-static const eng_ui_page page_display = { "Display", 440, 120, 26, disp_n, NULL, disp_enabled, disp_text, disp_change, disp_notes };
+static const eng_ui_page page_display = { "Display", 580, 220, 26, disp_n, NULL, disp_enabled, disp_text, disp_change, disp_notes };
 
 /* ---- Audio ------------------------------------------------------------------- */
 extern int g_c352_gain_music, g_c352_gain_fx, g_c352_gain_voice;   /* c352.c: the music, effects and speech gains (percent) */

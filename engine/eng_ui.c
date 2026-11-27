@@ -161,7 +161,7 @@ static void disp_notes(void (*line)(const char *fmt, ...))
         nk_group_end(ctx);
     }
 }
-static const eng_ui_page page_display = { "Display", 440, 120, 26, disp_n, NULL, disp_enabled, disp_text, disp_change, disp_notes };
+static const eng_ui_page page_display = { "Display", 580, 220, 26, disp_n, NULL, disp_enabled, disp_text, disp_change, disp_notes };
 
 /* ---- Audio ------------------------------------------------------------------- */
 static const eng_ui_mixer *mixer;                              /* the game's speakers under the Volume row (eng_ui_set_mixer) */

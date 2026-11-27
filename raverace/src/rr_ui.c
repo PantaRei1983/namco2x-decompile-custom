@@ -902,7 +902,7 @@ void rr_ui_draw(bool *quit)
     nk_end(ctx);
 
     /* the dropdown: sized to its page, under its title, inside the window */
-    static const float drop_w[T_N] = { 300, 440, 300, 340, 380, 560, 420, 460 };
+    static const float drop_w[T_N] = { 300, 560, 300, 340, 380, 560, 420, 460 };
     const int n0 = nrows(tab);
     const float rh0 = tab == T_CONTROLS ? 20 : 26;
     float nh = tab == T_NETWORK ? 176 : 44;                             /* the Network page: room for all its notes (they were cut) */
@@ -929,7 +929,7 @@ void rr_ui_draw(bool *quit)
             row_text(tab, i, label, sizeof label, value, sizeof value);
             const bool en = row_enabled(tab, i), val = has_value(tab, i);
             nk_layout_row_template_begin(ctx, rh);
-            nk_layout_row_template_push_static(ctx, tab == T_CONTROLS ? 120 : tab == T_FILE ? 0 : tab == T_NETWORK ? 210 : 120);
+            nk_layout_row_template_push_static(ctx, tab == T_CONTROLS ? 120 : tab == T_FILE ? 0 : tab == T_NETWORK ? 210 : 180);
             if (val) nk_layout_row_template_push_static(ctx, 24);
             nk_layout_row_template_push_dynamic(ctx);
             if (val) nk_layout_row_template_push_static(ctx, 24);
