@@ -7,7 +7,7 @@
 namco22-decompile rebuilds Namco's 1990s 3d arcade games (System 21, 22, Gorgon and 23) so they run natively on a PC. All of that
 work is spacestate1's. The [LuKa-86](https://github.com/LuKa-86/polygonizer-arcade-lan)'s fork puts those games into real cabinets: a PC in place of the original boards, the
 cabinets linked over a wired network the way the boards were linked by their cable, starting by themselves when the
-cabinet is switched on, added full decompiled version of two Namco Gorgon (early System 23 family) games (Rapid River and Final Furlong), one new System 23 game (Gunmen Wars), all other Super System 22 games (Air Combat 22, Alpine Racer, Alpine Racer 2, Alpine Surfer, Aqua Jet, Cyber Cycles) and one new System 22 game (Ace Driver: Victory Lap). My fork added a full decompiled version of Ridge Racer (based on latest "ridgerac" main romset of MAME v0.289), various game fixes (especially on Prop Cycle, that now have full attract mode and correct replay working) and introduce new filter options on texture game (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x). In this fork all Namco System 22/Super System 22 games and Namco Gorgon/System 22.5 are decompiled! Huge respect and thanks to spacestate1 and LuKa-86; please star and support
+cabinet is switched on, added full decompiled version of two Namco Gorgon (early System 23 family) games (Rapid River and Final Furlong), one new System 23 game (Gunmen Wars), all other Super System 22 games (Air Combat 22, Alpine Racer, Alpine Racer 2, Alpine Surfer, Aqua Jet, Cyber Cycles) and one new System 22 game (Ace Driver: Victory Lap). My fork added a full decompiled version of Ridge Racer (based on latest "ridgerac" main romset of MAME v0.289), a full decompiled version of Panic Park (based on latest "panicprk" main romset of MAME v0.289), various game fixes (especially on Prop Cycle, that now have full attract mode and correct replay working) and introduce new filter options on texture game (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x). In this fork all Namco System 22/Super System 22 games and Namco Gorgon/System 22.5 are decompiled! Huge respect and thanks to spacestate1 and LuKa-86; please star and support
 [the original project](https://github.com/spacestate1/namco22-decompile), and use it for playing at home or online.
 
 **You need your own copy of the games.** This repository contains no ROMs or game data.
@@ -16,7 +16,7 @@ cabinet is switched on, added full decompiled version of two Namco Gorgon (early
 
 The original boards in these cabinets are 25 to 30 years old. They fail, spares are scarce, and a linked set is only as
 good as its weakest board. The LuKa-86's project started as a way to **restore a 4-player linked Tokyo Wars set-up** and has
-grown into a way to **keep other Namco machines of that era running** with a modern PC in each cabinet. My project starts as a way to **fix some bugs present in the original repo (especially Prop Cycle)**, try to decompile new games on these system (only Ridge Racer at the moment) and added **new graphics options likes texture and Sprite 2d effects filtering**.
+grown into a way to **keep other Namco machines of that era running** with a modern PC in each cabinet. My project starts as a way to **fix some bugs present in the original repo (especially Prop Cycle)**, try to decompile new games on these system ( Ridge Racer and Panic Park at the moment) and added **new graphics options likes texture and Sprite 2d effects filtering**.
 
 
 > **Project status:** a hobby project, with no regular updates or support.
@@ -153,6 +153,11 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   cockpit. The cheats' third word (0x10000C28 = 0) is the world's priority band: at 0 the whole scene was taken for HUD pieces --
   in 16:9 the car and the track broke into pieces at the sides, and the 3D texture filter switched off -- so band 5 is used
   instead (it hides the mirror the same way). The choice is remembered (`camera = 0 | 1 | 2` in `r2_controls.cfg`).
+  <p align="center">  
+  <img width="80%" alt="Ridge Racer 2: Default view" src="docs/images/ridgeracer2_defaultview.png" />
+  <img width="80%" alt="Ridge Racer 2: Chase view 1" src="docs/images/ridgeracer2_chaseview-1.png" />
+  <img width="80%" alt="Ridge Racer 2: Chase view 2" src="docs/images/ridgeracer2_chaseview-2.png" />
+  </p>
 - **Ridge Racer 2 / Rave Racer (and every System 22 / Super System 22 sub-window): the rear-view mirror stays inside its
   frame.** The picture spilled one pixel past the frame on the left and top: the window's edges kept their half pixel
   (`engine/slave_list.c`), where MAME holds them as whole pixels. Now the same as MAME at every resolution and in 4:3 or 16:9.
