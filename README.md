@@ -1,5 +1,5 @@
 
-# Namco 2x: Arcade Custom Decompiled Version with various game fixes made by [LuKa-86](https://github.com/LuKa-86) and me, plus Ridge Racer full decompiled and advanced texture filtering (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x) made by [PantaRei1983](https://github.com/PantaRei1983), aka myself, with Claude Opus 5.5 Support.
+# Namco 2x version 0.10.4f: Arcade Custom Decompiled Version with various game fixes made by [LuKa-86](https://github.com/LuKa-86) and me, plus Ridge Racer full decompiled and advanced texture filtering (bilinear/sharp bilinear/trilinear or sharp trilinear+anisotropic 2x-4x-8x-16x) made by [PantaRei1983](https://github.com/PantaRei1983), aka myself, with Claude Opus 5.5 Support.
 
 **A fork of [namco22-decompile](https://github.com/spacestate1/namco22-decompile) by
 [spacestate1](https://github.com/spacestate1), made to keep real arcade cabinets running.**
