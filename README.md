@@ -158,6 +158,8 @@ grown into a way to **keep other Namco machines of that era running** with a mod
   <img width="80%" alt="Ridge Racer 2: Chase view 1" src="docs/images/ridgeracer2_chaseview-1.png" />
   <img width="80%" alt="Ridge Racer 2: Chase view 2" src="docs/images/ridgeracer2_chaseview-2.png" />
   </p>
+  
+  [![Ridge Racer 2 alternate chase view demo gameplay](https://img.youtube.com/vi/S4O9Z_8-mvM/maxresdefault.jpg)](https://www.youtube.com/watch?v=S4O9Z_8-mvM)
 - **Ridge Racer 2 / Rave Racer (and every System 22 / Super System 22 sub-window): the rear-view mirror stays inside its
   frame.** The picture spilled one pixel past the frame on the left and top: the window's edges kept their half pixel
   (`engine/slave_list.c`), where MAME holds them as whole pixels. Now the same as MAME at every resolution and in 4:3 or 16:9.
