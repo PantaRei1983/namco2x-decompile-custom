@@ -47,6 +47,8 @@ static int load(const char *dir, const char *name, uint8_t *dst, size_t n)
     if (got != n) { fprintf(stderr, "[3D] %s: %zu of %zu bytes\n", p, got, n); return 0; }
     return 1;
 }
+/* a point ROM word for the C417's read port (src/s23_chips.c): 1 = inside the ROM */
+int s23_ptrom_word(uint32_t a, uint32_t *w) { if (!ptrom || a >= ptrom_limit) return 0; *w = ptrom[a]; return 1; }
 void s23_render_init(const char *dir)
 {
     ptrom_limit = 0x800000; ptrom = calloc(ptrom_limit + 256, 4);   /* + a pad: a polygon's vertex words are read after the per-polygon limit check */

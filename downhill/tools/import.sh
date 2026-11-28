@@ -10,6 +10,8 @@ ROMS="${1:-$HERE/extracted/roms}"
 mkdir -p "$HERE/extracted"
 $PY -I "$HERE/tools/make_prog.py" "$ROMS" "$HERE/extracted"
 $PY -I "$HERE/tools/scan_seeds.py" "$HERE/extracted" "$HERE/extracted/seeds_static.txt"
+$PY -I "$HERE/tools/scan_switches.py" "$HERE/extracted" "$HERE/extracted/switches.txt"
+cp "$HERE/extracted/switches.txt" "$WORK/dh_switches.txt"
 cp "$HERE/extracted/prog.bin" "$WORK/downhill_prog.bin"
 cp "$HERE/extracted/nmon.bin" "$WORK/downhill_nmon.bin"
 cp "$HERE/../tools/gen/ghidra/"*.java "$WORK/scripts/"
@@ -18,6 +20,7 @@ rm -rf "$WORK/downhill.gpr" "$WORK/downhill.rep"
 ( cd "$WORK" && "$HEADLESS" "$WW" downhill -import "$WW${SEP}downhill_prog.bin" \
     -loader BinaryLoader -loader-baseAddr 0x80000000 -processor MIPS:BE:64:64-32addr -scriptPath "$WW${SEP}scripts" \
     -preScript SeedMips.java "$WW${SEP}dh_seeds.txt" "block:BFC00000:$WW${SEP}downhill_nmon.bin" \
+    -postScript FixSwitches.java "$WW${SEP}dh_switches.txt" \
     -postScript DumpPcode.java "$WW${SEP}downhill.pcode" > dh_import.log 2>&1 ) || { echo "Ghidra failed: see $WORK/dh_import.log"; tail -5 "$WORK/dh_import.log"; exit 1; }
-grep -E "SeedMips:|DumpPcode:" "$WORK/dh_import.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
+grep -E "SeedMips:|FixSwitches:|DumpPcode:" "$WORK/dh_import.log" | sed 's/^INFO *//; s/(GhidraScript).*//'
 cp "$WORK/downhill.pcode" "$HERE/downhill.pcode"

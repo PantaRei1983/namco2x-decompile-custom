@@ -59,6 +59,7 @@ int s23_chips_owns(uint32_t p)
         || (p >= 0x0C000004u && p <= 0x0C000019u) || (p >= 0x0C400000u && p <= 0x0C400007u) || p == 0x0E800000u;
 }
 
+int s23_ptrom_word(uint32_t a, uint32_t *w);   /* src/s23_render.c */
 int s23_chips_read(uint32_t p, int size, uint32_t *v)
 {
     if (p == 0x01000028u && size == 4) { *v = 1; return 1; }
@@ -68,6 +69,12 @@ int s23_chips_read(uint32_t p, int size, uint32_t *v)
     case 0x02000002u: *v = c417.adr; return 1;
     case 0x02000006u: c417.test_mode = 0; *v = 0; return 1;
     case 0x02000008u: *v = c417.ram[c417.adr]; return 1;
+    /* THE POINT ROM THROUGH THE C417 (MAME c417_ptrom_msw_r / lsw_r): the word at the address written to +4, high half, then low half and
+     * on to the next word. Downhill Bikers reads its model directory so at boot (the model numbers it draws come from it): with these
+     * unanswered every model it chose was the wrong one -- the rider and the cabinet drawn as the handlebar's frames, the title logo
+     * as ranking-table letters. 0xFFFF past the ROM, as MAME */
+    case 0x0200000Au: { uint32_t w; *v = s23_ptrom_word(c417.ptrom_adr, &w) ? w >> 16 : 0xFFFFu; return 1; }
+    case 0x0200000Cu: { uint32_t w; if (s23_ptrom_word(c417.ptrom_adr, &w)) { *v = w & 0xFFFFu; c417.ptrom_adr++; } else *v = 0xFFFFu; return 1; }
     case 0x0C000006u: *v = 0x0002; return 1;
     case 0x0C000010u: *v = (uint16_t)c412.adr; return 1;
     case 0x0C000012u: *v = (uint16_t)(c412.adr >> 16); return 1;
