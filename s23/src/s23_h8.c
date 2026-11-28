@@ -305,6 +305,7 @@ void s23_reel_wind(int counts)
     pos += dir * counts;
     s23_rotary_in[0] = (uint16_t)(int16_t)pos;
 }
+uint16_t (*s23_asca_analog)(int ch);                          /* the game's controls on the A/D (NULL: centred / Angler King's s23_analog_in) */
 static uint16_t asca3_adc(void *u, int ch) { (void)u; return (uint16_t)((s23_analog_in[ch & 7] & 0xFFC0) >> 6); }
 static uint8_t asca3_switches_(int n);
 static uint8_t asca3_switches(int n)                  /* TEST: $S23_INRSCAN=frame -- every 40 frames the next bit of in_r 0-3 reads pressed (low) */
@@ -366,14 +367,14 @@ static uint8_t asca_switches(int n)
     default: return (uint8_t)~0x03;
     }
 }
-uint16_t (*s23_asca_analog)(int ch);                          /* the game's controls on the A/D (NULL: centred) */
 static uint16_t asca_adc(void *u, int ch) { (void)u; return s23_asca_analog ? s23_asca_analog(ch) : 0x200; }
 static uint8_t io_rd8(void *u, uint32_t a)
 {
     (void)u;
     if (a < 0x4000) return io_rom[a];
     if (a >= 0xC000 && a < 0xFF80) return io_ram[a - 0xC000];
-    if (s23_game.io_asca3 && a >= 0x6000 && a <= 0x6003) return asca3_switches((int)(a - 0x6000));   /* Angler King's ASCA-3 / FCA-1 */
+    if (s23_game.io_asca3 && a >= 0x6000 && a <= 0x6003)          /* Angler King's ASCA-3 / FCA-1; Downhill Bikers' ASCA-3 with its own switches (asca_in) */
+        return s23_game.asca_in ? asca_switches((int)(a & 3)) : asca3_switches((int)(a - 0x6000));
     if (s23_game.io_asca3 && (a == 0x6006 || a == 0x6007)) return asca3_rotary((int)(a - 0x6006));
     if (s23_game.io_asca && a >= 0x6000 && a <= 0x6003) return asca_switches((int)(a & 3));   /* Gunmen Wars' ASCA-5 (our fork) */
     if (a == 0x6000 || a == 0x6001) { uint8_t v = io_switches(a & 1); if (swlog_on()) fprintf(stderr, "[SW] %04X = %02X frame %u\n", (unsigned)a, v, rr_frame); return v; }
@@ -532,7 +533,7 @@ void s23_h8_init(const char *extracted)
     if (s23_rom_io(extracted, io_rom, sizeof io_rom)) {
         io.advanced = 0; io.amask = 0xFFFF; io.rd8 = io_rd8; io.rd16 = io_rd16; io.wr8 = io_wr8; io.wr16 = io_wr16;
         h8p_init(&iop, H8P_3334, &io, NULL);
-        if (s23_game.io_asca3) iop.adc_in = asca3_adc;
+        if (s23_game.io_asca3) iop.adc_in = s23_asca_analog ? asca_adc : asca3_adc;   /* a game's own controls on the A/D (Downhill Bikers), else Angler King's */
         iop.port_in = io_port_in; iop.port_out = io_port_out; iop.sci_tx = io_sci_tx;
         if (s23_game.io_asca) iop.adc_in = asca_adc;
         h8p_reset(&iop);

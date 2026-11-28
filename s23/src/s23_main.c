@@ -121,7 +121,7 @@ static void scripted_inputs(uint32_t frame)
             g_ss22_gun_x = (uint16_t)(s23_game.gun_x0 + x * s23_game.gun_xw); g_ss22_gun_y = (uint16_t)(s23_game.gun_y0 + y * s23_game.gun_yh); }
         p += n ? n : 1; while (*p && *p != ',') p++; if (*p == ',') p++;
     }
-	if (aim && s23_game.io_asca3) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }   /* Angler King: the aim = the rod, as in the window */
+	if (aim && s23_game.io_asca3 && !s23_game.input) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }   /* Angler King: the aim = the rod, as in the window */
     /* the ASCA-3 board's inputs (Angler King's rod / arm / reel, src/s23_h8.c): $S23_ANALOG = "ch:value@frame,..." (value hex, MAME's 16-bit
      * JVS value, held from that frame on); $S23_REEL = "counts@frame+frames,..." (the reel wound by that many counts a frame: s23_reel_wind) */
     static const char *an, *rl; static int rinit;
@@ -253,7 +253,7 @@ static void session_rec(uint32_t frame)
         }
 		/* Angler King: the window turns the pointer into the rod's yaw / pitch every frame (src/s23_input.c); a replay does the same.
          * ponytail: the reel is not recorded, so a replayed fight reels nothing -- add it to the F line when a fight must replay */
-        if (rep && s23_game.io_asca3) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }
+        if (rep && s23_game.io_asca3 && !s23_game.input) { void s23_ak_replay_send(uint16_t); s23_ak_replay_send(s23_inputs); }
     }
     if (rec) {
         static uint16_t pin = 0xFFFF, px, py; static int poff = -1;

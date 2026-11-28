@@ -25,6 +25,7 @@
 #   ./launch.sh gunmen       Gunmen Wars (add a number for the window size: gunmen 2)
 #   ./launch.sh finfurl      Final Furlong (add a number for the window size: finfurl 2)
 #   ./launch.sh panic        Panic Park (add a number for the window size: panic 2)
+#   ./launch.sh downhill     Downhill Bikers
 #
 # Prop Cycle keys:  5 coin, Enter start, arrow keys steer, Space pedal,
 #                   P pause, Esc menu, F12 picture.
@@ -243,6 +244,14 @@ case "$game" in
         rebuild rapidrvr rapidrvr
         cd rapidrvr
         exec ./build/rapidrvr --window "$@"
+        ;;
+    downhill|downhillu|dh|downhillbikers)
+        if [ ! -f downhill/build/CMakeCache.txt ]; then
+            echo "Downhill Bikers is not built yet. Run:  downhill/build.sh /path/to/downhill.zip /path/to/namco_asca3.zip  (with N22TOOLS set, the first time)"; exit 1
+        fi
+        rebuild downhill downhill
+        cd downhill
+        exec ./build/downhill --window "$@"
         ;;
     panic|panicprk|panicpark)
         if [ ! -f panicprk/build/CMakeCache.txt ]; then

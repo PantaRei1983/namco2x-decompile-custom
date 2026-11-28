@@ -150,7 +150,7 @@ typedef struct {
      * decodes (the 28-bit physical address); 1 = handled. NULL = none */
     int no_smooth;                                /* 1 = motion smoothing (in-between frames) off: Gunmen Wars crashed Intel's GL driver with it (cause not found yet) */
     int io_asca;                                  /* 1 = the I/O board is an ASCA (Gunmen Wars' ASCA-5): switches at 0x6000-3, controls on its A/D */
-    uint8_t (*asca_in)(int n, int test_on);       /* optional, with io_asca: the switch byte at 0x6000 + n (MAME namco_asca_1_device::in_r) from the game's own
+    uint8_t (*asca_in)(int n, int test_on);       /* optional, with io_asca or io_asca3 (Downhill Bikers): the switch byte at 0x6000 + n (MAME namco_asca_1_device::in_r) from the game's own
                                                    * buttons (Panic Park: two START buttons, the operator's Up / Down / Enter); test_on = the Test switch's state */
     int (*mem_read)(uint32_t p, int size, uint32_t *v);
     int (*mem_write)(uint32_t p, int size, uint32_t v);

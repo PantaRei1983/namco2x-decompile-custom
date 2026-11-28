@@ -277,3 +277,16 @@ __pycache__/
 /finfurl/*.nv
 /finfurl/*.rec
 /finfurl/*.log
+
+# Downhill Bikers (downhill/): game files and the translation's working files (made from YOUR ROM), test output
+/downhill/extracted/
+/downhill/gen/
+/downhill/build/
+/downhill/roms/
+/downhill/*.pcode
+/downhill/*.cfg
+/downhill/*.nv
+/downhill/*.rec
+/downhill/*.ppm
+/downhill/*.out
+/downhill/*.log
